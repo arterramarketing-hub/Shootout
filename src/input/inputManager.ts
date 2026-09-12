@@ -3,6 +3,20 @@ import { emptyInput, type InputFrame } from "../sim/types";
 import { ButtonBank, type ButtonAction } from "./buttons";
 import { Joystick } from "./joystick";
 
+/**
+ * Pointer capture keeps a drag tracking after it slides off the canvas, but it
+ * throws whenever the browser no longer considers the pointer active. That is
+ * not a reason to drop the input: capture is an enhancement, so a failure here
+ * must never abort the handler that reads the touch.
+ */
+const capturePointer = (element: HTMLElement, pointerId: number): void => {
+  try {
+    element.setPointerCapture(pointerId);
+  } catch {
+    // Pointer already released, or synthetic. Routing by id still works.
+  }
+};
+
 interface LookPointer {
   id: number;
   lastX: number;
@@ -146,7 +160,7 @@ export class InputManager {
 
   private readonly onPointerDown = (event: PointerEvent): void => {
     event.preventDefault();
-    this.surface.setPointerCapture(event.pointerId);
+    capturePointer(this.surface, event.pointerId);
 
     if (this.pointerLocked || !this.isTouchPrimary()) {
       this.lookPointer = { id: event.pointerId, lastX: event.clientX, lastY: event.clientY };

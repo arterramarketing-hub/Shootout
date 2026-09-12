@@ -16,7 +16,9 @@ export const defaultLookSettings = (): LookSettings => ({
 });
 
 export interface LookState {
+  /** Radians clockwise from the map's forward axis. */
   yaw: number;
+  /** Radians above the horizon. Positive looks up. */
   pitch: number;
 }
 
@@ -42,8 +44,12 @@ export const applyLookDelta = (
   const pitchSign = settings.invertY ? -1 : 1;
 
   look.yaw += deltaX * scale;
+  // `pitch` means angle above the horizon, so positive is looking up.
+  // Screen coordinates grow downward, so a drag up gives a negative deltaY:
+  // negate it to get the mouse-like convention every shooter uses, where
+  // moving the input up looks up.
   look.pitch = clamp(
-    look.pitch + deltaY * scale * pitchSign,
+    look.pitch - deltaY * scale * pitchSign,
     -CAMERA.maxPitchRadians,
     CAMERA.maxPitchRadians,
   );

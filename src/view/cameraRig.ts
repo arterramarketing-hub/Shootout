@@ -64,6 +64,8 @@ export class CameraRig {
     this.camera.position.set(x + lean.x, y + eye, z + lean.z);
     // Rotation is taken from the current state directly, never interpolated:
     // smoothing the aim would read as input lag.
+    // Babylon's rotation.x pitches the camera downward as it grows, while the
+    // simulation measures pitch above the horizon, so the sign flips here.
     this.camera.rotation.set(
       -current.pitch,
       current.yaw,

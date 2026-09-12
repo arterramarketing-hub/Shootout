@@ -1,5 +1,6 @@
 import "./styles.css";
 import { Engine } from "@babylonjs/core/Engines/engine";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { FixedStepLoop, FpsMeter } from "./engine/loop";
 import { QualityBenchmark, detectQuality, settingsFor, type QualitySettings } from "./engine/quality";
 import { Hud } from "./hud/hud";
@@ -133,6 +134,17 @@ const boot = (): void => {
       get quality() {
         return quality.tier;
       },
+      /** Where the camera is actually pointing. Used to verify look signs. */
+      get forward() {
+        const direction = rig.camera.getDirection(Vector3.Forward());
+        return { x: +direction.x.toFixed(3), y: +direction.y.toFixed(3), z: +direction.z.toFixed(3) };
+      },
+      get pitch() {
+        return +player.pitch.toFixed(3);
+      },
+      get yaw() {
+        return +player.yaw.toFixed(3);
+      },
       get activeMeshes() {
         return scene.getActiveMeshes().length;
       },
@@ -143,6 +155,9 @@ const boot = (): void => {
         player.velocity.x = 0;
         player.velocity.y = 0;
         player.velocity.z = 0;
+        // Level the view as well, so a teleport is a complete, repeatable
+        // reset rather than carrying the previous aim into the new spot.
+        input.look.pitch = 0;
         if (yaw !== undefined) input.look.yaw = yaw;
       },
     },

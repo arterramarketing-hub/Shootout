@@ -10,12 +10,25 @@ describe("applyLookDelta", () => {
     expect(look.yaw).toBeCloseTo(100 * LOOK.baseSensitivity, 6);
   });
 
+  it("looks up when the drag moves up the screen", () => {
+    const look = createLook();
+    // Screen Y grows downward, so a drag up is a negative deltaY.
+    applyLookDelta(look, 0, -80, defaultLookSettings(), "touch");
+    expect(look.pitch).toBeGreaterThan(0);
+  });
+
+  it("looks down when the drag moves down the screen", () => {
+    const look = createLook();
+    applyLookDelta(look, 0, 80, defaultLookSettings(), "touch");
+    expect(look.pitch).toBeLessThan(0);
+  });
+
   it("clamps pitch so the view cannot flip over", () => {
     const look = createLook();
     const settings = defaultLookSettings();
-    applyLookDelta(look, 0, 100000, settings, "touch");
+    applyLookDelta(look, 0, -100000, settings, "touch");
     expect(look.pitch).toBeCloseTo(CAMERA.maxPitchRadians, 6);
-    applyLookDelta(look, 0, -200000, settings, "touch");
+    applyLookDelta(look, 0, 200000, settings, "touch");
     expect(look.pitch).toBeCloseTo(-CAMERA.maxPitchRadians, 6);
   });
 

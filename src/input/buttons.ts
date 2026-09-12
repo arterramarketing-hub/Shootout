@@ -28,7 +28,11 @@ export class ButtonBank {
     button.element.addEventListener("pointerdown", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      button.element.setPointerCapture(event.pointerId);
+      try {
+        button.element.setPointerCapture(event.pointerId);
+      } catch {
+        // Capture is an enhancement; the press is tracked by pointer id anyway.
+      }
       this.pointerToAction.set(event.pointerId, button.action);
       this.pressedEdge.add(button.action);
       if (button.toggle) {
