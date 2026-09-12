@@ -9,11 +9,13 @@ import {
   settingsFor,
   type QualitySettings,
 } from "./engine/quality";
+import { loadProfile, saveProfile } from "./engine/profile";
 import { loadSettings, saveSettings, type GameSettings } from "./engine/settings";
 import { Hud } from "./hud/hud";
 import { Screens } from "./hud/screens";
 import { InputManager } from "./input/inputManager";
-import { greyboxMap } from "./maps/greybox";
+import { mapById } from "./maps";
+import type { MapDefinition } from "./maps/types";
 import {
   DIFFICULTIES,
   PLAYER_ID,
@@ -42,6 +44,12 @@ import {
   type MatchState,
 } from "./sim/match";
 import { createPlayer, eyeOffset, stepPlayer } from "./sim/player";
+import { finishById } from "./sim/cosmetics";
+import {
+  applyMatchResult,
+  unlockedWeapons,
+  type MatchReward,
+} from "./sim/progression";
 import { createRandom } from "./sim/random";
 import { damageTarget, stepTargets } from "./sim/targets";
 import type { PlayerState } from "./sim/types";
@@ -90,33 +98,64 @@ const boot = (): void => {
   });
   applyQuality(engine, quality);
 
-  const { scene } = createScene(engine, greyboxMap, quality);
-  const rig = new CameraRig(scene, quality, settings.fovDegrees);
-  const viewmodel = new ViewmodelRig(scene);
-  // The world camera must not draw the weapon, and the weapon camera must not
-  // draw the world. Babylon clears depth between them, so the weapon never
-  // intersects a wall it is standing next to.
-  rig.camera.layerMask = WORLD_LAYER;
-  scene.activeCameras = [rig.camera, viewmodel.camera];
+  // Everything below is rebuilt when the map changes, so the bindings are
+  // mutable and the closures that capture them keep working across a swap.
+  let activeMap: MapDefinition = mapById(settings.mapId);
+  let scene!: ReturnType<typeof createScene>["scene"];
+  let rig!: CameraRig;
+  let viewmodel!: ViewmodelRig;
+  let world!: BrushWorld;
+  let body!: ReturnType<BrushWorld["createController"]>;
+  let targets!: TargetField;
+  let effects!: ShotEffects;
+  let botField!: BotField;
+  let nav!: ReturnType<typeof bakeNavGrid>;
 
-  // One world serves collision, hitscan and navigation, in plain TypeScript.
-  // The authoritative server runs this same class, which is what lets client
-  // prediction land on the server's answer instead of near it.
-  const world = new BrushWorld(greyboxMap.brushes);
-  const body = world.createController(STANCE.radius, STANCE.standHeight / 2);
-  const hitscan = world;
-  const targets = new TargetField(scene, greyboxMap.targets);
-  const effects = new ShotEffects(scene);
+  const buildWorld = (map: MapDefinition): void => {
+    activeMap = map;
+    scene?.dispose();
+
+    scene = createScene(engine, map, quality).scene;
+    rig = new CameraRig(scene, quality, settings.fovDegrees);
+    viewmodel = new ViewmodelRig(scene);
+    // The world camera must not draw the weapon, and the weapon camera must
+    // not draw the world. Babylon clears depth between them, so the weapon
+    // never intersects a wall it is standing next to.
+    rig.camera.layerMask = WORLD_LAYER;
+    scene.activeCameras = [rig.camera, viewmodel.camera];
+
+    // One world serves collision, hitscan and navigation, in plain TypeScript.
+    // The authoritative server runs this same class, which is what lets client
+    // prediction land on the server's answer instead of near it.
+    world = new BrushWorld(map.brushes);
+    body = world.createController(STANCE.radius, STANCE.standHeight / 2);
+    targets = new TargetField(scene, map.targets);
+    effects = new ShotEffects(scene);
+    botField = new BotField(scene);
+
+    // The navigation grid is baked once per map, from the level itself.
+    nav = bakeNavGrid(world);
+    console.info(
+      `[shootout] ${map.name}: ${nav.grid.nodes.length} nav nodes, ` +
+        `${nav.raycasts} rays, ${nav.pruned} pruned, ${nav.millis} ms`,
+    );
+  };
+
+  buildWorld(activeMap);
+
   const audio = new GameAudio();
-  const botField = new BotField(scene);
 
-  const spawn = greyboxMap.spawns[0];
+  const spawn = activeMap.spawns[0];
   const spawnPosition = vec3(spawn.x, STANCE.standHeight / 2 + 0.05, spawn.z);
   body.setPosition(spawnPosition);
 
   const player: PlayerState = createPlayer(spawnPosition, spawn.yaw);
   const playerHealth = createHealth();
-  const playerLoadout = createLoadout(DEFAULT_LOADOUT);
+  const profile = loadProfile();
+  // Levelling hands out weapons one at a time early on, so a new player has
+  // two to learn rather than four.
+  const carried = () => unlockedWeapons(profile, DEFAULT_LOADOUT);
+  const playerLoadout = createLoadout(carried());
   const random = createRandom(0x51f2a3);
   let previousPosition = copy(player.position);
   let playerRespawnTimer = 0;
@@ -124,15 +163,6 @@ const boot = (): void => {
   const match: MatchState = createMatch({ ...DEFAULT_MATCH, teamSize: settings.teamSize });
   let bots: BotState[] = [];
   let combatants: Combatant[] = [];
-
-  // The navigation grid is baked once, from the level itself. It is plain data
-  // afterwards, which is what lets bot movement live in the engine-free
-  // simulation alongside everything else.
-  const nav = bakeNavGrid(world);
-  console.info(
-    `[shootout] navigation: ${nav.grid.nodes.length} nodes, ` +
-      `${nav.raycasts} rays, ${nav.pruned} pruned, ${nav.millis} ms`,
-  );
 
   const input = new InputManager(canvas);
   input.look.yaw = spawn.yaw;
@@ -191,7 +221,7 @@ const boot = (): void => {
 
   /** Spawn for a team, chosen to be as far as possible from living enemies. */
   const chooseSpawn = (team: Team): { position: Vec3; yaw: number } => {
-    const options = greyboxMap.spawns.filter((point) => point.team === team);
+    const options = activeMap.spawns.filter((point) => point.team === team);
     const enemies = combatants.filter((entry) => entry.alive && entry.team !== team);
     let best = options[0];
     let bestScore = -Infinity;
@@ -225,9 +255,8 @@ const boot = (): void => {
     for (const team of ["a", "b"] as const) {
       const count = team === "a" ? Math.max(0, perTeam - 1) : perTeam;
       for (let i = 0; i < count; i += 1) {
-        const point = greyboxMap.spawns.filter((entry) => entry.team === team)[
-          i % greyboxMap.spawns.filter((entry) => entry.team === team).length
-        ];
+        const teamSpawns = activeMap.spawns.filter((entry) => entry.team === team);
+        const point = teamSpawns[i % teamSpawns.length];
         // Bots carry a rifle and a sidearm; the player gets the full rack.
         const bot = createBot(
           `bot_${index}`,
@@ -387,7 +416,7 @@ const boot = (): void => {
 
   const onPlayerShot = (shot: ShotEvent): void => {
     const origin = eyePosition();
-    const resolution = resolveShot(shot, origin, hitscan, PLAYER_ID);
+    const resolution = resolveShot(shot, origin, world, PLAYER_ID);
 
     audio.shot(shot.weapon.id);
     viewmodel.addRecoil(0.55 + shot.weapon.recoil.pattern[0][0] * 0.35, random.next());
@@ -422,8 +451,7 @@ const boot = (): void => {
     input.look.pitch = 0;
     revive(playerHealth);
     // A fresh loadout, so dying is not also punished with an empty magazine.
-    const fresh = createLoadout(DEFAULT_LOADOUT);
-    Object.assign(playerLoadout, fresh);
+    Object.assign(playerLoadout, createLoadout(carried()));
   };
 
   /** Fold one authoritative snapshot into the local view of the world. */
@@ -500,12 +528,22 @@ const boot = (): void => {
         return;
       }
       screens.setNetStatus(`connecting to ${settings.serverUrl}...`);
+      // Online the server owns the loadout and hands everyone the full rack,
+      // so levelling gates nothing there. Progression stays a solo concern
+      // rather than turning into an advantage over other players.
+      Object.assign(playerLoadout, createLoadout(DEFAULT_LOADOUT));
       net.connect(settings.serverUrl, settings.playerName);
       return;
     }
 
     online = false;
     net.disconnect();
+
+    // Swapping the level rebuilds the scene, the collision world and the
+    // navigation grid. Cheap enough to do between rounds, and it keeps one
+    // set of per-map objects alive rather than several.
+    const wanted = mapById(settings.mapId);
+    if (wanted.id !== activeMap.id) buildWorld(wanted);
     match.config.teamSize = settings.teamSize;
     createRoster();
     rebuildCombatants();
@@ -522,12 +560,20 @@ const boot = (): void => {
     void orientation?.lock?.("landscape").catch(() => undefined);
   };
 
-  const screens = new Screens(settings, {
+  const screens = new Screens(settings, profile, {
     onStart: beginMatch,
     onPlayAgain: beginMatch,
     onReturnToLobby: () => screens.show("lobby"),
     onSettingsChanged: applySettings,
+    onFinishChanged: (finishId) => {
+      // One finish covers the whole rack, which is the only thing a player
+      // has asked for so far and keeps the lobby to a single row.
+      for (const id of DEFAULT_LOADOUT) profile.equipped[id] = finishId;
+      saveProfile(profile);
+      viewmodel.setFinish(finishById(finishId));
+    },
   });
+  viewmodel.setFinish(finishById(profile.equipped.ar));
   applySettings(settings);
 
   const netStatusBar = byId("netbar");
@@ -605,11 +651,31 @@ const boot = (): void => {
     viewmodel.fireFlash(0.7 + random.next() * 0.6);
     const muzzle = viewmodel.muzzleWorldPosition();
     const origin = muzzle ? vec3(muzzle.x, muzzle.y, muzzle.z) : eyePosition();
-    const local = resolveShot(shot, eyePosition(), hitscan, PLAYER_ID);
+    const local = resolveShot(shot, eyePosition(), world, PLAYER_ID);
     for (const impact of local.impacts) {
       effects.addPellet(origin, impact);
       if (impact.hit && !impact.targetId) audio.impact(impact.distance);
     }
+  };
+
+  /** Bank the round's experience, then show the scoreboard. */
+  const finishRound = (): void => {
+    const ownTeam: Team = "a";
+    const reward: MatchReward = {
+      kills: match.playerKills,
+      headshots: match.playerHeadshots,
+      deaths: match.playerDeaths,
+      won: match.winner === ownTeam,
+      ownScore: match.scores[ownTeam],
+      otherScore: match.scores.b,
+      completed: true,
+    };
+    const result = applyMatchResult(profile, reward);
+    saveProfile(profile);
+    screens.renderCareer(profile);
+    viewmodel.setFinish(finishById(profile.equipped.ar));
+    screens.showResults(match, reward, result.levels);
+    if (document.pointerLockElement) document.exitPointerLock();
   };
 
   const stepSimulation = (dt: number, frame: ReturnType<typeof input.sample>): void => {
@@ -628,7 +694,7 @@ const boot = (): void => {
     }
 
     syncHitboxes();
-    const botWorld = { grid: nav.grid, hitscan, combatants, random };
+    const botWorld = { grid: nav.grid, hitscan: world, combatants, random };
     for (const bot of bots) {
       if (bot.health.dead) {
         bot.respawnTimer = Math.max(0, bot.respawnTimer - dt);
@@ -675,8 +741,7 @@ const boot = (): void => {
     previousMagazine = magazine;
 
     if (match.phase === "over" && screens.activeScreen === "game") {
-      screens.showResults(match);
-      if (document.pointerLockElement) document.exitPointerLock();
+      finishRound();
     }
   };
 
@@ -794,6 +859,10 @@ const boot = (): void => {
       get pitch() {
         return +player.pitch.toFixed(3);
       },
+      /** Horizontal speed, so a test can check pace without walking into a wall. */
+      get speed() {
+        return +lengthXZ(player.velocity).toFixed(3);
+      },
       get yaw() {
         return +player.yaw.toFixed(3);
       },
@@ -855,6 +924,17 @@ const boot = (): void => {
       },
       get screen() {
         return screens.activeScreen;
+      },
+      get map() {
+        return { id: activeMap.id, name: activeMap.name };
+      },
+      get profile() {
+        return {
+          level: profile.level,
+          xp: profile.xp,
+          kills: profile.kills,
+          carried: carried(),
+        };
       },
       get settings() {
         return { ...settings };

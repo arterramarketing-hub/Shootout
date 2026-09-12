@@ -6,6 +6,7 @@ import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 import type { WeaponId } from "../sim/weapons";
+import { DEFAULT_FINISH, type Finish } from "../sim/cosmetics";
 
 /**
  * Greybox weapon viewmodels, built from primitives.
@@ -93,11 +94,12 @@ const MODELS: Record<WeaponId, ModelSpec> = {
   },
 };
 
-const TONES: Record<Part["tone"], string> = {
-  body: "#33383f",
-  metal: "#23272c",
-  accent: "#4a3e31",
-};
+const TONE_KEYS: Part["tone"][] = ["body", "metal", "accent"];
+
+/** Lets the equipped finish repaint every weapon in place. */
+export interface FinishPainter {
+  apply(finish: Finish): void;
+}
 
 export interface WeaponModel {
   root: TransformNode;
@@ -110,20 +112,32 @@ export interface WeaponModel {
 export const createWeaponModels = (
   scene: Scene,
   layerMask: number,
-): Record<WeaponId, WeaponModel> => {
+): { models: Record<WeaponId, WeaponModel>; painter: FinishPainter } => {
   const materials = new Map<string, StandardMaterial>();
-  for (const [tone, hex] of Object.entries(TONES)) {
+  for (const tone of TONE_KEYS) {
     const material = new StandardMaterial(`mat_vm_${tone}`, scene);
-    const colour = Color3.FromHexString(hex);
-    material.diffuseColor = colour;
-    material.ambientColor = colour;
     material.specularColor = new Color3(0.12, 0.12, 0.13);
     material.specularPower = 48;
-    // The viewmodel is lit by its own rig, so it must not go black in shadow.
-    material.emissiveColor = colour.scale(0.1);
-    material.freeze();
     materials.set(tone, material);
   }
+
+  const painter: FinishPainter = {
+    apply(finish) {
+      for (const tone of TONE_KEYS) {
+        const material = materials.get(tone);
+        if (!material) continue;
+        const colour = Color3.FromHexString(finish[tone]);
+        // Materials are frozen for speed, so a repaint has to lift that first.
+        material.unfreeze();
+        material.diffuseColor = colour;
+        material.ambientColor = colour;
+        // The viewmodel is lit by its own rig, so it must not go black in shadow.
+        material.emissiveColor = colour.scale(0.1);
+        material.freeze();
+      }
+    },
+  };
+  painter.apply(DEFAULT_FINISH);
 
   const models = {} as Record<WeaponId, WeaponModel>;
   for (const [id, spec] of Object.entries(MODELS) as [WeaponId, ModelSpec][]) {
@@ -150,5 +164,5 @@ export const createWeaponModels = (
     root.setEnabled(false);
     models[id] = { root, sight: spec.sight, muzzle };
   }
-  return models;
+  return { models, painter };
 };

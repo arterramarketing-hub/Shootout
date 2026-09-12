@@ -1,4 +1,4 @@
-import type { BoxBrush, MapDefinition, SpawnPoint, TargetPlacement } from "./types";
+import type { BoxBrush, MapDefinition, MapStyle, SpawnPoint, TargetPlacement } from "./types";
 
 const WALL_HEIGHT = 4.2;
 const WALL_THICKNESS = 0.4;
@@ -138,9 +138,35 @@ const targets: TargetPlacement[] = [
   { id: "t_far_b", x: 15.0, z: 7.5, y: 3.2, yaw: -Math.PI * 0.6 },
 ];
 
+/**
+ * Daylight through high windows onto bare concrete: cool greys, warm timber,
+ * and a single strong key from above and behind the north wall.
+ */
+const warehouseStyle: MapStyle = {
+  concrete: "#6e737b",
+  panel: "#7a808a",
+  crate: "#a98f6a",
+  metal: "#5d636c",
+  grate: "#6a7078",
+  hazard: "#8a8f96",
+  hazardStripe: "#d8a53c",
+  fog: "#8a9099",
+  skyLight: "#cfdcea",
+  groundLight: "#6b6154",
+  keyLight: "#fff3dc",
+  fillIntensity: 0.62,
+  keyIntensity: 0.68,
+  ambient: "#4d5158",
+  keyDirection: { x: -0.55, y: -0.72, z: 0.42 },
+  stripLight: "#ffe9c4",
+};
+
 export const greyboxMap: MapDefinition = {
-  id: "warehouse_greybox",
-  name: "Warehouse (greybox)",
+  id: "warehouse",
+  name: "Warehouse",
+  tagline: "Open floor, crate cover, a mezzanine that owns the long angles.",
+  style: warehouseStyle,
+  textureSeed: 1337,
   size: 40,
   brushes,
   spawns,

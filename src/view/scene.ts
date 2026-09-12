@@ -2,14 +2,14 @@ import "@babylonjs/core/Meshes/Builders/boxBuilder";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Vector3, Vector4 } from "@babylonjs/core/Maths/math.vector";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { Scene } from "@babylonjs/core/scene";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import type { QualitySettings } from "../engine/quality";
-import type { MapDefinition, SurfaceKind } from "../maps/types";
-import { createMaterials } from "./materials";
+import type { BoxBrush, MapDefinition, SurfaceKind } from "../maps/types";
+import { TEXEL_METRES, createMaterials } from "./materials";
 
 export interface BuiltScene {
   scene: Scene;
@@ -22,15 +22,16 @@ export const createScene = (
   map: MapDefinition,
   quality: QualitySettings,
 ): BuiltScene => {
+  const style = map.style;
   const scene = new Scene(engine);
-  scene.clearColor = new Color4(0.05, 0.06, 0.07, 1);
+  const fog = Color3.FromHexString(style.fog);
+
+  scene.clearColor = new Color4(fog.r * 0.5, fog.g * 0.5, fog.b * 0.55, 1);
   // Ambient lifts the shadowed side of every surface. Without it, vertical
-  // walls facing away from the key light read as flat black.
-  scene.ambientColor = new Color3(0.26, 0.27, 0.3);
-  scene.collisionsEnabled = true;
-  // Gravity is integrated in the simulation, not by the scene.
-  scene.gravity = Vector3.Zero();
-  // Nothing in the greybox animates or changes material, so let Babylon skip
+  // walls facing away from the key light read as flat black, and a player
+  // standing in one is invisible rather than merely hard to see.
+  scene.ambientColor = Color3.FromHexString(style.ambient);
+  // Nothing in the level animates or changes material, so let Babylon skip
   // the per-frame bookkeeping it would otherwise do for dynamic scenes.
   scene.blockMaterialDirtyMechanism = true;
   scene.skipPointerMovePicking = true;
@@ -38,43 +39,79 @@ export const createScene = (
 
   if (quality.fog) {
     scene.fogMode = Scene.FOGMODE_LINEAR;
-    scene.fogColor = new Color3(0.07, 0.08, 0.09);
-    scene.fogStart = quality.viewDistance * 0.35;
+    scene.fogColor = fog.scale(0.55);
+    scene.fogStart = quality.viewDistance * 0.4;
     scene.fogEnd = quality.viewDistance;
   }
 
-  buildLighting(scene);
-  const staticMeshes = buildMap(scene, map);
+  buildLighting(scene, map);
+  const staticMeshes = buildMap(scene, map, quality.tier === "high" ? 4 : 1);
 
   return { scene, staticMeshes };
 };
 
-const buildLighting = (scene: Scene): void => {
+const buildLighting = (scene: Scene, map: MapDefinition): void => {
+  const style = map.style;
+
   // Two lights only. A hemispheric fill for shape, one directional for
   // direction. Real-time shadows stay off on every mobile tier.
-  const fill = new HemisphericLight("fill", new Vector3(0.2, 1, 0.15), scene);
-  fill.intensity = 0.58;
-  fill.diffuse = new Color3(0.86, 0.9, 0.98);
+  const fill = new HemisphericLight("fill", new Vector3(0.15, 1, 0.1), scene);
+  fill.intensity = style.fillIntensity;
+  fill.diffuse = Color3.FromHexString(style.skyLight);
   // A warm bounce from the floor keeps undersides from going dead.
-  fill.groundColor = new Color3(0.42, 0.39, 0.36);
+  fill.groundColor = Color3.FromHexString(style.groundLight);
   fill.specular = new Color3(0.05, 0.05, 0.05);
 
   // The key is angled well off vertical so that walls, not just floors,
   // catch it and the geometry reads in three dimensions.
-  const key = new DirectionalLight("key", new Vector3(-0.55, -0.7, 0.45), scene);
-  key.intensity = 0.52;
-  key.diffuse = new Color3(1.0, 0.96, 0.88);
-  key.specular = new Color3(0.08, 0.08, 0.08);
+  const direction = style.keyDirection;
+  const key = new DirectionalLight(
+    "key",
+    new Vector3(direction.x, direction.y, direction.z).normalize(),
+    scene,
+  );
+  key.intensity = style.keyIntensity;
+  key.diffuse = Color3.FromHexString(style.keyLight);
+  key.specular = new Color3(0.16, 0.16, 0.16);
 };
 
-const buildMap = (scene: Scene, map: MapDefinition): Mesh[] => {
-  const materials = createMaterials(scene);
+/**
+ * UV rectangles for one box, scaled by its real size.
+ *
+ * Without this every face maps the texture zero to one, so a forty metre floor
+ * and a one metre crate get the same single tile and the level reads as
+ * stretched plastic. Scaling by world size gives one texel density everywhere.
+ */
+const faceUVs = (brush: BoxBrush): Vector4[] => {
+  const u = (metres: number) => Math.max(0.25, metres / TEXEL_METRES);
+  const width = u(brush.width);
+  const height = u(brush.height);
+  const depth = u(brush.depth);
+  // Babylon's face order: back, front, right, left, top, bottom.
+  return [
+    new Vector4(0, 0, width, height),
+    new Vector4(0, 0, width, height),
+    new Vector4(0, 0, depth, height),
+    new Vector4(0, 0, depth, height),
+    new Vector4(0, 0, width, depth),
+    new Vector4(0, 0, width, depth),
+  ];
+};
+
+const buildMap = (scene: Scene, map: MapDefinition, anisotropy: number): Mesh[] => {
+  const { materials } = createMaterials(scene, map.style, map.textureSeed, anisotropy);
   const byKind = new Map<SurfaceKind, Mesh[]>();
 
   for (const [index, brush] of map.brushes.entries()) {
     const mesh = MeshBuilder.CreateBox(
       `brush_${index}`,
-      { width: brush.width, height: brush.height, depth: brush.depth },
+      {
+        width: brush.width,
+        height: brush.height,
+        depth: brush.depth,
+        faceUV: faceUVs(brush),
+        wrap: true,
+      },
       scene,
     );
     mesh.position.set(brush.x, brush.y, brush.z);
@@ -87,17 +124,15 @@ const buildMap = (scene: Scene, map: MapDefinition): Mesh[] => {
   const merged: Mesh[] = [];
   for (const [kind, meshes] of byKind) {
     // Merging collapses every brush of a kind into one draw call. The third
-    // argument disposes the sources; the fifth keeps submeshes so collision
-    // and culling still work per-brush.
+    // argument disposes the sources; the sixth keeps submeshes so culling
+    // still works per-brush.
     const mesh = Mesh.MergeMeshes(meshes, true, true, undefined, false, true);
     if (!mesh) continue;
     mesh.name = `static_${kind}`;
     mesh.material = materials[kind];
-    mesh.checkCollisions = true;
-    mesh.isPickable = true;
+    mesh.checkCollisions = false;
+    mesh.isPickable = false;
     mesh.freezeWorldMatrix();
-    // An octree turns collision from a scan of every triangle into a local
-    // lookup, which is the difference between 60 fps and a stutter on a phone.
     mesh.createOrUpdateSubmeshesOctree(64, 2);
     merged.push(mesh);
   }

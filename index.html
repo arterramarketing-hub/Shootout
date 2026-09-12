@@ -95,6 +95,20 @@
           <h1>SHOOTOUT</h1>
           <p class="boot-sub">Phase 2 &middot; team deathmatch</p>
 
+          <div class="career">
+            <div class="career-head">
+              <span class="career-level">LVL <b id="career-level">1</b></span>
+              <span class="career-next" id="career-next"></span>
+            </div>
+            <div class="career-track"><div class="career-fill" id="career-fill"></div></div>
+            <div class="career-stats" id="career-stats"></div>
+          </div>
+
+          <div class="lobby-row">
+            <span class="lobby-label">Finish</span>
+            <div class="segmented segmented-wrap" id="pick-finish" role="group" aria-label="Weapon finish"></div>
+          </div>
+
           <div class="lobby-row">
             <span class="lobby-label">Match</span>
             <div class="segmented" id="pick-online" role="group" aria-label="Match type">
@@ -114,6 +128,12 @@
             <input class="text-field" type="text" id="set-name" spellcheck="false"
                    autocomplete="off" maxlength="16" placeholder="Player" />
           </div>
+
+          <div class="lobby-row is-offline">
+            <span class="lobby-label">Map</span>
+            <div class="segmented" id="pick-map" role="group" aria-label="Map"></div>
+          </div>
+          <p class="map-tagline is-offline" id="map-tagline"></p>
 
           <div class="lobby-row is-offline">
             <span class="lobby-label">Difficulty</span>
@@ -212,6 +232,9 @@
             <div><dt>Headshots</dt><dd id="stat-headshots">0</dd></div>
             <div><dt>Ratio</dt><dd id="stat-ratio">0.00</dd></div>
           </dl>
+
+          <div class="rewards" id="rewards"></div>
+          <p class="levelup" id="levelup"></p>
 
           <div class="screen-actions">
             <button class="start" id="btn-again" type="button">PLAY AGAIN</button>

@@ -615,3 +615,96 @@ html, body {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
 }
 .netbar.is-poor { color: #ffb46b; }
+
+.map-tagline {
+  margin: -4px 0 10px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--hud-dim);
+  text-align: right;
+}
+
+/* --- Career ---------------------------------------------------------------- */
+
+.career {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid rgba(232, 238, 245, 0.14);
+  border-radius: 7px;
+  text-align: left;
+}
+.career-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.career-level { font-size: 11px; letter-spacing: 0.16em; color: var(--hud-dim); }
+.career-level b {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--hud);
+  font-variant-numeric: tabular-nums;
+}
+.career-next { font-size: 10.5px; letter-spacing: 0.06em; color: var(--accent); }
+.career-track {
+  margin-top: 9px;
+  height: 4px;
+  background: rgba(232, 238, 245, 0.14);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.career-fill {
+  height: 100%;
+  width: 100%;
+  background: var(--accent);
+  transform-origin: left center;
+  transition: transform 320ms ease-out;
+}
+.career-stats {
+  margin-top: 9px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--hud-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.segmented-wrap { flex-wrap: wrap; justify-content: flex-end; }
+.segmented button[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.segmented button .lock {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  opacity: 0.8;
+}
+
+.rewards {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 18px 0 0;
+  font-size: 11.5px;
+  color: var(--hud-dim);
+  text-align: left;
+}
+.reward-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.reward-line.is-total {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(232, 238, 245, 0.14);
+  color: var(--hud);
+}
+.levelup {
+  margin: 12px 0 0;
+  min-height: 1.2em;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}

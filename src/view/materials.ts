@@ -1,43 +1,59 @@
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import type { Scene } from "@babylonjs/core/scene";
-import type { SurfaceKind } from "../maps/types";
+import type { MapStyle, SurfaceKind } from "../maps/types";
+import { createTextures, type SurfaceTextureId, type TextureSet } from "./textures";
 
 /**
- * Greybox palette. Flat, desaturated and value-separated so that geometry
- * reads clearly before any art exists. Hue is doing no work here; only
- * lightness separates the surfaces, which is what makes a greybox readable.
+ * Which generated texture dresses each kind of surface, and how shiny it is.
+ *
+ * Keeping this mapping separate from the level data means a new map changes
+ * its whole look by changing colours, without touching a single brush.
  */
-const PALETTE: Record<SurfaceKind, { diffuse: string; specular: number }> = {
-  floor: { diffuse: "#55585e", specular: 0.02 },
-  wall: { diffuse: "#7c8087", specular: 0.02 },
-  prop: { diffuse: "#9a8d76", specular: 0.03 },
-  accent: { diffuse: "#464c54", specular: 0.05 },
-  catwalk: { diffuse: "#696e76", specular: 0.04 },
+const SURFACES: Record<SurfaceKind, { texture: SurfaceTextureId; specular: number; power: number }> = {
+  floor: { texture: "concrete", specular: 0.03, power: 16 },
+  wall: { texture: "panel", specular: 0.05, power: 24 },
+  prop: { texture: "crate", specular: 0.04, power: 20 },
+  accent: { texture: "metal", specular: 0.14, power: 48 },
+  catwalk: { texture: "grate", specular: 0.1, power: 40 },
+  hazard: { texture: "hazard", specular: 0.06, power: 24 },
 };
+
+/**
+ * One texture repeat per this many metres, so texel density stays even.
+ * Three metres keeps wall panels reading as panels; at one or two the seams
+ * repeat often enough that a wall looks like bathroom tile.
+ */
+export const TEXEL_METRES = 3;
 
 export type MaterialSet = Record<SurfaceKind, StandardMaterial>;
 
-export const createMaterials = (scene: Scene): MaterialSet => {
+export const createMaterials = (
+  scene: Scene,
+  style: MapStyle,
+  seed: number,
+  anisotropy = 1,
+): { materials: MaterialSet; textures: TextureSet } => {
+  const textures = createTextures(scene, style, seed, anisotropy);
   const set = {} as MaterialSet;
-  for (const [kind, config] of Object.entries(PALETTE) as [
+
+  for (const [kind, config] of Object.entries(SURFACES) as [
     SurfaceKind,
-    { diffuse: string; specular: number },
+    (typeof SURFACES)[SurfaceKind],
   ][]) {
     const material = new StandardMaterial(`mat_${kind}`, scene);
-    const diffuse = Color3.FromHexString(config.diffuse);
-    material.diffuseColor = diffuse;
-    material.specularColor = new Color3(config.specular, config.specular, config.specular);
+    material.diffuseTexture = textures[config.texture];
     // Ambient response is what lets the scene's ambient colour reach this
     // surface; leaving it black is why an unlit wall turns pure black.
-    material.ambientColor = diffuse;
-    // A little emissive keeps the darkest faces legible in a greybox, where
-    // readability matters more than lighting realism.
-    material.emissiveColor = diffuse.scale(0.05);
+    material.ambientTexture = textures[config.texture];
+    material.ambientColor = new Color3(1, 1, 1);
+    material.specularColor = new Color3(config.specular, config.specular, config.specular);
+    material.specularPower = config.power;
+    material.useAlphaFromDiffuseTexture = false;
     // Materials are frozen because nothing about them changes at runtime;
     // this skips a per-frame dirty check on every draw.
     material.freeze();
     set[kind] = material;
   }
-  return set;
+  return { materials: set, textures };
 };

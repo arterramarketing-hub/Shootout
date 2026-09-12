@@ -10,9 +10,8 @@ names, maps, or trademarks are used.
 
 ## Status
 
-**Phase 3 complete.** An authoritative server with client prediction,
-reconciliation and lag compensation. Team deathmatch and free-for-all, solo
-against bots or online against other players.
+**Phase 4 complete.** Two maps with generated art, levelling with weapon and
+finish unlocks, on top of the authoritative server from Phase 3.
 
 | Phase | Scope | State |
 | --- | --- | --- |
@@ -20,6 +19,7 @@ against bots or online against other players.
 | 1 | Weapons, viewmodel, shooting, HUD, sound | Done |
 | 2 | Bots, team deathmatch, match flow, PWA install | Done |
 | 3 | Authoritative multiplayer server, 5v5 | Done |
+| 4 | Art pass, second map, progression | Done |
 | 4 | Art pass, second map, progression | Planned |
 
 ## Stack
@@ -146,6 +146,49 @@ visit. The service worker caches at runtime rather than from a build manifest,
 since the bundler hashes asset names on every build and a stale list is worse
 than no list.
 
+## Art
+
+Every texture is drawn at load rather than downloaded: concrete, wall panelling,
+timber crates, brushed metal, catwalk grating and hazard paint, all generated
+from noise and simple shapes. The download therefore carries zero bytes of art,
+and a map changes its entire look by passing different colours through the same
+generators.
+
+Texel density is held even by scaling each brush's UVs to its real size. Without
+that, a forty metre floor and a one metre crate both get a single tile, and the
+level reads as stretched plastic.
+
+## Maps
+
+| Map | Plays like |
+| --- | --- |
+| Warehouse | Open floor, crate cover, a mezzanine that owns the long angles |
+| Substation | Transformer blocks break every lane; the gantry sees everything |
+
+Each carries its own palette and light levels. Substation is cool and
+industrial, but deliberately not dark: a player standing still in a corner has
+to stay visible, and atmosphere is worth less than that.
+
+## Progression
+
+Experience comes from kills, headshots, seeing a round out, winning, and how
+close the round was. Levelling hands over the submachine gun at 3 and the
+shotgun at 6, so a new player has two weapons to learn rather than four.
+
+Everything after that is a finish: three colours on the weapon viewmodel and
+nothing else. There is no finish that shoots straighter, holds more rounds or
+reloads faster. A unit test asserts that a finish carries only colours and a
+name, so nothing that could affect a match can be added to one by accident.
+
+Online matches are not gated at all. The server hands everyone the full rack,
+because progression that turns into an advantage over other players is not
+worth balancing.
+
+The entitlement seam exists as an interface with one shipped implementation
+that grants only what a profile already records. There is no purchase path, no
+currency and no prompt, and anything plugged into that seam can still only
+unlock a set of colours.
+
 ## Multiplayer
 
 The server owns the game. It runs the same simulation the client does, at
@@ -193,7 +236,7 @@ src/
   net/      protocol, client prediction, lag-compensation history
   engine/   render loop, quality tiers, audio synthesis, settings
   hud/      DOM overlay
-  maps/     level definitions as data
+  maps/     level definitions and their palettes, as data
 server/     authoritative game server
 ```
 
@@ -233,10 +276,11 @@ Measured for Phase 0:
 
 | Metric | Value |
 | --- | --- |
-| Bundle, gzipped | 403 KB |
+| Bundle, gzipped | 409 KB |
 | Server bundle | 79 KB |
 | Draw calls, empty level | 5 |
-| Navigation bake, at load | about 30 ms |
+| Navigation bake, at load | 30 to 45 ms |
+| Downloaded art | none; every texture is generated |
 | Snapshot size, four players | about 800 bytes |
 | Frame rate, software rasteriser in CI | 30 to 60 fps |
 

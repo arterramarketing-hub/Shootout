@@ -1,3 +1,4 @@
+import { DEFAULT_MAP_ID, MAPS } from "../maps";
 import type { BotDifficulty } from "../sim/bots";
 import { CAMERA, LOOK } from "../sim/config";
 import type { QualityTier } from "./quality";
@@ -18,6 +19,8 @@ export interface GameSettings {
   online: boolean;
   serverUrl: string;
   playerName: string;
+  /** Which level solo matches load. */
+  mapId: string;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -34,6 +37,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   online: false,
   serverUrl: "",
   playerName: "Player",
+  mapId: DEFAULT_MAP_ID,
 };
 
 export const SETTINGS_LIMITS = {
@@ -106,6 +110,11 @@ export const loadSettings = (): GameSettings => {
       online: typeof parsed.online === "boolean" ? parsed.online : DEFAULT_SETTINGS.online,
       serverUrl: sanitiseServerUrl(parsed.serverUrl),
       playerName: sanitisePlayerName(parsed.playerName),
+      // A map that no longer exists falls back rather than failing to load.
+      mapId:
+        typeof parsed.mapId === "string" && parsed.mapId in MAPS
+          ? parsed.mapId
+          : DEFAULT_MAP_ID,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

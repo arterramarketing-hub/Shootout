@@ -11,7 +11,8 @@ import { activeWeapon, isSwapping, type LoadoutState } from "../sim/loadout";
 import type { PlayerState } from "../sim/types";
 import type { WeaponId } from "../sim/weapons";
 import { clamp, damp } from "../sim/vec3";
-import { createWeaponModels, type WeaponModel } from "./weaponModels";
+import { createWeaponModels, type FinishPainter, type WeaponModel } from "./weaponModels";
+import type { Finish } from "../sim/cosmetics";
 
 /** Meshes on this layer render only through the viewmodel camera. */
 export const VIEWMODEL_LAYER = 0x20000000;
@@ -92,6 +93,7 @@ const RECOIL = {
 export class ViewmodelRig {
   readonly camera: FreeCamera;
   private readonly models: Record<WeaponId, WeaponModel>;
+  private readonly painter: FinishPainter;
   /**
    * The weapon hangs off this node rather than off the camera.
    * Parenting directly to a Babylon camera inherits the camera's world
@@ -134,7 +136,9 @@ export class ViewmodelRig {
 
     this.holder = new TransformNode("viewmodel_holder", scene);
 
-    this.models = createWeaponModels(scene, VIEWMODEL_LAYER);
+    const built = createWeaponModels(scene, VIEWMODEL_LAYER);
+    this.models = built.models;
+    this.painter = built.painter;
     for (const model of Object.values(this.models)) {
       light.includedOnlyMeshes.push(...model.root.getChildMeshes());
       model.root.parent = this.holder;
@@ -156,6 +160,11 @@ export class ViewmodelRig {
   }
 
   /** Set the weapon camera's vertical field of view, in degrees. */
+  /** Repaint the weapon in the equipped finish. */
+  setFinish(finish: Finish): void {
+    this.painter.apply(finish);
+  }
+
   setFieldOfView(verticalDegrees: number = VIEWMODEL_FOV_DEGREES): void {
     this.camera.fov = verticalDegrees * DEG_TO_RAD;
   }

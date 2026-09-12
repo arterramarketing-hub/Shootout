@@ -1,5 +1,62 @@
 # Changelog
 
+## Phase 4 — art, a second map, progression
+
+The prototype stops looking like a greybox. Every surface is textured, there
+are two levels to play, and rounds now pay into a levelling track that hands
+over weapons early and colours thereafter.
+
+**Added**
+
+- Procedural textures generated at load: concrete, wall panelling, timber
+  crates, brushed metal, catwalk grating and hazard paint, all from noise and
+  simple shapes. The download carries no art at all.
+- Per-brush UV scaling, so texel density is even across a forty metre floor and
+  a one metre crate rather than stretching one to cover the other.
+- Per-map palettes and light levels, which is how a level changes its whole
+  look without a brush moving.
+- Substation, a second map: a grid of transformer blocks that breaks every lane
+  into short lanes, with one raised gantry that trades cover for vision.
+- A map registry and a lobby picker. Swapping levels rebuilds the scene, the
+  collision world and the navigation grid between rounds.
+- Progression: experience from kills, headshots, rounds played, wins and how
+  close the round was, with the submachine gun at level 3 and the shotgun at 6.
+- Seven weapon finishes, unlocked by level. A finish carries three colours and
+  a name, and a test asserts it can carry nothing else.
+- An entitlement seam: one interface, one shipped implementation that grants
+  only what a profile already records. No purchase path, no currency, no
+  prompt.
+- Career panel in the lobby and an itemised experience breakdown on the
+  scoreboard.
+- 57 further unit tests.
+
+**Changed**
+
+- Online matches are not gated by level. The server hands everyone the full
+  rack, since progression that becomes an advantage over other players is not
+  worth balancing.
+- Substation was rebuilt brighter after the first pass. The original palette
+  was atmospheric and unplayable: a player standing in a corner simply was not
+  visible.
+
+**Fixed**
+
+- The wall texture repeated tightly enough to read as bathroom tile. Softened
+  the seams and widened the repeat.
+- The "next unlock" line went blank for twenty levels once the weapon rack was
+  complete; it now falls through to the next finish.
+- Two map surfaces were forced through casts to kinds that did not exist, which
+  would have left them without materials at runtime.
+
+**Measured**
+
+| Metric | Value |
+| --- | --- |
+| Bundle, gzipped | 409 KB |
+| Downloaded art | none |
+| Navigation bake | 30 to 45 ms |
+| Maps | 2 |
+
 ## Phase 3 — authoritative server, prediction, lag compensation
 
 The game is playable against other people. An authoritative server owns the
