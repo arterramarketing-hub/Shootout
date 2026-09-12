@@ -1,5 +1,72 @@
 # Changelog
 
+## Phase 1 — weapons, viewmodel, shooting
+
+The prototype is now a shooter. Four weapons, a first-person viewmodel, hitscan
+fire against practice targets, a combat HUD, and weapon audio synthesised at
+runtime.
+
+**Added**
+
+- Four original weapons in `src/sim/weapons.ts`: an assault rifle, a submachine
+  gun, a pump shotgun and a sidearm. Damage is derived from the lethality
+  target rather than picked by feel, and unit tests assert the design rules
+  against every weapon, so a retune that breaks them fails the build.
+- Ballistics: range falloff, headshot multipliers, movement and stance spread,
+  firing bloom, and fixed per-shot recoil patterns that can be learned.
+- Weapon state machine covering automatic, semi-automatic and pump actions,
+  magazine and per-shell reloads, weapon swapping, and the sprint-out delay.
+- Hitscan resolution behind a `HitscanWorld` interface, so the simulation stays
+  free of engine types. Scatter comes from a seeded generator, making any shot
+  reproducible from its seed.
+- First-person viewmodel drawn by a second camera at a fixed 45 degree vertical
+  field of view, with procedural sway, bob, sprint and reload poses, an aimed
+  pose that lines the weapon's own sight up with screen centre, and recoil kick.
+- Six practice targets: a body plate and a head plate on a post, which fold back
+  when knocked down and stand up again after three seconds.
+- Shot effects: pooled tracers and impact marks, plus a muzzle flash on the
+  weapon itself. Nothing is allocated per shot.
+- Weapon audio synthesised from noise and oscillators, with no sample files. Each
+  weapon's crack, body and room tail are tuned as numbers beside its damage.
+- Combat HUD: ammunition, health with a damage vignette, weapon name, a
+  crosshair driven by the same spread the bullets use, hit markers that
+  distinguish headshots, and a damage feed.
+- Player health with delayed regeneration, ready for Phase 2.
+- 99 further unit tests and 14 further browser tests.
+
+**Changed**
+
+- Crouch and lean came off the touch layout, which now carries fire, aim, reload
+  and swap. Both remain in the simulation and on the keyboard.
+- The submachine gun went from 26 to 35 damage. At 26 it needed four body shots,
+  breaking the design rule of three or fewer.
+
+**Fixed**
+
+- Vertical look was inverted. Screen coordinates grow downward, so a drag up
+  gives a negative delta, and adding that to pitch unchanged aimed the camera
+  the wrong way.
+- `setPointerCapture` throws for a pointer the browser no longer considers
+  active, which aborted the pointer-down handler and dropped the touch entirely.
+- Firing bloom was inert on every weapon, because recovery was faster than any
+  weapon could accumulate it.
+- The weapon viewmodel was invisible, then enormous. Three separate causes: it
+  was parented to the camera, whose world matrix is not the frame the offsets
+  were written in; its field of view was converted from a horizontal figure,
+  which on a wide phone screen gave a very narrow vertical angle; and its stock
+  sat level with the eye, where perspective blew the near end up until it
+  covered the screen.
+- The mesh readout under-reported the scene, because `getActiveMeshes` returns
+  only the camera rendered last, which is the weapon camera.
+
+**Measured**
+
+| Metric | Value |
+| --- | --- |
+| Bundle, gzipped | 397 KB |
+| Draw calls, whole level | 5 |
+| Frame rate, software rasteriser in CI | 45 to 60 fps |
+
 ## Phase 0 — boot, greybox, movement
 
 First playable build. The player can walk, sprint, crouch and lean around a

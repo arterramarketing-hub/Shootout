@@ -27,8 +27,33 @@
           <span class="crosshair-line crosshair-right"></span>
           <span class="crosshair-dot"></span>
         </div>
+        <div id="hit-marker" class="hit-marker" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div id="damage-vignette" class="damage-vignette" aria-hidden="true"></div>
         <pre id="debug" class="debug"></pre>
         <div id="stance" class="stance">STAND</div>
+        <div id="feed" class="feed" aria-live="polite"></div>
+
+        <div class="vitals">
+          <div class="health">
+            <div class="health-track"><div id="health-fill" class="health-fill"></div></div>
+            <div class="health-value"><span id="health-value">100</span></div>
+          </div>
+        </div>
+
+        <div class="ammo">
+          <div class="ammo-counts">
+            <span id="ammo-current" class="ammo-current">30</span>
+            <span class="ammo-slash">/</span>
+            <span id="ammo-reserve" class="ammo-reserve">150</span>
+          </div>
+          <div class="weapon-line">
+            <span id="weapon-name" class="weapon-name">Ridgeline</span>
+            <span id="weapon-class" class="weapon-class">Assault Rifle</span>
+          </div>
+          <div id="reload-hint" class="reload-hint">RELOAD</div>
+        </div>
       </div>
 
       <div id="joystick-base" class="joystick-base" aria-hidden="true">
@@ -36,23 +61,30 @@
       </div>
 
       <div class="buttons" id="buttons">
-        <button class="pad-button" id="btn-lean-left" type="button" aria-label="Lean left">Q</button>
-        <button class="pad-button" id="btn-lean-right" type="button" aria-label="Lean right">E</button>
-        <button class="pad-button pad-wide" id="btn-crouch" type="button" aria-label="Crouch">CROUCH</button>
+        <div class="button-column">
+          <button class="pad-button pad-small" id="btn-swap" type="button" aria-label="Swap weapon">SWAP</button>
+          <button class="pad-button pad-small" id="btn-reload" type="button" aria-label="Reload">RELOAD</button>
+        </div>
+        <button class="pad-button pad-aim" id="btn-aim" type="button" aria-label="Aim down sights">ADS</button>
+        <button class="pad-button pad-fire" id="btn-fire" type="button" aria-label="Fire">FIRE</button>
       </div>
+
+      <button class="pad-button pad-fire pad-fire-left" id="btn-fire-left" type="button" aria-label="Fire">FIRE</button>
 
       <button class="chip" id="btn-debug" type="button">DEBUG</button>
 
       <div id="boot" class="boot">
         <div class="boot-card">
           <h1>SHOOTOUT</h1>
-          <p class="boot-sub">Phase 0 &middot; movement prototype</p>
+          <p class="boot-sub">Phase 1 &middot; weapons prototype</p>
           <button class="start" id="btn-start" type="button">TAP TO START</button>
           <ul class="boot-help">
             <li><b>Left half</b> drag to move. Push out to sprint.</li>
             <li><b>Right half</b> drag to look.</li>
-            <li>Buttons bottom-right: crouch and lean.</li>
-            <li>Desktop: WASD, mouse, Shift, Ctrl, Q and E.</li>
+            <li><b>FIRE</b> either side. <b>ADS</b> to aim.</li>
+            <li><b>SWAP</b> cycles four weapons. Shoot the plates.</li>
+            <li>Desktop: WASD, mouse, click to fire, right-click aims, R reloads.</li>
+            <li>Desktop extras: Shift sprints, Ctrl crouches, Q and E lean.</li>
           </ul>
         </div>
       </div>

@@ -20,11 +20,13 @@ export class CameraRig {
   readonly camera: FreeCamera;
   private bobOffset = 0;
   private bobRoll = 0;
+  private currentFov = CAMERA.defaultFovDegrees;
 
   constructor(scene: Scene, quality: QualitySettings, fovDegrees = CAMERA.defaultFovDegrees) {
     this.camera = new FreeCamera("player_camera", new Vector3(0, STANCE.standEyeHeight, 0), scene);
     // Babylon takes a vertical field of view; the familiar shooter number is
     // horizontal, so convert to keep the setting meaningful across aspects.
+    this.currentFov = fovDegrees;
     this.setFieldOfView(fovDegrees);
     this.camera.minZ = CAMERA.nearClip;
     this.camera.maxZ = Math.min(quality.viewDistance, CAMERA.farClip);
@@ -46,11 +48,24 @@ export class CameraRig {
    * `alpha` interpolates between the previous and current simulation states so
    * that rendering stays smooth when the frame rate and tick rate differ.
    */
+  /**
+   * Ease the world field of view toward a target.
+   * Aiming narrows it, which is most of what makes a sight picture feel
+   * closer; snapping instead of easing reads as a glitch.
+   */
+  blendFieldOfView(targetDegrees: number, deltaSeconds: number): void {
+    const blend = Math.min(1, deltaSeconds * 14);
+    this.currentFov += (targetDegrees - this.currentFov) * blend;
+    this.setFieldOfView(this.currentFov);
+  }
+
   update(
     previousPosition: Vec3,
     current: PlayerState,
     alpha: number,
     deltaSeconds: number,
+    recoilPitch = 0,
+    recoilYaw = 0,
   ): void {
     const x = previousPosition.x + (current.position.x - previousPosition.x) * alpha;
     const y = previousPosition.y + (current.position.y - previousPosition.y) * alpha;
@@ -64,11 +79,13 @@ export class CameraRig {
     this.camera.position.set(x + lean.x, y + eye, z + lean.z);
     // Rotation is taken from the current state directly, never interpolated:
     // smoothing the aim would read as input lag.
+    // Recoil is added here rather than folded into the player's aim, so that
+    // kick moves the view and the shots without also steering movement.
     // Babylon's rotation.x pitches the camera downward as it grows, while the
     // simulation measures pitch above the horizon, so the sign flips here.
     this.camera.rotation.set(
-      -current.pitch,
-      current.yaw,
+      -(current.pitch + recoilPitch),
+      current.yaw + recoilYaw,
       current.leanAmount * STANCE.leanRollRadians + this.bobRoll,
     );
   }

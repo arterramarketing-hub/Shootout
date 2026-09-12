@@ -25,6 +25,16 @@ export interface SpawnPoint {
   yaw: number;
 }
 
+export interface TargetPlacement {
+  id: string;
+  x: number;
+  z: number;
+  /** Height of the plate's base above the floor. */
+  y: number;
+  /** Facing, in radians. */
+  yaw: number;
+}
+
 export interface MapDefinition {
   id: string;
   name: string;
@@ -32,4 +42,6 @@ export interface MapDefinition {
   size: number;
   brushes: BoxBrush[];
   spawns: SpawnPoint[];
+  /** Practice targets. Replaced by bots in Phase 2. */
+  targets: TargetPlacement[];
 }

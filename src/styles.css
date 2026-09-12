@@ -120,31 +120,53 @@ html, body {
 
 .buttons {
   position: absolute;
-  right: calc(16px + var(--safe-r));
-  bottom: calc(16px + var(--safe-b));
+  right: calc(14px + var(--safe-r));
+  bottom: calc(14px + var(--safe-b));
   display: flex;
-  gap: 10px;
+  gap: 9px;
   align-items: flex-end;
 }
+.button-column { display: flex; flex-direction: column; gap: 9px; }
 .pad-button {
-  width: 58px;
-  height: 58px;
+  width: 62px;
+  height: 62px;
   border-radius: 50%;
   border: 1.5px solid rgba(232, 238, 245, 0.32);
   background: rgba(18, 22, 26, 0.5);
   color: var(--hud);
   font: inherit;
-  font-size: 12px;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  letter-spacing: 0.06em;
   touch-action: none;
   backdrop-filter: blur(2px);
 }
-.pad-wide { width: 84px; border-radius: 29px; }
+.pad-small { width: 50px; height: 50px; font-size: 10px; }
+.pad-aim {
+  width: 68px;
+  height: 68px;
+  border-color: rgba(232, 238, 245, 0.45);
+}
+.pad-fire {
+  width: 92px;
+  height: 92px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  border-color: rgba(126, 224, 168, 0.55);
+  background: rgba(126, 224, 168, 0.1);
+}
+/* A second fire button on the left, for players who shoot with that thumb. */
+.pad-fire-left {
+  position: absolute;
+  left: calc(14px + var(--safe-l));
+  bottom: calc(14px + var(--safe-b));
+  opacity: 0.5;
+}
 .pad-button.is-active {
-  background: rgba(126, 224, 168, 0.22);
+  background: rgba(126, 224, 168, 0.24);
   border-color: var(--accent);
   color: var(--accent);
 }
+.pad-fire.is-active { background: rgba(126, 224, 168, 0.34); }
 
 .chip {
   position: absolute;
@@ -221,4 +243,134 @@ html, body {
 /* Only nag on a phone-sized portrait screen, never on a desktop window. */
 @media (orientation: portrait) and (pointer: coarse) {
   .rotate { display: grid; }
+}
+
+/* --- Weapon and vitals HUD ------------------------------------------------ */
+
+.hit-marker {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 90ms ease-out;
+}
+.hit-marker span {
+  position: absolute;
+  width: 9px;
+  height: 2px;
+  background: var(--hud);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.9);
+}
+.hit-marker span:nth-child(1) { top: 3px; left: 2px; transform: rotate(45deg); }
+.hit-marker span:nth-child(2) { top: 3px; right: 2px; transform: rotate(-45deg); }
+.hit-marker span:nth-child(3) { bottom: 3px; left: 2px; transform: rotate(-45deg); }
+.hit-marker span:nth-child(4) { bottom: 3px; right: 2px; transform: rotate(45deg); }
+.hit-marker.is-headshot span { background: #ff8d6b; }
+
+.damage-vignette {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(150, 20, 20, 0) 42%,
+    rgba(150, 20, 20, 0.42) 82%,
+    rgba(110, 12, 12, 0.7) 100%
+  );
+  transition: opacity 140ms linear;
+}
+
+.ammo {
+  position: absolute;
+  right: calc(16px + var(--safe-r));
+  bottom: calc(122px + var(--safe-b));
+  text-align: right;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+.ammo-counts {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.ammo-current { font-size: 30px; font-weight: 600; line-height: 1; }
+.ammo-current.is-empty { color: #ff7a5c; }
+.ammo-slash { font-size: 15px; color: var(--hud-dim); }
+.ammo-reserve { font-size: 15px; color: var(--hud-dim); }
+.weapon-line { margin-top: 3px; display: flex; gap: 8px; justify-content: flex-end; }
+.weapon-name { font-size: 11px; letter-spacing: 0.12em; }
+.weapon-class { font-size: 10px; letter-spacing: 0.08em; color: var(--hud-dim); }
+.reload-hint {
+  margin-top: 5px;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: #ff7a5c;
+  opacity: 0;
+  transition: opacity 120ms linear;
+}
+.reload-hint.is-visible { opacity: 1; }
+
+.vitals {
+  position: absolute;
+  left: calc(16px + var(--safe-l));
+  bottom: calc(20px + var(--safe-b));
+}
+.health { display: flex; align-items: center; gap: 9px; }
+.health-track {
+  width: 148px;
+  height: 5px;
+  background: rgba(232, 238, 245, 0.14);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.health-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--hud);
+  transform-origin: left center;
+  transition: transform 140ms ease-out, background-color 200ms linear;
+}
+.health-fill.is-critical { background: #ff7a5c; }
+.health-value {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--hud-dim);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+
+.feed {
+  position: absolute;
+  left: calc(16px + var(--safe-l));
+  top: calc(50% - 40px);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+.feed-line { transition: opacity 140ms linear; }
+.feed-hit { color: var(--hud-dim); }
+.feed-down { color: var(--accent); }
+.feed-info { color: var(--hud-dim); }
+
+/* On short landscape screens the ammo block would collide with the buttons. */
+@media (max-height: 380px) {
+  .ammo { bottom: calc(108px + var(--safe-b)); }
+  .ammo-current { font-size: 25px; }
+  .pad-fire { width: 80px; height: 80px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crosshair-line,
+  .hit-marker,
+  .health-fill,
+  .damage-vignette,
+  .reload-hint,
+  .feed-line { transition: none; }
 }

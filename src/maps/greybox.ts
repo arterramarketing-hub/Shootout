@@ -1,4 +1,4 @@
-import type { BoxBrush, MapDefinition, SpawnPoint } from "./types";
+import type { BoxBrush, MapDefinition, SpawnPoint, TargetPlacement } from "./types";
 
 const WALL_HEIGHT = 4.2;
 const WALL_THICKNESS = 0.4;
@@ -124,10 +124,25 @@ const spawns: SpawnPoint[] = [
   { team: "b", x: 17, z: 11, yaw: -2.1451 },
 ];
 
+/**
+ * Practice targets, placed to exercise each weapon's effective range: two
+ * close for the shotgun, a mid-range pair on the warehouse floor, and two
+ * long shots onto the mezzanine.
+ */
+const targets: TargetPlacement[] = [
+  { id: "t_close_a", x: -3.5, z: -3.0, y: 0, yaw: Math.PI * 0.25 },
+  { id: "t_close_b", x: 1.5, z: -4.5, y: 0, yaw: Math.PI * 0.1 },
+  { id: "t_mid_a", x: -7.0, z: 9.5, y: 0, yaw: -Math.PI * 0.2 },
+  { id: "t_mid_b", x: 5.5, z: 8.0, y: 0, yaw: -Math.PI * 0.35 },
+  { id: "t_far_a", x: 12.0, z: -2.0, y: 3.2, yaw: -Math.PI * 0.5 },
+  { id: "t_far_b", x: 15.0, z: 7.5, y: 3.2, yaw: -Math.PI * 0.6 },
+];
+
 export const greyboxMap: MapDefinition = {
   id: "warehouse_greybox",
   name: "Warehouse (greybox)",
   size: 40,
   brushes,
   spawns,
+  targets,
 };

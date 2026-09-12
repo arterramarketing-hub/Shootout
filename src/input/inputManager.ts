@@ -36,6 +36,10 @@ export class InputManager {
 
   private readonly frame: InputFrame = emptyInput();
   private readonly keys = new Set<string>();
+  /** Keys pressed this frame, for actions that must not repeat while held. */
+  private readonly keyEdges = new Set<string>();
+  /** Mouse buttons currently down, for desktop fire and aim. */
+  private readonly mouseButtons = new Set<number>();
   private readonly buttons = new ButtonBank();
   private joystick: Joystick | null = null;
   private lookPointer: LookPointer | null = null;
@@ -147,15 +151,24 @@ export class InputManager {
     frame.crouch = this.buttons.isDown("crouch") || this.keys.has("ControlLeft") || this.keys.has("KeyC");
     frame.leanLeft = this.buttons.isDown("leanLeft") || this.keys.has("KeyQ");
     frame.leanRight = this.buttons.isDown("leanRight") || this.keys.has("KeyE");
-    frame.fire = this.buttons.isDown("fire");
-    frame.aim = this.buttons.isDown("aim");
-    frame.reloadPressed = this.buttons.consumePress("reload") || this.keys.has("KeyR");
-    frame.swapPressed = this.buttons.consumePress("swap");
+    frame.fire = this.buttons.isDown("fire") || this.mouseButtons.has(0);
+    frame.aim = this.buttons.isDown("aim") || this.mouseButtons.has(2);
+    frame.reloadPressed = this.buttons.consumePress("reload") || this.consumeKey("KeyR");
+    frame.swapPressed =
+      this.buttons.consumePress("swap") ||
+      this.consumeKey("Tab") ||
+      this.consumeKey("KeyF");
     return frame;
+  }
+
+  /** True while the player is asking to aim, for the look sensitivity scale. */
+  get isAiming(): boolean {
+    return this.buttons.isDown("aim") || this.mouseButtons.has(2);
   }
 
   endFrame(): void {
     this.buttons.endFrame();
+    this.keyEdges.clear();
   }
 
   private readonly onPointerDown = (event: PointerEvent): void => {
@@ -163,6 +176,8 @@ export class InputManager {
     capturePointer(this.surface, event.pointerId);
 
     if (this.pointerLocked || !this.isTouchPrimary()) {
+      // On desktop the mouse both aims and shoots.
+      if (event.pointerType === "mouse") this.mouseButtons.add(event.button);
       this.lookPointer = { id: event.pointerId, lastX: event.clientX, lastY: event.clientY };
       return;
     }
@@ -197,21 +212,35 @@ export class InputManager {
   };
 
   private readonly onPointerUp = (event: PointerEvent): void => {
+    if (event.pointerType === "mouse") this.mouseButtons.delete(event.button);
     if (this.joystick?.owns(event.pointerId)) this.joystick.end();
     if (this.lookPointer?.id === event.pointerId) this.lookPointer = null;
   };
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
+    // Browsers repeat a held key; only the first press is an edge.
+    if (!this.keys.has(event.code)) this.keyEdges.add(event.code);
     this.keys.add(event.code);
+    // Tab would otherwise move focus out of the canvas mid-fight.
+    if (event.code === "Tab") event.preventDefault();
   };
 
   private readonly onKeyUp = (event: KeyboardEvent): void => {
     this.keys.delete(event.code);
   };
 
+  /** True once per physical press of a key. */
+  private consumeKey(code: string): boolean {
+    if (!this.keyEdges.has(code)) return false;
+    this.keyEdges.delete(code);
+    return true;
+  }
+
   private readonly onBlur = (): void => {
     // Without this, a key or button held during an alt-tab stays stuck down.
     this.keys.clear();
+    this.keyEdges.clear();
+    this.mouseButtons.clear();
     this.buttons.releaseAll();
     this.joystick?.end();
     this.lookPointer = null;
