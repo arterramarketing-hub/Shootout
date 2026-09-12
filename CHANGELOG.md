@@ -1,5 +1,60 @@
 # Changelog
 
+## Phase 2 — bots, team deathmatch, match flow
+
+The prototype is now a game you can finish. Team deathmatch against bots that
+navigate the level, take cover and shoot back, wrapped in a lobby, a round and
+a scoreboard, and installable to a phone home screen.
+
+**Added**
+
+- Layered navigation grid baked from the level at load: about 4,700 walkable
+  nodes for a 40 metre map in under 200 milliseconds, with the mezzanine and
+  the floor beneath it as separate layers. A* pathfinding lives in the
+  simulation and runs on plain arrays.
+- Bots with patrol, investigate, engage and break-contact behaviour. They see
+  through a vision cone with a real line-of-sight test, so cover works against
+  them, and their aim error grows with how fast the target is moving.
+- Three difficulty tiers that differ in reaction time, aim error, turn rate and
+  view distance, from 800 milliseconds and 6 degrees down to 250 and 1.5.
+- Bots run the player's weapon state machine, so they obey the same fire rates,
+  magazines, reload times and recoil.
+- Team deathmatch: six minute rounds, first to 50, four second respawns, spawn
+  selection that picks the point furthest from living enemies, and team kills
+  that cost a point rather than earning one.
+- Match HUD with a score bar, round clock, countdown and kill feed, plus a
+  downed overlay while waiting to respawn.
+- Lobby, settings and scoreboard screens. Settings persist to local storage and
+  cover look sensitivity, gyroscope aim, inverted look, field of view, HUD
+  scale, sound and a quality override.
+- Installable as a progressive web app, playable offline after the first visit.
+- Invisible player hitboxes, so a bot shooting the player runs exactly the code
+  a player shooting a bot runs.
+- 70 further unit tests and 8 further browser tests.
+
+**Fixed**
+
+- Bots walked on the roof. The navigation rays started above the building, so
+  the first surface they found was the ceiling, and the top of it was duly
+  marked as walkable ground.
+- Every shooter was blind to the world and to itself. Rays start at the eye,
+  which sits inside the shooter's own head hitbox, so every line-of-sight test
+  and every shot hit the shooter first and stopped there. Bots could never see
+  an enemy, and the player's own shots would have been swallowed by their own
+  head the moment hitboxes were introduced.
+- Each bot cost eight draw calls. Body parts are now merged into one mesh, with
+  the head kept separate because it needs its own hitbox for headshots.
+
+**Measured**
+
+| Metric | Value |
+| --- | --- |
+| Bundle, gzipped | 407 KB |
+| Draw calls, empty level | 5 |
+| Draw calls per bot | 3 |
+| Navigation bake, at load | under 200 ms |
+| Frame rate, software rasteriser in CI | 34 to 60 fps |
+
 ## Phase 1 — weapons, viewmodel, shooting
 
 The prototype is now a shooter. Four weapons, a first-person viewmodel, hitscan

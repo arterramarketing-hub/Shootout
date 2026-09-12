@@ -7,5 +7,15 @@
   "orientation": "landscape",
   "background_color": "#0d0f12",
   "theme_color": "#0d0f12",
-  "icons": []
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "categories": [
+    "games"
+  ]
 }

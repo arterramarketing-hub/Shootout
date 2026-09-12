@@ -20,9 +20,13 @@ export class CameraRig {
   readonly camera: FreeCamera;
   private bobOffset = 0;
   private bobRoll = 0;
-  private currentFov = CAMERA.defaultFovDegrees;
+  private currentFov: number = CAMERA.defaultFovDegrees;
 
-  constructor(scene: Scene, quality: QualitySettings, fovDegrees = CAMERA.defaultFovDegrees) {
+  constructor(
+    scene: Scene,
+    quality: QualitySettings,
+    fovDegrees: number = CAMERA.defaultFovDegrees,
+  ) {
     this.camera = new FreeCamera("player_camera", new Vector3(0, STANCE.standEyeHeight, 0), scene);
     // Babylon takes a vertical field of view; the familiar shooter number is
     // horizontal, so convert to keep the setting meaningful across aspects.

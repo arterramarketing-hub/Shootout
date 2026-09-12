@@ -23,6 +23,37 @@ interface GameState {
 interface DebugHandle extends GameState {
   teleport: (x: number, z: number, yaw?: number) => void;
   weaponScreenPosition: () => { x: number; y: number } | null;
+  startMatch: () => void;
+  match: {
+    phase: string;
+    scores: { a: number; b: number };
+    timeRemaining: number;
+    kills: number;
+    deaths: number;
+    feed: number;
+  };
+  bots: {
+    id: string;
+    name: string;
+    team: string;
+    behaviour: string;
+    health: number;
+    dead: boolean;
+    pathLength: number;
+    position: { x: number; y: number; z: number };
+  }[];
+  nav: { nodes: number; cells: number; millis: number; raycasts: number };
+  screen: string;
+  settings: {
+    touchSensitivity: number;
+    mouseSensitivity: number;
+    fovDegrees: number;
+    hudScale: number;
+    invertY: boolean;
+    audioEnabled: boolean;
+    difficulty: string;
+    teamSize: number;
+  };
 }
 
 declare global {
@@ -36,7 +67,7 @@ const bootGame = async (page: Page): Promise<void> => {
   await page.waitForFunction(() => window.__shootout?.ready === true, null, {
     timeout: 30_000,
   });
-  await page.getByRole("button", { name: "TAP TO START" }).click();
+  await page.getByRole("button", { name: "DEPLOY" }).click();
   // Let the loop run long enough for the frame-rate meter to report.
   await page.waitForFunction(() => window.__shootout.fps > 0, null, { timeout: 20_000 });
 };
@@ -259,4 +290,98 @@ test("the weapon viewmodel is on screen", async ({ page }) => {
   expect(position!.x).toBeLessThan(0.95);
   expect(position!.y).toBeGreaterThan(0.05);
   expect(position!.y).toBeLessThan(0.95);
+});
+
+test("the navigation grid is built from the level", async ({ page }) => {
+  await bootGame(page);
+  const nav = await page.evaluate(() => window.__shootout.nav);
+  // Thousands of walkable nodes across a forty metre map, not a handful.
+  expect(nav.nodes).toBeGreaterThan(1500);
+  expect(nav.nodes).toBeLessThan(nav.cells * 2);
+  // Baking must not stall the load; this is a one-off cost at startup.
+  expect(nav.millis).toBeLessThan(4000);
+});
+
+test("bots stand on the floor, not on the roof", async ({ page }) => {
+  await bootGame(page);
+  await page.waitForTimeout(2500);
+  const bots = await page.evaluate(() => window.__shootout.bots);
+  expect(bots.length).toBeGreaterThan(0);
+  for (const bot of bots) {
+    // The mezzanine is the highest walkable surface, at about three metres.
+    expect(bot.position.y).toBeGreaterThanOrEqual(-0.5);
+    expect(bot.position.y).toBeLessThan(4);
+  }
+});
+
+test("both teams are fielded and the round starts", async ({ page }) => {
+  await bootGame(page);
+  const bots = await page.evaluate(() => window.__shootout.bots);
+  expect(bots.some((bot) => bot.team === "a")).toBe(true);
+  expect(bots.some((bot) => bot.team === "b")).toBe(true);
+
+  await page.waitForTimeout(4000);
+  const match = await page.evaluate(() => window.__shootout.match);
+  expect(match.phase).toBe("active");
+  expect(match.timeRemaining).toBeGreaterThan(0);
+});
+
+test("bots patrol away from where they spawned", async ({ page }) => {
+  await bootGame(page);
+  await page.waitForTimeout(4000);
+  const before = await page.evaluate(() => window.__shootout.bots);
+  await page.waitForTimeout(4000);
+  const after = await page.evaluate(() => window.__shootout.bots);
+
+  const moved = after.filter((bot, index) => {
+    const start = before[index];
+    return Math.hypot(bot.position.x - start.position.x, bot.position.z - start.position.z) > 1;
+  });
+  expect(moved.length).toBeGreaterThan(0);
+});
+
+test("bots fight each other and the score moves", async ({ page }) => {
+  test.setTimeout(90_000);
+  await bootGame(page);
+  // Long enough for two sides to find each other across a forty metre map.
+  await page.waitForTimeout(40_000);
+  const match = await page.evaluate(() => window.__shootout.match);
+  expect(match.scores.a + match.scores.b).toBeGreaterThan(0);
+  expect(match.feed).toBeGreaterThan(0);
+});
+
+test("settings persist across a reload", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForFunction(() => window.__shootout?.ready === true, null, { timeout: 30_000 });
+  await page.getByRole("button", { name: "SETTINGS" }).click();
+
+  const slider = page.locator("#set-touch");
+  await slider.fill("2.4");
+  await slider.dispatchEvent("input");
+  await page.getByRole("button", { name: "DONE" }).click();
+
+  await page.reload();
+  await page.waitForFunction(() => window.__shootout?.ready === true, null, { timeout: 30_000 });
+  const settings = await page.evaluate(() => window.__shootout.settings);
+  expect(settings.touchSensitivity).toBeCloseTo(2.4, 2);
+});
+
+test("the lobby leads to a match and the round can be ended", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForFunction(() => window.__shootout?.ready === true, null, { timeout: 30_000 });
+  expect(await page.evaluate(() => window.__shootout.screen)).toBe("lobby");
+
+  await page.getByRole("button", { name: "DEPLOY" }).click();
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => window.__shootout.screen)).toBe("game");
+});
+
+test("a service worker is registered for offline play", async ({ page }) => {
+  await bootGame(page);
+  const registered = await page.evaluate(async () => {
+    if (!("serviceWorker" in navigator)) return false;
+    const registration = await navigator.serviceWorker.getRegistration();
+    return registration !== undefined;
+  });
+  expect(registered).toBe(true);
 });

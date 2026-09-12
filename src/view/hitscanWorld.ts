@@ -31,16 +31,25 @@ export class BabylonHitscanWorld implements HitscanWorld {
 
   constructor(private readonly scene: Scene) {}
 
-  raycast(origin: Vec3, direction: Vec3, maxDistance: number): RayHit | null {
+  raycast(
+    origin: Vec3,
+    direction: Vec3,
+    maxDistance: number,
+    ignoreId: string | null = null,
+  ): RayHit | null {
     this.origin.set(origin.x, origin.y, origin.z);
     this.direction.set(direction.x, direction.y, direction.z);
     this.ray.origin = this.origin;
     this.ray.direction = this.direction;
     this.ray.length = maxDistance;
 
-    const pick = this.scene.pickWithRay(this.ray, (mesh) =>
-      mesh.isPickable && (mesh.checkCollisions || readDamageable(mesh) !== null),
-    );
+    const pick = this.scene.pickWithRay(this.ray, (mesh) => {
+      if (!mesh.isPickable) return false;
+      const damageable = readDamageable(mesh);
+      // The shooter's own hitboxes are transparent to their own rays.
+      if (damageable && ignoreId !== null && damageable.targetId === ignoreId) return false;
+      return mesh.checkCollisions || damageable !== null;
+    });
     if (!pick?.hit || !pick.pickedPoint) return null;
 
     const damageable = pick.pickedMesh ? readDamageable(pick.pickedMesh) : null;

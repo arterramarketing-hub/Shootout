@@ -134,6 +134,35 @@ export class GameAudio {
     tail.stop(now + voice.tailDecay + 0.05);
   }
 
+  /**
+   * Someone else's weapon. Quieter and duller with distance, which is what
+   * lets a player judge how far away a firefight is.
+   */
+  remoteShot(id: WeaponId, distance: number): void {
+    const context = this.context;
+    const master = this.master;
+    const noise = this.noise;
+    if (!context || !master || !noise || !this.enabled) return;
+
+    const voice = VOICES[id];
+    const now = context.currentTime;
+    // Inverse falloff, floored so a distant shot stays just audible.
+    const attenuation = Math.max(0.06, 1 / (1 + distance * 0.09));
+
+    const crack = context.createBufferSource();
+    crack.buffer = noise;
+    const filter = context.createBiquadFilter();
+    filter.type = "lowpass";
+    // Air eats the high end first, so distance reads as dullness, not just
+    // quietness.
+    filter.frequency.value = Math.max(420, voice.crackFrequency * attenuation * 1.6);
+    const amp = context.createGain();
+    envelope(amp.gain, now, voice.gain * attenuation * 0.9, voice.crackDecay * 1.6);
+    crack.connect(filter).connect(amp).connect(master);
+    crack.start(now);
+    crack.stop(now + voice.crackDecay * 1.6 + 0.05);
+  }
+
   /** Mechanical clicks during a reload. */
   reloadClick(pitch = 1): void {
     this.tick(2600 * pitch, 0.05, 0.22, "bandpass");

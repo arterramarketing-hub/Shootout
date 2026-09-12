@@ -15,7 +15,18 @@ export interface RayHit {
 
 /** The simulation's only way to query the level for shooting. */
 export interface HitscanWorld {
-  raycast(origin: Vec3, direction: Vec3, maxDistance: number): RayHit | null;
+  /**
+   * Trace a ray. `ignoreId` drops one combatant's own hitboxes from the
+   * result, which every shooter needs: rays start at the eye, and the eye
+   * sits inside the shooter's own head box, so without this every shot and
+   * every line-of-sight test hits the shooter first and stops there.
+   */
+  raycast(
+    origin: Vec3,
+    direction: Vec3,
+    maxDistance: number,
+    ignoreId?: string | null,
+  ): RayHit | null;
 }
 
 export interface PelletImpact {
@@ -55,13 +66,14 @@ export const resolveShot = (
   shot: ShotEvent,
   origin: Vec3,
   world: HitscanWorld,
+  shooterId: string | null = null,
 ): ShotResolution => {
   const impacts: PelletImpact[] = [];
   const totals = new Map<string, TargetDamage>();
 
   for (const pellet of shot.pellets) {
     const direction = offsetDirection(shot.aimYaw, shot.aimPitch, pellet.yaw, pellet.pitch);
-    const hit = world.raycast(origin, direction, shot.weapon.maxRange);
+    const hit = world.raycast(origin, direction, shot.weapon.maxRange, shooterId);
 
     if (!hit) {
       impacts.push({
@@ -108,4 +120,32 @@ export const resolveShot = (
 
   const damage = [...totals.values()];
   return { impacts, damage, hitTarget: damage.length > 0 };
+};
+
+/**
+ * Whether `from` can see `to`, ignoring the target itself.
+ *
+ * Used for bot perception and for deciding whether cover is doing its job.
+ * A ray that reaches the target's own hitbox counts as clear sight; anything
+ * else in the way does not.
+ */
+export const hasLineOfSight = (
+  world: HitscanWorld,
+  from: Vec3,
+  to: Vec3,
+  targetId: string | null = null,
+  observerId: string | null = null,
+): boolean => {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const dz = to.z - from.z;
+  const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (distance < 1e-4) return true;
+
+  const direction = { x: dx / distance, y: dy / distance, z: dz / distance };
+  const hit = world.raycast(from, direction, distance, observerId);
+  if (!hit) return true;
+  if (targetId !== null && hit.targetId === targetId) return true;
+  // A hit short of the target is cover; one at the target's own range is not.
+  return hit.distance >= distance - 0.05;
 };

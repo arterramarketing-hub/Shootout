@@ -35,6 +35,21 @@
         <div id="stance" class="stance">STAND</div>
         <div id="feed" class="feed" aria-live="polite"></div>
 
+        <div class="matchbar" id="matchbar">
+          <div class="team team-a"><span class="team-tag">BLUE</span><span id="score-a" class="team-score">0</span></div>
+          <div class="clock" id="clock">6:00</div>
+          <div class="team team-b"><span id="score-b" class="team-score">0</span><span class="team-tag">RUST</span></div>
+        </div>
+
+        <div id="killfeed" class="killfeed" aria-live="polite"></div>
+
+        <div id="countdown" class="countdown"></div>
+
+        <div id="respawn" class="respawn">
+          <div class="respawn-title">DOWNED</div>
+          <div class="respawn-timer" id="respawn-timer">4</div>
+        </div>
+
         <div class="vitals">
           <div class="health">
             <div class="health-track"><div id="health-fill" class="health-fill"></div></div>
@@ -73,19 +88,111 @@
 
       <button class="chip" id="btn-debug" type="button">DEBUG</button>
 
-      <div id="boot" class="boot">
-        <div class="boot-card">
+      <div id="boot" class="boot screen">
+        <div class="screen-card">
           <h1>SHOOTOUT</h1>
-          <p class="boot-sub">Phase 1 &middot; weapons prototype</p>
-          <button class="start" id="btn-start" type="button">TAP TO START</button>
+          <p class="boot-sub">Phase 2 &middot; team deathmatch</p>
+
+          <div class="lobby-row">
+            <span class="lobby-label">Difficulty</span>
+            <div class="segmented" id="pick-difficulty" role="group" aria-label="Bot difficulty">
+              <button type="button" data-value="recruit">Recruit</button>
+              <button type="button" data-value="regular">Regular</button>
+              <button type="button" data-value="veteran">Veteran</button>
+            </div>
+          </div>
+
+          <div class="lobby-row">
+            <span class="lobby-label">Bots per team</span>
+            <div class="segmented" id="pick-teamsize" role="group" aria-label="Bots per team">
+              <button type="button" data-value="1">1</button>
+              <button type="button" data-value="2">2</button>
+              <button type="button" data-value="3">3</button>
+              <button type="button" data-value="4">4</button>
+              <button type="button" data-value="5">5</button>
+            </div>
+          </div>
+
+          <div class="screen-actions">
+            <button class="start" id="btn-start" type="button">DEPLOY</button>
+            <button class="ghost" id="btn-open-settings" type="button">SETTINGS</button>
+          </div>
+
           <ul class="boot-help">
             <li><b>Left half</b> drag to move. Push out to sprint.</li>
-            <li><b>Right half</b> drag to look.</li>
-            <li><b>FIRE</b> either side. <b>ADS</b> to aim.</li>
-            <li><b>SWAP</b> cycles four weapons. Shoot the plates.</li>
-            <li>Desktop: WASD, mouse, click to fire, right-click aims, R reloads.</li>
-            <li>Desktop extras: Shift sprints, Ctrl crouches, Q and E lean.</li>
+            <li><b>Right half</b> drag to look. <b>FIRE</b> on either side.</li>
+            <li><b>ADS</b> aims, <b>SWAP</b> cycles four weapons.</li>
+            <li>Desktop: WASD, mouse, right-click aims, R reloads, Tab swaps.</li>
           </ul>
+        </div>
+      </div>
+
+      <div id="settings" class="screen is-hidden">
+        <div class="screen-card">
+          <h2>SETTINGS</h2>
+
+          <div class="setting"><label for="set-touch">Touch sensitivity</label>
+            <input type="range" id="set-touch" min="0.2" max="3" step="0.05" />
+            <output id="out-touch">1.00</output></div>
+
+          <div class="setting"><label for="set-mouse">Mouse sensitivity</label>
+            <input type="range" id="set-mouse" min="0.2" max="3" step="0.05" />
+            <output id="out-mouse">1.00</output></div>
+
+          <div class="setting"><label for="set-gyro">Gyroscope aim</label>
+            <input type="range" id="set-gyro" min="0" max="2" step="0.05" />
+            <output id="out-gyro">0.00</output></div>
+
+          <div class="setting"><label for="set-fov">Field of view</label>
+            <input type="range" id="set-fov" min="65" max="100" step="1" />
+            <output id="out-fov">80</output></div>
+
+          <div class="setting"><label for="set-hud">HUD scale</label>
+            <input type="range" id="set-hud" min="0.8" max="1.4" step="0.05" />
+            <output id="out-hud">1.00</output></div>
+
+          <div class="setting setting-row">
+            <label for="set-invert">Invert vertical look</label>
+            <input type="checkbox" id="set-invert" />
+          </div>
+
+          <div class="setting setting-row">
+            <label for="set-audio">Sound</label>
+            <input type="checkbox" id="set-audio" />
+          </div>
+
+          <div class="lobby-row">
+            <span class="lobby-label">Quality</span>
+            <div class="segmented" id="pick-quality" role="group" aria-label="Quality">
+              <button type="button" data-value="auto">Auto</button>
+              <button type="button" data-value="low">Low</button>
+              <button type="button" data-value="medium">Medium</button>
+              <button type="button" data-value="high">High</button>
+            </div>
+          </div>
+
+          <div class="screen-actions">
+            <button class="start" id="btn-close-settings" type="button">DONE</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="scoreboard" class="screen is-hidden">
+        <div class="screen-card">
+          <h2 id="result-title">ROUND OVER</h2>
+          <p class="result-sub" id="result-sub">Blue 50 &middot; Rust 42</p>
+
+          <dl class="stats">
+            <div><dt>Kills</dt><dd id="stat-kills">0</dd></div>
+            <div><dt>Deaths</dt><dd id="stat-deaths">0</dd></div>
+            <div><dt>Headshots</dt><dd id="stat-headshots">0</dd></div>
+            <div><dt>Ratio</dt><dd id="stat-ratio">0.00</dd></div>
+          </dl>
+
+          <div class="screen-actions">
+            <button class="start" id="btn-again" type="button">PLAY AGAIN</button>
+            <button class="ghost" id="btn-lobby" type="button">LOBBY</button>
+          </div>
         </div>
       </div>
 

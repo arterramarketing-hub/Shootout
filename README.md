@@ -10,14 +10,14 @@ names, maps, or trademarks are used.
 
 ## Status
 
-**Phase 1 complete.** Four weapons, a first-person viewmodel, hitscan shooting
-against practice targets, a full combat HUD, and synthesised weapon audio.
+**Phase 2 complete.** Team deathmatch against navmesh bots, with match flow,
+a settings screen, and installable offline play.
 
 | Phase | Scope | State |
 | --- | --- | --- |
 | 0 | Boot, greybox map, touch movement, deployed URL | Done |
 | 1 | Weapons, viewmodel, shooting, HUD, sound | Done |
-| 2 | Bots, team deathmatch, match flow, PWA install | Planned |
+| 2 | Bots, team deathmatch, match flow, PWA install | Done |
 | 3 | Authoritative multiplayer server, 5v5 | Planned |
 | 4 | Art pass, second map, progression | Planned |
 
@@ -29,7 +29,9 @@ against practice targets, a full combat HUD, and synthesised weapon audio.
 | Language | TypeScript, strict |
 | Bundler | Vite |
 | Collision | Babylon swept-ellipsoid collider |
+| Navigation | Layered grid baked from the level, A* in the simulation |
 | Audio | Web Audio, synthesised at runtime, no samples |
+| Offline | Service worker, runtime cache |
 | Unit tests | Vitest |
 | End-to-end | Playwright, desktop and phone viewports |
 
@@ -91,6 +93,50 @@ Crouch and lean stay in the simulation and on the keyboard, but they are off
 the touch layout. On a phone, thumb space is the scarcest resource, and it
 belongs to firing and aiming.
 
+## Bots
+
+Three difficulty tiers, which differ in the things that actually decide a
+gunfight rather than in raw damage.
+
+| Tier | Reaction | Aim error | Turn rate | View |
+| --- | --- | --- | --- | --- |
+| Recruit | 800 ms | 6.0 deg | 2.2 rad/s | 32 m |
+| Regular | 500 ms | 3.2 deg | 3.6 rad/s | 45 m |
+| Veteran | 250 ms | 1.5 deg | 5.4 rad/s | 60 m |
+
+Bots patrol, investigate where an enemy was last seen, engage, and break
+contact to reload or when badly hurt. They see through a vision cone with a
+real line-of-sight test, so cover works against them. Aim error grows with how
+fast the target is moving, so sprinting is genuinely harder to track.
+
+They run the same weapon state machine the player does, which means the same
+fire rates, magazines, reload times and recoil. Letting bots fire outside those
+rules is the quickest way to make a shooter feel unfair.
+
+Navigation is a layered grid baked from the level at load, about 4,700 walkable
+nodes for a 40 metre map, built in under 200 ms. A grid rather than a navmesh
+library for three reasons: the level is boxes on a floor with one raised deck,
+which a grid represents exactly; the simulation has to run on the authoritative
+server in Phase 3, and plain arrays travel far more easily than a wasm navmesh;
+and the megabyte a navmesh library costs buys nothing here. Layers are what let
+the mezzanine and the floor beneath it coexist.
+
+## Match flow
+
+Team deathmatch. Six minute rounds, first to 50 kills, four second respawns.
+Lobby sets difficulty and team size, the round plays, and a scoreboard reports
+kills, deaths, headshots and ratio.
+
+Settings persist to local storage and cover look sensitivity for touch and
+mouse separately, gyroscope aim, inverted look, field of view, HUD scale,
+sound, and a quality override. Every field is validated against its own limits
+on load, because storage can be empty, stale, or throw outright.
+
+The game installs as a progressive web app and runs offline after the first
+visit. The service worker caches at runtime rather than from a build manifest,
+since the bundler hashes asset names on every build and a stale list is worse
+than no list.
+
 ## Architecture
 
 ```
@@ -98,7 +144,7 @@ src/
   sim/      pure gameplay. No Babylon imports, so it can run on a server.
   view/     Babylon presentation of simulation state
   input/    pointer, keyboard and gyroscope handling
-  engine/   render loop, quality tiers, audio synthesis
+  engine/   render loop, quality tiers, audio synthesis, settings
   hud/      DOM overlay
   maps/     level definitions as data
 ```
@@ -125,6 +171,11 @@ The weapon is drawn by a second camera at a fixed 45 degree vertical field of
 view. The world runs wide so players can see flanks; a weapon drawn at that
 same angle stretches into a fisheye.
 
+Bots and the player resolve shots through one hitscan path. The player carries
+invisible hitboxes so that a bot shooting them runs exactly the code a player
+shooting a bot runs. A separate "did the bot hit the player" test would
+inevitably drift from the real one.
+
 ## Performance
 
 Budget: 60 fps on an iPhone 12 or Pixel 6, 30 fps floor on a 2020 mid-range
@@ -134,12 +185,14 @@ Measured for Phase 0:
 
 | Metric | Value |
 | --- | --- |
-| Bundle, gzipped | 397 KB |
-| Draw calls, whole level | 5 |
-| Frame rate, software rasteriser in CI | 45 to 60 fps |
+| Bundle, gzipped | 407 KB |
+| Draw calls, empty level | 5 |
+| Navigation bake, at load | under 200 ms |
+| Frame rate, software rasteriser in CI | 34 to 60 fps |
 
 Every brush of a given surface kind is merged into one mesh, which is why the
-entire level costs five draw calls. Quality tiers are picked from the GPU string
+empty level costs five draw calls. Each bot costs three more: one merged body,
+a head that needs its own hitbox for headshots, and a weapon. Quality tiers are picked from the GPU string
 at boot and can be stepped down once by a three-second frame-time benchmark,
 because the GPU string alone is an unreliable guide.
 

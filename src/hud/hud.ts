@@ -2,6 +2,7 @@ import { currentSpread } from "../sim/ballistics";
 import { HEALTH, type HealthState } from "../sim/health";
 import { activeWeapon, isSwapping, type LoadoutState } from "../sim/loadout";
 import type { PlayerState } from "../sim/types";
+import { describeKill, formatClock, type MatchState } from "../sim/match";
 import { clamp } from "../sim/vec3";
 
 export interface HudElements {
@@ -18,12 +19,23 @@ export interface HudElements {
   healthValue: HTMLElement;
   damageVignette: HTMLElement;
   feed: HTMLElement;
+  scoreA: HTMLElement;
+  scoreB: HTMLElement;
+  clock: HTMLElement;
+  killFeed: HTMLElement;
+  countdown: HTMLElement;
+  respawn: HTMLElement;
+  respawnTimer: HTMLElement;
+  root: HTMLElement;
 }
 
 export interface HudFrame {
   player: PlayerState;
   loadout: LoadoutState;
   health: HealthState;
+  match: MatchState;
+  /** Seconds until the player returns, or zero when alive. */
+  respawnIn: number;
   fps: number;
   tier: string;
   activeMeshes: number;
@@ -41,6 +53,10 @@ export class Hud {
   private readonly feedEntries: { element: HTMLElement; life: number }[] = [];
   private lastAmmo = -1;
   private lastWeapon = "";
+  private lastFeedLength = 0;
+  private lastClock = "";
+  private lastScoreA = -1;
+  private lastScoreB = -1;
 
   constructor(private readonly elements: HudElements) {
     this.elements.debug.style.display = "none";
@@ -72,8 +88,14 @@ export class Hud {
     }
   }
 
+  /** Scale the whole HUD, so a small screen can get bigger readouts. */
+  setScale(scale: number): void {
+    this.elements.root.style.transform = scale === 1 ? "" : `scale(${scale})`;
+  }
+
   update(frame: HudFrame): void {
     const { player, loadout, health, deltaSeconds } = frame;
+    this.updateMatch(frame);
     const weapon = activeWeapon(loadout);
 
     this.updateCrosshair(player, loadout, deltaSeconds);
@@ -98,6 +120,58 @@ export class Hud {
     this.elements.reloadHint.classList.toggle("is-visible", needsReload);
 
     this.updateDebug(frame);
+  }
+
+  private updateMatch(frame: HudFrame): void {
+    const { match, respawnIn } = frame;
+
+    if (match.scores.a !== this.lastScoreA) {
+      this.lastScoreA = match.scores.a;
+      this.elements.scoreA.textContent = String(match.scores.a);
+    }
+    if (match.scores.b !== this.lastScoreB) {
+      this.lastScoreB = match.scores.b;
+      this.elements.scoreB.textContent = String(match.scores.b);
+    }
+
+    const clock = formatClock(match.timeRemaining);
+    if (clock !== this.lastClock) {
+      this.lastClock = clock;
+      this.elements.clock.textContent = clock;
+      this.elements.clock.classList.toggle("is-urgent", match.timeRemaining <= 30);
+    }
+
+    const counting = match.phase === "countdown";
+    this.elements.countdown.classList.toggle("is-visible", counting);
+    if (counting) {
+      this.elements.countdown.textContent = String(Math.max(1, Math.ceil(match.countdown)));
+    }
+
+    const downed = respawnIn > 0;
+    this.elements.respawn.classList.toggle("is-visible", downed);
+    if (downed) {
+      this.elements.respawnTimer.textContent = String(Math.max(1, Math.ceil(respawnIn)));
+    }
+
+    // The kill feed is rebuilt only when it actually changed, which on a phone
+    // is the difference between a free HUD and one that costs a frame.
+    if (match.feed.length !== this.lastFeedLength) {
+      this.lastFeedLength = match.feed.length;
+      this.renderKillFeed(frame);
+    }
+  }
+
+  private renderKillFeed(frame: HudFrame): void {
+    const container = this.elements.killFeed;
+    container.replaceChildren();
+    for (const event of frame.match.feed) {
+      const line = document.createElement("div");
+      line.className = "kill-line";
+      if (event.byPlayer) line.classList.add("is-player");
+      else if (event.againstPlayer) line.classList.add("is-victim");
+      line.textContent = describeKill(event);
+      container.appendChild(line);
+    }
   }
 
   private updateCrosshair(
