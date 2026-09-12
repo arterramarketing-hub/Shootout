@@ -17,11 +17,11 @@ No bodycam camera treatment: no fisheye lens, no chest-height camera, no timesta
 Do not use any Bodycam or Call of Duty assets, names, maps, logos, or trademarks. Original or CC0 assets only.
 
 ### Tech stack (fixed)
-- TypeScript, Vite, three.js (latest), WebGL2 renderer. WebGPU behind a feature flag.
-- Physics and collision: Rapier (`@dimforge/rapier3d-compat`) for the character controller and hit raycasts.
-- Audio: Web Audio API, positional audio through three.js `PositionalAudio`.
+- TypeScript, Vite, Babylon.js 9, WebGL2 renderer. WebGPU behind a feature flag.
+- Collision: Babylon's swept-ellipsoid collider for the character controller. Add Havok (`@babylonjs/havok`) only when ragdolls or thrown objects need it; a character controller does not.
+- Audio: Babylon's audio engine, positional sound through `CreateAudioEngineAsync`.
 - Assets: glTF/GLB with Meshopt compression, KTX2 textures.
-- HUD: DOM + CSS overlaid on the canvas. No React. Plain TypeScript modules.
+- HUD: DOM + CSS overlaid on the canvas. No React, and not Babylon GUI, which draws into the scene and costs frame time the HUD does not need to spend.
 - Packaging: PWA (installable, fullscreen, landscape lock, offline cache). Capacitor wrapper for app stores later.
 - Tests: Vitest for pure logic (weapon math, ballistics, input mapping). Playwright smoke test that the game boots and renders a frame.
 
@@ -35,7 +35,7 @@ Do not use any Bodycam or Call of Duty assets, names, maps, logos, or trademarks
 
 ### Camera and presentation (COD Mobile style)
 - First-person camera at 1.65 m eye height. FOV 70–90, user-adjustable. ADS narrows FOV per weapon.
-- Weapon viewmodel rendered by a second camera on its own layer with a fixed FOV (~55) so it does not distort at wide world FOV. Second render pass with `autoClear = false` and a depth clear.
+- Weapon viewmodel rendered by a second camera with a fixed FOV (~55) so it does not distort at wide world FOV. Use Babylon's `layerMask` plus a second camera in `scene.activeCameras`, and clear depth between passes so the weapon never intersects the world.
 - Procedural viewmodel animation: idle sway, walk bob, sprint pose, ADS transition, recoil kick. Reload is an animated GLB clip.
 - Subtle feedback only: light camera shake on shots and explosions. Motion blur off by default. No chromatic aberration.
 - Hit markers, damage direction indicator, red vignette at low health.
@@ -69,14 +69,14 @@ Do not use any Bodycam or Call of Duty assets, names, maps, logos, or trademarks
 - Write `tools/bake-lightmap.md` describing the Blender bake workflow.
 
 ### AI (before multiplayer)
-- Bots on a navmesh (`recast-navigation-js` or `three-pathfinding`). States: patrol, investigate sound, engage, take cover, reload.
+- Bots on a navmesh (`recast-navigation-js`, which has a Babylon adapter). States: patrol, investigate sound, engage, take cover, reload.
 - Difficulty tiers change reaction time (250–800 ms) and accuracy.
 
 ### Multiplayer (Phase 3: design now, build later)
 - Authoritative Node server (Colyseus, or plain WebSocket plus geckos.io for WebRTC data channels). 30 Hz tick.
 - Client prediction and reconciliation for movement. Server-side hit validation with lag compensation (rewind up to 200 ms).
 - Modes: Team Deathmatch 5v5 and Free-for-all. 6-minute rounds.
-- Keep simulation code engine-agnostic (pure TypeScript, no three.js imports) so the same code runs on the server.
+- Keep simulation code engine-agnostic (pure TypeScript, no Babylon imports) so the same code runs on the server.
 
 ### Architecture
 ```
@@ -84,8 +84,8 @@ src/
   main.ts        boot, quality detection, game loop
   engine/        renderer, loop, asset loader, audio
   input/         joystick, look, buttons, gyro, keyboard
-  sim/           pure gameplay: player, weapons, ballistics, health (no three.js)
-  view/          three.js presentation of sim state, viewmodel, effects
+  sim/           pure gameplay: player, weapons, ballistics, health (no Babylon)
+  view/          Babylon presentation of sim state, viewmodel, effects
   ai/            bots, navmesh
   hud/           DOM HUD
   net/           (Phase 3) prediction, messages
@@ -93,10 +93,10 @@ src/
 assets/
 tests/
 ```
-Fixed 60 Hz simulation step, rendering interpolates between steps. The sim never touches the DOM or three.js.
+Fixed 60 Hz simulation step, rendering interpolates between steps. The sim never touches the DOM or Babylon.
 
 ### Phases and acceptance criteria
-- **Phase 0**: Vite + three.js boot, greybox map, walk around with touch controls on a real phone at 60 fps. Deployed to a URL.
+- **Phase 0**: Vite + Babylon boot, greybox map, walk around with touch controls on a real phone at 60 fps. Deployed to a URL.
 - **Phase 1**: Weapons, viewmodel, shooting targets, HUD, sounds. Vitest coverage for weapon math.
 - **Phase 2**: Bots, Team Deathmatch versus bots, match flow (lobby → match → scoreboard), settings screen, PWA install.
 - **Phase 3**: Multiplayer server, 5v5 on LAN, then hosted.
@@ -115,18 +115,54 @@ After each phase: run `npm run lint && npm run test && npm run build`, test on a
 
 ## Engine decision
 
-**Chosen: three.js in the browser, shipped as a PWA.** Reason: fastest path to a playable prototype on a phone, instant distribution by URL, no app store review, and it is the stack a coding agent iterates on best.
+**Chosen: Babylon.js in the browser, shipped as a PWA.** Fastest path to a
+playable prototype on a phone, distribution by URL, no app store review, and a
+stack a coding agent iterates on quickly.
 
-What you give up versus a native engine:
-- Fidelity. Bodycam's look comes from Unreal Engine 5 (Lumen, Nanite, photogrammetry). No browser stack reaches that on a phone. Aim for clean, baked-lit realism, not photorealism.
-- Mobile FPS tooling. Unity ships a touch input package, netcode, and thousands of FPS assets. Here you build joystick, viewmodel rendering, and netcode yourself.
-- Thermal and battery headroom. WebGL on iOS Safari throttles harder than a native app.
+Babylon over three.js, having considered both:
 
-Alternatives, in order of preference if requirements change:
-1. **Unity (URP)** if the goal is a real App Store product competing with COD Mobile. COD Mobile itself is Unity. Highest ceiling, worst fit for an agent-driven workflow.
-2. **Babylon.js** if you stay in the browser but want batteries included (physics, GUI, WebGPU, asset pipeline). Slightly heavier bundle than three.js.
-3. **PlayCanvas** if you want a visual editor plus a mobile-optimized WebGL engine. Editor is hosted and partially closed.
-4. **Godot 4** if you want open source and a native build without Unity licensing. Mobile renderer is weaker than Unity's.
-5. **Unreal Engine 5 mobile** only with a team and budget. Closest to the Bodycam look, heaviest pipeline.
+- **Batteries included.** Collision, picking, an asset pipeline, audio,
+  input and scene serialisation ship in the box. In three.js a character
+  controller means adding a physics library; in Babylon the swept-ellipsoid
+  collider is already there, which is the whole of Phase 0's collision needs.
+- **Tree-shaking makes the size argument moot.** The full library is large,
+  but the ES6 packages only pull in what is imported. Phase 0 ships 386 KB
+  gzipped including the renderer.
+- **A real WebGPU path.** Babylon's WebGPU backend is a supported engine
+  swap rather than a separate renderer, which matters once mobile browsers
+  finish shipping it.
+- **Stronger typing and documentation.** The TypeScript definitions are
+  first-class rather than community-maintained.
 
-Rule of thumb: prototype and validate the feel in three.js. If it is fun and you want stores, port the pure-TypeScript `sim/` design to Unity C#.
+The cost of choosing Babylon is a smaller ecosystem of example code and
+community shaders than three.js has. That is a real loss, and it is worth
+less than the engine features above for a game of this shape.
+
+What you give up versus a native engine, whichever web renderer you pick:
+
+- Fidelity. The reference game's look comes from Unreal Engine 5 with Lumen,
+  Nanite and photogrammetry. No browser stack reaches that on a phone. Aim for
+  clean, baked-lit realism, not photorealism.
+- Mobile shooter tooling. Unity ships touch input, netcode and a large asset
+  market. Here you build the joystick, viewmodel rendering and netcode yourself.
+- Thermal and battery headroom. WebGL on iOS Safari throttles harder than a
+  native app does.
+
+Alternatives, in order of preference if the requirements change:
+
+1. **Unity (URP)** if the goal is an App Store product competing with the large
+   mobile shooters, several of which are themselves built in Unity. Highest
+   ceiling, worst fit for an agent-driven workflow.
+2. **three.js** if you want the largest ecosystem of examples and are willing to
+   assemble the character controller, asset pipeline and audio yourself.
+3. **PlayCanvas** if you want a visual editor over a mobile-tuned WebGL engine.
+   The editor is hosted and partly closed.
+4. **Godot 4** for open source and native builds without Unity licensing. Its
+   mobile renderer is weaker than Unity's.
+5. **Unreal Engine 5 mobile** only with a team and a budget. Closest to the
+   reference look, heaviest pipeline by far.
+
+Rule of thumb: prove the feel in the browser. If it is fun and you want app
+stores, port the pure-TypeScript `sim/` layer to Unity C#. Keeping that layer
+free of engine imports is what makes the port cheap, and it is why the
+architecture enforces it.

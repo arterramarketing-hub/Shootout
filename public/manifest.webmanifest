@@ -1,0 +1,11 @@
+{
+  "name": "Shootout",
+  "short_name": "Shootout",
+  "description": "Mobile tactical FPS prototype",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0d0f12",
+  "theme_color": "#0d0f12",
+  "icons": []
+}

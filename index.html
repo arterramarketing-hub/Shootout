@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0d0f12" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="description" content="Shootout - mobile tactical FPS prototype" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <title>Shootout</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="view" touch-action="none"></canvas>
+
+      <div id="hud" class="hud">
+        <div id="crosshair" class="crosshair" aria-hidden="true">
+          <span class="crosshair-line crosshair-top"></span>
+          <span class="crosshair-line crosshair-bottom"></span>
+          <span class="crosshair-line crosshair-left"></span>
+          <span class="crosshair-line crosshair-right"></span>
+          <span class="crosshair-dot"></span>
+        </div>
+        <pre id="debug" class="debug"></pre>
+        <div id="stance" class="stance">STAND</div>
+      </div>
+
+      <div id="joystick-base" class="joystick-base" aria-hidden="true">
+        <div id="joystick-knob" class="joystick-knob"></div>
+      </div>
+
+      <div class="buttons" id="buttons">
+        <button class="pad-button" id="btn-lean-left" type="button" aria-label="Lean left">Q</button>
+        <button class="pad-button" id="btn-lean-right" type="button" aria-label="Lean right">E</button>
+        <button class="pad-button pad-wide" id="btn-crouch" type="button" aria-label="Crouch">CROUCH</button>
+      </div>
+
+      <button class="chip" id="btn-debug" type="button">DEBUG</button>
+
+      <div id="boot" class="boot">
+        <div class="boot-card">
+          <h1>SHOOTOUT</h1>
+          <p class="boot-sub">Phase 0 &middot; movement prototype</p>
+          <button class="start" id="btn-start" type="button">TAP TO START</button>
+          <ul class="boot-help">
+            <li><b>Left half</b> drag to move. Push out to sprint.</li>
+            <li><b>Right half</b> drag to look.</li>
+            <li>Buttons bottom-right: crouch and lean.</li>
+            <li>Desktop: WASD, mouse, Shift, Ctrl, Q and E.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="rotate" id="rotate">
+        <p>Rotate your device to landscape.</p>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
