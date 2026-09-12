@@ -20,7 +20,6 @@ finish unlocks, on top of the authoritative server from Phase 3.
 | 2 | Bots, team deathmatch, match flow, PWA install | Done |
 | 3 | Authoritative multiplayer server, 5v5 | Done |
 | 4 | Art pass, second map, progression | Done |
-| 4 | Art pass, second map, progression | Planned |
 
 ## Stack
 
@@ -29,7 +28,6 @@ finish unlocks, on top of the authoritative server from Phase 3.
 | Renderer | Babylon.js 9, WebGL2 |
 | Language | TypeScript, strict |
 | Bundler | Vite |
-| Collision | Babylon swept-ellipsoid collider |
 | Collision | Analytic capsule against oriented boxes, shared by both sides |
 | Navigation | Layered grid baked from the level, A* in the simulation |
 | Server | Node and `ws`, authoritative at 30 Hz |
@@ -60,6 +58,28 @@ Environment variables for the server: `PORT`, `MODE` (`tdm` or `ffa`),
 
 To test on a phone, run `npm run dev` and open the network address it prints on a
 device on the same network.
+
+## Playing it
+
+Every push to the default branch runs lint, tests and the build, and publishes
+`dist/` to GitHub Pages:
+
+<https://arterramarketing-hub.github.io/Shootout/>
+
+Share that link with anyone you want to playtest with; it opens on a phone
+browser and installs to the home screen from the browser's share menu. There is
+no sign-in and nothing to download.
+
+Pages has to be switched on once, by hand, by someone with admin rights on the
+repository: **Settings -> Pages -> Build and deployment -> Source -> GitHub
+Actions**. The workflow cannot do this for you. Its token is refused with
+"Resource not accessible by integration", so until the setting is made the
+deploy step fails with `Get Pages site failed: Not Found` and there is no site.
+After switching it on, re-run the workflow from the Actions tab.
+
+The published build is the single-player game against bots. The authoritative
+server is a separate Node process and is not part of the Pages deploy; online
+matches need it running somewhere reachable.
 
 ## Weapons
 
@@ -272,7 +292,7 @@ inevitably drift from the real one.
 Budget: 60 fps on an iPhone 12 or Pixel 6, 30 fps floor on a 2020 mid-range
 Android, under 150 draw calls, under 15 MB initial load.
 
-Measured for Phase 0:
+Measured at Phase 4:
 
 | Metric | Value |
 | --- | --- |

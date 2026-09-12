@@ -42,11 +42,14 @@ jobs:
       - run: npm run test
       - run: npm run build
 
+      # Pages has to be switched on by hand once, under
+      # Settings -> Pages -> Build and deployment -> Source -> GitHub Actions.
+      # The `enablement: true` option looks like it removes that step, but the
+      # workflow's own token is not allowed to create a Pages site: it fails
+      # with "Resource not accessible by integration" and buries the real
+      # cause. Without it the failure reads "Get Pages site failed: Not Found",
+      # which points at the setting.
       - uses: actions/configure-pages@v5
-        with:
-          # Turn Pages on the first time this runs, rather than needing
-          # someone to find the setting.
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
