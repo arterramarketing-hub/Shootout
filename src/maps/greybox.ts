@@ -46,11 +46,17 @@ wall(HALF, HALF, -HALF, HALF, 8);
 wall(-HALF, HALF, -HALF, -HALF, 8);
 
 // --- North-west office block: tight rooms, short sightlines. -----------------
-wall(-HALF, -6, -6, -6);
-wall(-6, -6, -6, -HALF);
+// Doorways are gaps left between wall segments rather than cut geometry, and
+// the block needs two of them to the warehouse floor. With the outer walls
+// unbroken it is a sealed box, and a player spawning inside can reach the
+// rooms and nothing else.
+wall(-HALF, -6, -11, -6);
+wall(-8, -6, -6, -6);
+wall(-6, -6, -6, -11);
+wall(-6, -14, -6, -HALF);
+
 wall(-13, -6, -13, -14); // room divider
 wall(-HALF, -12, -13, -12);
-// Doorways are gaps left between wall segments rather than cut geometry.
 wall(-9.5, -6, -9.5, -9);
 wall(-9.5, -11.5, -9.5, -HALF);
 
@@ -89,19 +95,27 @@ box({ kind: "catwalk", x: 14, y: MEZZ_Y, z: 0, width: 11, height: 0.4, depth: 24
 // Guard rail, low enough to shoot over from a crouch.
 wall(8.6, -12, 8.6, 12, 1.0, "accent");
 // Ramps. A pitch shallower than the slope limit so they are walkable.
-const rampAngle = -Math.atan2(MEZZ_Y, 7.5);
+// The run is set so each ramp's top edge lands exactly on the deck edge at
+// z = 12. Tucking the top under the deck instead leaves the first cell past
+// the deck more than a step below it, and the whole mezzanine ends up as an
+// island nothing can path onto.
+const RAMP_RUN = 7.0;
+const RAMP_CENTRE = 12 + RAMP_RUN / 2;
+const rampAngle = -Math.atan2(MEZZ_Y, RAMP_RUN);
 box({
   kind: "catwalk",
-  x: 12, y: MEZZ_Y / 2, z: -14.5,
-  width: 3.6, height: 0.4, depth: Math.hypot(7.5, MEZZ_Y),
+  x: 12, y: MEZZ_Y / 2, z: -RAMP_CENTRE,
+  width: 3.6, height: 0.4, depth: Math.hypot(RAMP_RUN, MEZZ_Y),
   pitch: rampAngle,
 });
 box({
   kind: "catwalk",
-  x: 12, y: MEZZ_Y / 2, z: 14.5,
-  width: 3.6, height: 0.4, depth: Math.hypot(7.5, MEZZ_Y),
+  x: 12, y: MEZZ_Y / 2, z: RAMP_CENTRE,
+  width: 3.6, height: 0.4, depth: Math.hypot(RAMP_RUN, MEZZ_Y),
   pitch: -rampAngle,
 });
+// A rail along the open edge of the deck itself, rather than at floor level.
+box({ kind: "accent", x: 8.6, y: MEZZ_Y + 0.7, z: 0, width: 0.2, height: 1.0, depth: 24 });
 // Cover on the mezzanine itself.
 box({ kind: "prop", x: 11.5, y: MEZZ_Y + 0.7, z: -5, width: 2.4, height: 1.0, depth: 1.2 });
 box({ kind: "prop", x: 16, y: MEZZ_Y + 0.7, z: 5, width: 1.2, height: 1.0, depth: 2.6 });
@@ -114,14 +128,16 @@ box({ kind: "prop", x: -7, y: 1.4, z: 17, width: 2.6, height: 2.8, depth: 5.0 })
 box({ kind: "prop", x: -16.5, y: 0.6, z: 4, width: 2.2, height: 1.2, depth: 2.2 });
 
 const spawns: SpawnPoint[] = [
-  // Yaw faces the centre of the map, so a player never spawns
-  // staring at the wall behind them.
+  // Yaw faces the centre of the map, so a player never spawns staring at the
+  // wall behind them. Every one of these stands on open floor: spawning on a
+  // desk, a crate or a ramp drops the player somewhere they have to climb off
+  // before the round starts.
   { team: "a", x: -16, z: -16, yaw: 0.7854 },
-  { team: "a", x: -12, z: -17, yaw: 0.6147 },
-  { team: "a", x: -17, z: -9, yaw: 1.0839 },
+  { team: "a", x: -15, z: -18.5, yaw: 0.6813 },
+  { team: "a", x: -18.5, z: -13, yaw: 0.9583 },
   { team: "b", x: 15, z: 15, yaw: -2.3562 },
-  { team: "b", x: 12, z: 17, yaw: -2.5269 },
-  { team: "b", x: 17, z: 11, yaw: -2.1451 },
+  { team: "b", x: 16, z: 18, yaw: -2.415 },
+  { team: "b", x: 18.5, z: 13, yaw: -2.1833 },
 ];
 
 /**

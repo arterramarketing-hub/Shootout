@@ -260,9 +260,10 @@ export const randomNode = (grid: NavGrid, unit: number): NavNode | null => {
  * A desk top or a crate lid is a perfectly flat, perfectly walkable surface
  * that no one can step onto, because the climb exceeds the step limit. Left in
  * the grid they are traps: a bot that starts on one snaps to it and can never
- * leave, since it has no links to anywhere else.
+ * leave, since it has no links to anywhere else. The threshold has to clear
+ * the largest piece of furniture in any map, not merely the smallest.
  */
-export const pruneIsolated = (grid: NavGrid, minComponentSize = 12): number => {
+export const pruneIsolated = (grid: NavGrid, minComponentSize = 60): number => {
   const component = new Int32Array(grid.nodes.length).fill(-1);
   const sizes: number[] = [];
 

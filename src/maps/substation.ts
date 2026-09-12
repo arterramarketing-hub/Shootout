@@ -106,13 +106,15 @@ wall(-8, -17.5, -3, -17.5, 2.6, "prop");
 wall(3, 17.5, 8, 17.5, 2.6, "prop");
 
 const spawns: SpawnPoint[] = [
-  // Yaw faces the centre of the hall.
-  { team: "a", x: -6, z: -16, yaw: Math.atan2(6, 16) },
-  { team: "a", x: 0, z: -17, yaw: 0 },
-  { team: "a", x: 6, z: -16, yaw: Math.atan2(-6, 16) },
-  { team: "b", x: 6, z: 16, yaw: Math.atan2(-6, -16) },
-  { team: "b", x: 0, z: 17, yaw: Math.PI },
-  { team: "b", x: -6, z: 16, yaw: Math.atan2(6, -16) },
+  // Yaw faces the centre of the hall. The middle pair sit clear of the ramp:
+  // spawning on a slope drops the player somewhere they slide off before the
+  // round has started.
+  { team: "a", x: -6, z: -16, yaw: 0.3588 },
+  { team: "a", x: -2.6, z: -18.5, yaw: 0.1396 },
+  { team: "a", x: 6, z: -16, yaw: -0.3588 },
+  { team: "b", x: 6, z: 16, yaw: -2.7828 },
+  { team: "b", x: 2.6, z: 18.5, yaw: -3.002 },
+  { team: "b", x: -6, z: 16, yaw: 2.7828 },
 ];
 
 const targets: TargetPlacement[] = [

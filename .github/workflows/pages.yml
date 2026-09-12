@@ -1,0 +1,56 @@
+name: Deploy Shootout to Pages
+
+on:
+  push:
+    # The repository's default branch, and only that one. Answering to a
+    # second branch is how a site quietly goes live from somewhere nobody
+    # meant, while the branch everyone is reading falls behind. If a push
+    # lands elsewhere the site simply stops updating, which is loud and
+    # therefore the point. If this repository ever gains a `main` and makes
+    # it default, change the name here rather than adding to the list.
+    branches: [claude/bodycam-mobile-game-2mnvup]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Typechecks and unit tests run before anything is published, so a
+      # broken build never reaches the people playtesting it.
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+
+      - uses: actions/configure-pages@v5
+        with:
+          # Turn Pages on the first time this runs, rather than needing
+          # someone to find the setting.
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
