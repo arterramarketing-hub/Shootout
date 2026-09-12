@@ -16,6 +16,7 @@ import { InputManager } from "./input/inputManager";
 import { greyboxMap } from "./maps/greybox";
 import {
   DIFFICULTIES,
+  PLAYER_ID,
   botAsCombatant,
   createBot,
   damageBot,
@@ -26,7 +27,9 @@ import {
   type Combatant,
   type Team,
 } from "./sim/bots";
+import { BrushWorld } from "./sim/brushWorld";
 import { resolveShot, type ShotResolution } from "./sim/combat";
+import { bakeNavGrid } from "./sim/navBake";
 import { STANCE } from "./sim/config";
 import { applyDamage, createHealth, revive, stepHealth } from "./sim/health";
 import { activeWeapon, createLoadout, stepLoadout, type ShotEvent } from "./sim/loadout";
@@ -44,13 +47,11 @@ import { damageTarget, stepTargets } from "./sim/targets";
 import type { PlayerState } from "./sim/types";
 import { copy, lengthXZ, sub, vec3, type Vec3 } from "./sim/vec3";
 import { DEFAULT_LOADOUT } from "./sim/weapons";
+import { NetClient } from "./net/client";
+import { INTERPOLATION_DELAY_MS, type SnapshotMessage } from "./net/protocol";
 import { BotField } from "./view/botView";
 import { CameraRig } from "./view/cameraRig";
-import { BabylonCollisionWorld } from "./view/collisionWorld";
 import { ShotEffects } from "./view/effects";
-import { BabylonHitscanWorld } from "./view/hitscanWorld";
-import { buildNavGrid } from "./view/navBuilder";
-import { PLAYER_ID, PlayerHitbox } from "./view/playerHitbox";
 import { createScene } from "./view/scene";
 import { TargetField } from "./view/targetView";
 import { ViewmodelRig, WORLD_LAYER } from "./view/viewmodel";
@@ -98,17 +99,20 @@ const boot = (): void => {
   rig.camera.layerMask = WORLD_LAYER;
   scene.activeCameras = [rig.camera, viewmodel.camera];
 
-  const world = new BabylonCollisionWorld(scene, STANCE.radius, STANCE.standHeight / 2);
-  const hitscan = new BabylonHitscanWorld(scene);
+  // One world serves collision, hitscan and navigation, in plain TypeScript.
+  // The authoritative server runs this same class, which is what lets client
+  // prediction land on the server's answer instead of near it.
+  const world = new BrushWorld(greyboxMap.brushes);
+  const body = world.createController(STANCE.radius, STANCE.standHeight / 2);
+  const hitscan = world;
   const targets = new TargetField(scene, greyboxMap.targets);
   const effects = new ShotEffects(scene);
   const audio = new GameAudio();
-  const playerHitbox = new PlayerHitbox(scene);
   const botField = new BotField(scene);
 
   const spawn = greyboxMap.spawns[0];
   const spawnPosition = vec3(spawn.x, STANCE.standHeight / 2 + 0.05, spawn.z);
-  world.setPosition(spawnPosition);
+  body.setPosition(spawnPosition);
 
   const player: PlayerState = createPlayer(spawnPosition, spawn.yaw);
   const playerHealth = createHealth();
@@ -124,10 +128,10 @@ const boot = (): void => {
   // The navigation grid is baked once, from the level itself. It is plain data
   // afterwards, which is what lets bot movement live in the engine-free
   // simulation alongside everything else.
-  const nav = buildNavGrid(scene);
+  const nav = bakeNavGrid(world);
   console.info(
     `[shootout] navigation: ${nav.grid.nodes.length} nodes, ` +
-      `${nav.raycasts} rays, ${nav.millis} ms`,
+      `${nav.raycasts} rays, ${nav.pruned} pruned, ${nav.millis} ms`,
   );
 
   const input = new InputManager(canvas);
@@ -211,8 +215,7 @@ const boot = (): void => {
     CALLSIGNS[index % CALLSIGNS.length] ?? `Bot ${index + 1}`;
 
   const createRoster = (): void => {
-    for (const binding of botField.bindings) binding.root.dispose(false, true);
-    botField.bindings.length = 0;
+    botField.clear();
     bots = [];
 
     const difficulty = DIFFICULTIES[settings.difficulty];
@@ -236,9 +239,45 @@ const boot = (): void => {
           i % 3 === 0 ? ["smg", "pistol"] : ["ar", "pistol"],
         );
         bots.push(bot);
-        botField.add(bot);
         index += 1;
       }
+    }
+  };
+
+  /**
+   * Publish everyone's hitboxes into the shared world.
+   * Shooting resolves against these rather than against meshes, so the same
+   * code decides a hit whether it runs here or on the server.
+   */
+  const syncHitboxes = (): void => {
+    world.setHitboxes(
+      PLAYER_ID,
+      playerHealth.dead
+        ? []
+        : playerHitboxes(player.position.y + eyeOffset(player), player.position),
+    );
+    for (const bot of bots) {
+      world.setHitboxes(bot.id, bot.health.dead ? [] : botHitboxes(bot.position));
+    }
+    for (const binding of targets.bindings) {
+      // A folded plate is no longer a target, so it stops soaking rounds.
+      world.setHitboxes(
+        binding.state.id,
+        binding.state.down
+          ? []
+          : [
+              {
+                center: vec3(binding.origin.x, binding.origin.y + 1.02, binding.origin.z),
+                halfExtents: vec3(0.26, 0.48, 0.26),
+                isHead: false,
+              },
+              {
+                center: vec3(binding.origin.x, binding.origin.y + 1.63, binding.origin.z),
+                halfExtents: vec3(0.12, 0.13, 0.12),
+                isHead: true,
+              },
+            ],
+      );
     }
   };
 
@@ -330,6 +369,18 @@ const boot = (): void => {
     return hitSomething;
   };
 
+  /** Body and head boxes for a standing combatant, from their feet. */
+  const botHitboxes = (position: Vec3) => [
+    { center: vec3(position.x, position.y + 1.0, position.z), halfExtents: vec3(0.24, 0.52, 0.2), isHead: false },
+    { center: vec3(position.x, position.y + 1.62, position.z), halfExtents: vec3(0.13, 0.14, 0.13), isHead: true },
+  ];
+
+  /** The player's boxes hang off the eye, which is where their stance is known. */
+  const playerHitboxes = (eyeY: number, position: Vec3) => [
+    { center: vec3(position.x, eyeY - 0.72, position.z), halfExtents: vec3(STANCE.radius, 0.65, STANCE.radius), isHead: false },
+    { center: vec3(position.x, eyeY + 0.02, position.z), halfExtents: vec3(0.13, 0.13, 0.13), isHead: true },
+  ];
+
   /** Eye position, which is where the player's shots originate. */
   const eyePosition = () =>
     vec3(player.position.x, player.position.y + eyeOffset(player), player.position.z);
@@ -363,7 +414,7 @@ const boot = (): void => {
 
   const respawnPlayer = (): void => {
     const point = chooseSpawn("a");
-    world.setPosition(vec3(point.position.x, player.halfHeight + 0.05, point.position.z));
+    body.setPosition(vec3(point.position.x, player.halfHeight + 0.05, point.position.z));
     player.velocity.x = 0;
     player.velocity.y = 0;
     player.velocity.z = 0;
@@ -375,8 +426,86 @@ const boot = (): void => {
     Object.assign(playerLoadout, fresh);
   };
 
+  /** Fold one authoritative snapshot into the local view of the world. */
+  const applySnapshot = (snapshot: SnapshotMessage): void => {
+    net.reconcile(player, body);
+
+    const self = snapshot.players.find((entry) => entry.id === net.selfId);
+    if (self) {
+      // The server owns health, so the local value follows rather than leads.
+      playerHealth.current = self.health;
+      playerHealth.dead = self.dead;
+      playerRespawnTimer = self.dead ? Math.max(playerRespawnTimer, 0.1) : 0;
+    }
+
+    for (const event of snapshot.damage) {
+      playerHealth.sinceDamage = 0;
+      playerHealth.lastDamageYaw = event.fromYaw;
+    }
+
+    for (const event of snapshot.kills) {
+      const byMe = event.killer === net.selfId;
+      const againstMe = event.victim === net.selfId;
+      hud.pushFeed(
+        `${event.killerName} ${event.headshot ? "headshot" : "killed"} ${event.victimName}`,
+        byMe ? "down" : againstMe ? "hit" : "info",
+      );
+      match.feed.unshift({
+        killerName: event.killerName,
+        killerTeam: event.killerTeam,
+        victimName: event.victimName,
+        victimTeam: event.victimTeam,
+        headshot: event.headshot,
+        byPlayer: byMe,
+        againstPlayer: againstMe,
+      });
+      if (match.feed.length > 6) match.feed.length = 6;
+      if (byMe) {
+        hud.showHitMarker(event.headshot);
+        audio.hitMarker(event.headshot);
+      }
+    }
+
+    // Everyone else's gunfire, drawn and heard from where it happened.
+    const eye = eyePosition();
+    for (const shot of snapshot.shots) {
+      if (shot.shooter === net.selfId) continue;
+      const origin = vec3(shot.ox, shot.oy, shot.oz);
+      audio.remoteShot(shot.weapon, lengthXZ(sub(origin, eye)));
+      for (const impact of shot.hits) {
+        effects.addPellet(origin, {
+          point: vec3(impact.x, impact.y, impact.z),
+          normal: vec3(impact.nx, impact.ny, impact.nz),
+          distance: 0,
+          targetId: null,
+          headshot: false,
+          damage: 0,
+          hit: true,
+        });
+      }
+    }
+
+    match.scores.a = snapshot.scores.a;
+    match.scores.b = snapshot.scores.b;
+    match.timeRemaining = snapshot.timeRemaining;
+    match.phase = snapshot.phase === "over" ? "over" : "active";
+  };
+
   const beginMatch = (): void => {
     applySettings(settings);
+
+    if (settings.online) {
+      if (settings.serverUrl === "") {
+        screens.setNetStatus("enter a server address first", "error");
+        return;
+      }
+      screens.setNetStatus(`connecting to ${settings.serverUrl}...`);
+      net.connect(settings.serverUrl, settings.playerName);
+      return;
+    }
+
+    online = false;
+    net.disconnect();
     match.config.teamSize = settings.teamSize;
     createRoster();
     rebuildCombatants();
@@ -401,6 +530,31 @@ const boot = (): void => {
   });
   applySettings(settings);
 
+  const netStatusBar = byId("netbar");
+  let online = false;
+
+  const net = new NetClient({
+    onWelcome: (message) => {
+      online = true;
+      screens.setNetStatus(`connected as ${message.name} on ${message.team === "a" ? "blue" : "rust"}`, "live");
+      screens.show("game");
+      audio.start();
+      input.requestPointerLock();
+    },
+    onSnapshot: (snapshot) => applySnapshot(snapshot),
+    onClose: () => {
+      if (!online) return;
+      online = false;
+      screens.setNetStatus("disconnected from the server", "error");
+      screens.show("lobby");
+    },
+    onError: (reason) => {
+      online = false;
+      screens.setNetStatus(reason, "error");
+      screens.show("lobby");
+    },
+  });
+
   const loop = new FixedStepLoop();
   const fpsMeter = new FpsMeter();
   const benchmark = new QualityBenchmark();
@@ -415,11 +569,54 @@ const boot = (): void => {
   const sceneMeshCount = () =>
     scene.meshes.reduce((n, mesh) => (mesh.isEnabled() ? n + 1 : n), 0);
 
+  /**
+   * One predicted step of the local player while connected.
+   *
+   * Movement and the weapon run locally so that the controls answer at once,
+   * and the server's reply corrects whatever this got wrong. Damage is never
+   * decided here; the server owns that, and the client only draws it.
+   */
+  const stepOnline = (dt: number, frame: ReturnType<typeof input.sample>): void => {
+    previousPosition = copy(player.position);
+    stepPlayer(player, frame, dt, body);
+    net.recordInput(frame, dt);
+
+    const shot = stepLoadout(
+      playerLoadout,
+      playerHealth.dead
+        ? { fire: false, aim: false, reloadPressed: false, swapPressed: false }
+        : frame,
+      {
+        speed: lengthXZ(player.velocity),
+        grounded: player.grounded,
+        crouchAmount: player.crouchAmount,
+        sprintOutTimer: player.sprintOutTimer,
+        yaw: player.yaw,
+        pitch: player.pitch,
+      },
+      dt,
+      random,
+    );
+    if (!shot) return;
+
+    // Local feedback only: the muzzle flash, the kick, the sound and a tracer.
+    audio.shot(shot.weapon.id);
+    viewmodel.addRecoil(0.55 + shot.weapon.recoil.pattern[0][0] * 0.35, random.next());
+    viewmodel.fireFlash(0.7 + random.next() * 0.6);
+    const muzzle = viewmodel.muzzleWorldPosition();
+    const origin = muzzle ? vec3(muzzle.x, muzzle.y, muzzle.z) : eyePosition();
+    const local = resolveShot(shot, eyePosition(), hitscan, PLAYER_ID);
+    for (const impact of local.impacts) {
+      effects.addPellet(origin, impact);
+      if (impact.hit && !impact.targetId) audio.impact(impact.distance);
+    }
+  };
+
   const stepSimulation = (dt: number, frame: ReturnType<typeof input.sample>): void => {
     const live = match.phase === "active";
 
     previousPosition = copy(player.position);
-    stepPlayer(player, frame, dt, world);
+    stepPlayer(player, frame, dt, body);
     stepHealth(playerHealth, dt);
     stepTargets(targets.states, dt);
     stepMatch(match, dt);
@@ -430,6 +627,7 @@ const boot = (): void => {
       if (playerRespawnTimer === 0) respawnPlayer();
     }
 
+    syncHitboxes();
     const botWorld = { grid: nav.grid, hitscan, combatants, random };
     for (const bot of bots) {
       if (bot.health.dead) {
@@ -494,7 +692,8 @@ const boot = (): void => {
     const frame = input.sample();
     if (inGame) {
       for (let step = 0; step < timing.steps; step += 1) {
-        stepSimulation(loop.stepSeconds, frame);
+        if (online) stepOnline(loop.stepSeconds, frame);
+        else stepSimulation(loop.stepSeconds, frame);
       }
     }
     input.endFrame();
@@ -513,8 +712,23 @@ const boot = (): void => {
       playerLoadout.recoilYaw,
     );
     viewmodel.update(player, playerLoadout, rig.camera, delta);
-    playerHitbox.update(player, !playerHealth.dead);
-    botField.render(delta);
+
+    if (online) {
+      // Everyone else is drawn a little in the past, between the snapshots
+      // that have actually arrived, rather than guessed forward.
+      const views = net.remoteViews();
+      for (const view of views) {
+        botField.place(view.id, view.team, view.position, view.yaw, view.dead, delta);
+      }
+      botField.retain(new Set(views.map((view) => view.id)));
+      net.updateErrorOffset(delta);
+      netStatusBar.textContent =
+        `${Math.round(net.rttMs)} ms · ${INTERPOLATION_DELAY_MS} ms interp · ${views.length + 1} players`;
+      netStatusBar.classList.toggle("is-poor", net.rttMs > 150);
+    } else {
+      botField.renderBots(bots, delta);
+      netStatusBar.textContent = "";
+    }
     targets.render();
     effects.update(delta);
     scene.render();
@@ -636,6 +850,7 @@ const boot = (): void => {
           cells: nav.grid.cols * nav.grid.rows,
           millis: nav.millis,
           raycasts: nav.raycasts,
+          pruned: nav.pruned,
         };
       },
       get screen() {
@@ -645,9 +860,20 @@ const boot = (): void => {
         return { ...settings };
       },
       startMatch: beginMatch,
+      get net() {
+        return {
+          state: net.state,
+          online,
+          id: net.selfId,
+          rtt: Math.round(net.rttMs),
+          remotes: net.remoteViews().length,
+          tick: net.latest?.tick ?? 0,
+          phase: net.latest?.phase ?? null,
+        };
+      },
       /** Development helper: drop the player at a spot on the map. */
       teleport(x: number, z: number, yaw?: number) {
-        world.setPosition(vec3(x, player.halfHeight + 0.05, z));
+        body.setPosition(vec3(x, player.halfHeight + 0.05, z));
         player.velocity.x = 0;
         player.velocity.y = 0;
         player.velocity.z = 0;

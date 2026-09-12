@@ -42,8 +42,17 @@ interface DebugHandle extends GameState {
     pathLength: number;
     position: { x: number; y: number; z: number };
   }[];
-  nav: { nodes: number; cells: number; millis: number; raycasts: number };
+  nav: { nodes: number; cells: number; millis: number; raycasts: number; pruned: number };
   screen: string;
+  net: {
+    state: string;
+    online: boolean;
+    id: string | null;
+    rtt: number;
+    remotes: number;
+    tick: number;
+    phase: string | null;
+  };
   settings: {
     touchSensitivity: number;
     mouseSensitivity: number;
@@ -384,4 +393,161 @@ test("a service worker is registered for offline play", async ({ page }) => {
     return registration !== undefined;
   });
   expect(registered).toBe(true);
+});
+
+
+/** Put the lobby into online mode before the page boots. */
+const useServer = async (page: Page, name: string): Promise<void> => {
+  await page.addInitScript((playerName) => {
+    localStorage.setItem(
+      "shootout.settings.v1",
+      JSON.stringify({
+        online: true,
+        serverUrl: "ws://127.0.0.1:8080",
+        playerName,
+        audioEnabled: false,
+      }),
+    );
+  }, name);
+};
+
+const joinServer = async (page: Page, name: string): Promise<void> => {
+  await useServer(page, name);
+  await page.goto("/");
+  await page.waitForFunction(() => window.__shootout?.ready === true, null, {
+    timeout: 30_000,
+  });
+  await page.getByRole("button", { name: "DEPLOY" }).click();
+  await page.waitForFunction(() => window.__shootout.net.online === true, null, {
+    timeout: 20_000,
+  });
+};
+
+test.describe("online play", () => {
+  test("connects to the server and joins a live round", async ({ page }) => {
+    await joinServer(page, "Solo");
+    await page.waitForTimeout(2500);
+
+    const net = await page.evaluate(() => window.__shootout.net);
+    expect(net.state).toBe("connected");
+    expect(net.id).not.toBeNull();
+    expect(net.phase).toBe("active");
+    // The server fills the empty slots with bots, so there is someone to see.
+    expect(net.remotes).toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.__shootout.screen)).toBe("game");
+  });
+
+  test("the server's clock drives the match bar", async ({ page }) => {
+    await joinServer(page, "Clock");
+    await page.waitForTimeout(1500);
+    const first = await page.evaluate(() => window.__shootout.match.timeRemaining);
+    await page.waitForTimeout(2500);
+    const second = await page.evaluate(() => window.__shootout.match.timeRemaining);
+    expect(second).toBeLessThan(first);
+  });
+
+  test("prediction moves the player without waiting for the server", async ({ page }) => {
+    await joinServer(page, "Mover");
+    await page.waitForTimeout(1500);
+    const before = await page.evaluate(() => ({ ...window.__shootout.position }));
+
+    await page.keyboard.down("w");
+    // Far less than a round trip, so only prediction can have moved anything.
+    await page.waitForTimeout(250);
+    const during = await page.evaluate(() => ({ ...window.__shootout.position }));
+    await page.keyboard.up("w");
+
+    const moved = Math.hypot(during.x - before.x, during.z - before.z);
+    expect(moved).toBeGreaterThan(0.3);
+  });
+
+  test("the prediction holds up over a longer run", async ({ page }) => {
+    await joinServer(page, "Runner");
+    await page.waitForTimeout(1500);
+    const before = await page.evaluate(() => ({ ...window.__shootout.position }));
+
+    await page.keyboard.down("w");
+    await page.keyboard.down("Shift");
+    await page.waitForTimeout(2500);
+    await page.keyboard.up("Shift");
+    await page.keyboard.up("w");
+    await page.waitForTimeout(600);
+
+    const after = await page.evaluate(() => ({ ...window.__shootout.position }));
+    const travelled = Math.hypot(after.x - before.x, after.z - before.z);
+    // Sprinting for two and a half seconds covers real ground, and the
+    // reconciliation must not have dragged it back to the start.
+    expect(travelled).toBeGreaterThan(2);
+    // Still inside the map, so the server did not let it through a wall.
+    expect(Math.abs(after.x)).toBeLessThan(21);
+    expect(Math.abs(after.z)).toBeLessThan(21);
+  });
+
+  test("a networked player moves at the speed the simulation says", async ({ page }) => {
+    await joinServer(page, "Pace");
+    await page.waitForTimeout(1500);
+    // Open floor in the middle of the warehouse, facing down the long axis.
+    await page.evaluate(() => window.__shootout.teleport(-2, -2, 0));
+    await page.waitForTimeout(700);
+
+    const before = await page.evaluate(() => ({ ...window.__shootout.position }));
+    await page.keyboard.down("w");
+    await page.keyboard.down("Shift");
+    await page.waitForTimeout(1000);
+    const after = await page.evaluate(() => ({ ...window.__shootout.position }));
+    await page.keyboard.up("Shift");
+    await page.keyboard.up("w");
+
+    const speed = Math.hypot(after.x - before.x, after.z - before.z) / 1.0;
+    // Sprint is 6.5 metres per second. A server that simulated each client
+    // command for its own tick length instead of the span the command covers
+    // would run a sixty-frame client at roughly double this.
+    expect(speed).toBeGreaterThan(3);
+    expect(speed).toBeLessThan(9);
+  });
+
+  test("two clients see each other", async ({ browser }) => {
+    test.setTimeout(90_000);
+    const alphaContext = await browser.newContext();
+    const bravoContext = await browser.newContext();
+    const alpha = await alphaContext.newPage();
+    const bravo = await bravoContext.newPage();
+
+    await joinServer(alpha, "Alpha");
+    await joinServer(bravo, "Bravo");
+    await alpha.waitForTimeout(3000);
+
+    const alphaNet = await alpha.evaluate(() => window.__shootout.net);
+    const bravoNet = await bravo.evaluate(() => window.__shootout.net);
+    expect(alphaNet.id).not.toBe(bravoNet.id);
+    // Each sees the other plus whatever bots fill the round out.
+    expect(alphaNet.remotes).toBeGreaterThanOrEqual(1);
+    expect(bravoNet.remotes).toBeGreaterThanOrEqual(1);
+
+    await alphaContext.close();
+    await bravoContext.close();
+  });
+
+  test("an unreachable server reports back instead of hanging", async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "shootout.settings.v1",
+        JSON.stringify({
+          online: true,
+          serverUrl: "ws://127.0.0.1:9",
+          playerName: "Nobody",
+          audioEnabled: false,
+        }),
+      );
+    });
+    await page.goto("/");
+    await page.waitForFunction(() => window.__shootout?.ready === true, null, {
+      timeout: 30_000,
+    });
+    await page.getByRole("button", { name: "DEPLOY" }).click();
+    await page.waitForTimeout(4000);
+    // Back in the lobby with an explanation, rather than a blank screen.
+    expect(await page.evaluate(() => window.__shootout.screen)).toBe("lobby");
+    await expect(page.locator("#net-status")).toHaveClass(/is-error/);
+  });
 });

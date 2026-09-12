@@ -1,4 +1,9 @@
-import { SETTINGS_LIMITS, type GameSettings } from "../engine/settings";
+import {
+  SETTINGS_LIMITS,
+  sanitisePlayerName,
+  sanitiseServerUrl,
+  type GameSettings,
+} from "../engine/settings";
 import type { MatchState } from "../sim/match";
 
 export type ScreenName = "lobby" | "settings" | "scoreboard" | "game";
@@ -55,6 +60,9 @@ export class Screens {
   private readonly selectDifficulty: (value: string) => void;
   private readonly selectTeamSize: (value: string) => void;
   private readonly selectQuality: (value: string) => void;
+  private readonly selectOnline: (value: string) => void;
+  private readonly card = byId("boot").querySelector<HTMLElement>(".screen-card")!;
+  private readonly netStatus = byId("net-status");
 
   constructor(
     private settings: GameSettings,
@@ -72,6 +80,14 @@ export class Screens {
       this.settings.quality = value as GameSettings["quality"];
       this.commit();
     });
+
+    this.selectOnline = segmented("pick-online", (value) => {
+      this.settings.online = value === "online";
+      this.applyMatchType();
+      this.commit();
+    });
+    this.bindText("set-server", "serverUrl", sanitiseServerUrl);
+    this.bindText("set-name", "playerName", sanitisePlayerName);
 
     this.bindSlider("set-touch", "out-touch", "touchSensitivity", 2);
     this.bindSlider("set-mouse", "out-mouse", "mouseSensitivity", 2);
@@ -114,6 +130,34 @@ export class Screens {
     const ratio = playerDeaths === 0 ? playerKills : playerKills / playerDeaths;
     byId("stat-ratio").textContent = ratio.toFixed(2);
     this.show("scoreboard");
+  }
+
+  /** Show a connection message under the lobby's buttons. */
+  setNetStatus(text: string, kind: "info" | "error" | "live" = "info"): void {
+    this.netStatus.textContent = text;
+    this.netStatus.classList.toggle("is-error", kind === "error");
+    this.netStatus.classList.toggle("is-live", kind === "live");
+  }
+
+  private applyMatchType(): void {
+    this.card.classList.toggle("is-online", this.settings.online);
+    this.card.classList.toggle("is-offline", !this.settings.online);
+  }
+
+  private bindText(
+    inputId: string,
+    key: "serverUrl" | "playerName",
+    clean: (value: unknown) => string,
+  ): void {
+    const input = byId<HTMLInputElement>(inputId);
+    input.addEventListener("change", () => {
+      // Clean on commit rather than on every keystroke, so typing an address
+      // is not fought character by character.
+      const cleaned = clean(input.value);
+      this.settings[key] = cleaned;
+      if (cleaned !== input.value) input.value = cleaned;
+      this.commit();
+    });
   }
 
   private bindSlider(
@@ -164,6 +208,10 @@ export class Screens {
     this.selectDifficulty(this.settings.difficulty);
     this.selectTeamSize(String(this.settings.teamSize));
     this.selectQuality(this.settings.quality);
+    this.selectOnline(this.settings.online ? "online" : "offline");
+    byId<HTMLInputElement>("set-server").value = this.settings.serverUrl;
+    byId<HTMLInputElement>("set-name").value = this.settings.playerName;
+    this.applyMatchType();
     void limits;
   }
 

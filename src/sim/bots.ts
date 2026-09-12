@@ -16,6 +16,9 @@ import type { WeaponId } from "./weapons";
 
 export type Team = "a" | "b";
 
+/** The local player's combatant id, shared by client and server. */
+export const PLAYER_ID = "player";
+
 /** Anything a bot can shoot at, including the player. */
 export interface Combatant {
   id: string;
@@ -213,7 +216,19 @@ export interface BotWorld {
   /** Every combatant in the match, bots and player alike. */
   combatants: Combatant[];
   random: Random;
+  /**
+   * Whether one combatant should shoot another. Defaults to opposing teams,
+   * which is team deathmatch; free-for-all passes a function that answers yes
+   * for everyone but yourself.
+   */
+  isEnemy?: (self: { id: string; team: Team }, other: Combatant) => boolean;
 }
+
+/** Team deathmatch hostility: different team, and not yourself. */
+export const defaultHostility = (
+  self: { id: string; team: Team },
+  other: Combatant,
+): boolean => other.id !== self.id && other.team !== self.team;
 
 /** A shot a bot fired, for the view layer to draw and the match to score. */
 export interface BotShot {
@@ -261,8 +276,9 @@ const updatePerception = (bot: BotState, world: BotWorld, dt: number): void => {
   let best: Combatant | null = null;
   let bestDistance = Infinity;
 
+  const hostile = world.isEnemy ?? defaultHostility;
   for (const candidate of world.combatants) {
-    if (!candidate.alive || candidate.team === bot.team || candidate.id === bot.id) continue;
+    if (!candidate.alive || !hostile(bot, candidate)) continue;
     const toTarget = sub(candidate.centre, eye);
     const distance = Math.hypot(toTarget.x, toTarget.y, toTarget.z);
     if (distance > difficulty.viewDistance || distance < 1e-3) continue;

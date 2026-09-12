@@ -12,14 +12,19 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint": "eslint src tests --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist-server/server.mjs --external:ws",
+    "server": "npm run build:server && node dist-server/server.mjs"
   },
   "dependencies": {
-    "@babylonjs/core": "^9.26.0"
+    "@babylonjs/core": "^9.26.0",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.28.2",
     "eslint": "^10.10.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.0",

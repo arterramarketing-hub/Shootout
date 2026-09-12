@@ -6,6 +6,7 @@ import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 import type { BotState, Team } from "../sim/bots";
+import type { Vec3 } from "../sim/vec3";
 import { damp } from "../sim/vec3";
 
 /**
@@ -33,26 +34,29 @@ const PARTS = {
 } as const;
 
 export interface BotBinding {
-  bot: BotState;
+  id: string;
+  team: Team;
   root: TransformNode;
-  /** Yaw is smoothed for rendering so bots do not snap between frames. */
+  /** Yaw is smoothed for rendering so figures do not snap between frames. */
   renderYaw: number;
   meshes: Mesh[];
 }
 
 export class BotField {
   readonly bindings: BotBinding[] = [];
+  private readonly byId = new Map<string, BotBinding>();
   private readonly materials = new Map<string, StandardMaterial>();
 
   constructor(private readonly scene: Scene) {}
 
-  add(bot: BotState): BotBinding {
-    const root = new TransformNode(`bot_${bot.id}`, this.scene);
-    root.position.set(bot.position.x, bot.position.y, bot.position.z);
+  /** A figure for anyone the local player can see: a bot or a remote player. */
+  add(id: string, team: Team, position: Vec3, yaw: number): BotBinding {
+    const root = new TransformNode(`figure_${id}`, this.scene);
+    root.position.set(position.x, position.y, position.z);
 
-    const colours = TEAM_COLOURS[bot.team];
-    const body = this.material(`bot_${bot.team}_body`, colours.body);
-    const trim = this.material(`bot_${bot.team}_trim`, colours.trim);
+    const colours = TEAM_COLOURS[team];
+    const body = this.material(`bot_${team}_body`, colours.body);
+    const trim = this.material(`bot_${team}_trim`, colours.trim);
     const gun = this.material("bot_weapon", "#2b2f35");
 
     // Build every body part, then merge them into one mesh. Eight draw calls
@@ -62,7 +66,7 @@ export class BotField {
       PARTS.torso, PARTS.hips, PARTS.legLeft, PARTS.legRight, PARTS.armLeft, PARTS.armRight,
     ].map((spec, index) => {
       const mesh = MeshBuilder.CreateBox(
-        `bot_${bot.id}_part_${index}`,
+        `bot_${id}_part_${index}`,
         { width: spec.width, height: spec.height, depth: spec.depth },
         this.scene,
       );
@@ -73,28 +77,28 @@ export class BotField {
     const meshes: Mesh[] = [];
     const merged = Mesh.MergeMeshes(bodyParts, true, true, undefined, false, false);
     if (merged) {
-      merged.name = `bot_${bot.id}_body`;
+      merged.name = `bot_${id}_body`;
       merged.material = body;
       merged.parent = root;
-      merged.isPickable = true;
-      merged.metadata = { damageable: { targetId: bot.id, isHead: false } };
+      // Purely visual: hit detection runs against the shared world's boxes,
+      // not against meshes, so the server can reach the same answer.
+      merged.isPickable = false;
       meshes.push(merged);
     }
 
     const head = MeshBuilder.CreateBox(
-      `bot_${bot.id}_head`,
+      `bot_${id}_head`,
       { width: PARTS.head.width, height: PARTS.head.height, depth: PARTS.head.depth },
       this.scene,
     );
     head.position.set(0, PARTS.head.y, 0);
     head.material = trim;
     head.parent = root;
-    head.isPickable = true;
-    head.metadata = { damageable: { targetId: bot.id, isHead: true } };
+    head.isPickable = false;
     meshes.push(head);
 
     const gunMesh = MeshBuilder.CreateBox(
-      `bot_${bot.id}_weapon`,
+      `bot_${id}_weapon`,
       { width: PARTS.weapon.width, height: PARTS.weapon.height, depth: PARTS.weapon.depth },
       this.scene,
     );
@@ -105,8 +109,9 @@ export class BotField {
     gunMesh.isPickable = false;
     meshes.push(gunMesh);
 
-    const binding: BotBinding = { bot, root, renderYaw: bot.yaw, meshes };
+    const binding: BotBinding = { id, team, root, renderYaw: yaw, meshes };
     this.bindings.push(binding);
+    this.byId.set(id, binding);
     return binding;
   }
 
@@ -124,19 +129,41 @@ export class BotField {
     return material;
   }
 
-  /** Push simulation state into the scene. */
-  render(deltaSeconds: number): void {
-    for (const binding of this.bindings) {
-      const { bot, root } = binding;
-      const dead = bot.health.dead;
-      root.setEnabled(!dead);
-      // Hitboxes follow the body: a downed bot must not soak rounds.
-      for (const mesh of binding.meshes) mesh.isPickable = !dead && mesh.metadata != null;
-      if (dead) continue;
+  /** Place one figure. Creates it on first sight. */
+  place(
+    id: string,
+    team: Team,
+    position: Vec3,
+    yaw: number,
+    dead: boolean,
+    deltaSeconds: number,
+  ): void {
+    const binding = this.byId.get(id) ?? this.add(id, team, position, yaw);
+    binding.root.setEnabled(!dead);
+    if (dead) return;
+    binding.root.position.set(position.x, position.y, position.z);
+    binding.renderYaw = dampAngle(binding.renderYaw, yaw, deltaSeconds);
+    binding.root.rotation.y = binding.renderYaw;
+  }
 
-      root.position.set(bot.position.x, bot.position.y, bot.position.z);
-      binding.renderYaw = dampAngle(binding.renderYaw, bot.yaw, deltaSeconds);
-      root.rotation.y = binding.renderYaw;
+  /** Remove every figure whose id is not in the given set. */
+  retain(ids: Set<string>): void {
+    for (const binding of [...this.bindings]) {
+      if (ids.has(binding.id)) continue;
+      binding.root.dispose(false, true);
+      this.byId.delete(binding.id);
+      this.bindings.splice(this.bindings.indexOf(binding), 1);
+    }
+  }
+
+  clear(): void {
+    this.retain(new Set());
+  }
+
+  /** Push local bot state into the scene. */
+  renderBots(bots: readonly BotState[], deltaSeconds: number): void {
+    for (const bot of bots) {
+      this.place(bot.id, bot.team, bot.position, bot.yaw, bot.health.dead, deltaSeconds);
     }
   }
 }

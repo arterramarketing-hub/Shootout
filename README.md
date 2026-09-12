@@ -10,15 +10,16 @@ names, maps, or trademarks are used.
 
 ## Status
 
-**Phase 2 complete.** Team deathmatch against navmesh bots, with match flow,
-a settings screen, and installable offline play.
+**Phase 3 complete.** An authoritative server with client prediction,
+reconciliation and lag compensation. Team deathmatch and free-for-all, solo
+against bots or online against other players.
 
 | Phase | Scope | State |
 | --- | --- | --- |
 | 0 | Boot, greybox map, touch movement, deployed URL | Done |
 | 1 | Weapons, viewmodel, shooting, HUD, sound | Done |
 | 2 | Bots, team deathmatch, match flow, PWA install | Done |
-| 3 | Authoritative multiplayer server, 5v5 | Planned |
+| 3 | Authoritative multiplayer server, 5v5 | Done |
 | 4 | Art pass, second map, progression | Planned |
 
 ## Stack
@@ -29,7 +30,9 @@ a settings screen, and installable offline play.
 | Language | TypeScript, strict |
 | Bundler | Vite |
 | Collision | Babylon swept-ellipsoid collider |
+| Collision | Analytic capsule against oriented boxes, shared by both sides |
 | Navigation | Layered grid baked from the level, A* in the simulation |
+| Server | Node and `ws`, authoritative at 30 Hz |
 | Audio | Web Audio, synthesised at runtime, no samples |
 | Offline | Service worker, runtime cache |
 | Unit tests | Vitest |
@@ -47,7 +50,13 @@ npm run preview      # serve the production build
 npm run test         # unit tests
 npm run test:e2e     # browser smoke tests
 npm run lint
+
+npm run server     # authoritative server on port 8080
+npm run build:server
 ```
+
+Environment variables for the server: `PORT`, `MODE` (`tdm` or `ffa`),
+`TEAM_SIZE`, `DIFFICULTY`, `ROUND_SECONDS`, `SCORE_LIMIT`.
 
 To test on a phone, run `npm run dev` and open the network address it prints on a
 device on the same network.
@@ -137,6 +146,43 @@ visit. The service worker caches at runtime rather than from a build manifest,
 since the bundler hashes asset names on every build and a stale list is worse
 than no list.
 
+## Multiplayer
+
+The server owns the game. It runs the same simulation the client does, at
+30 Hz, decides all damage, and sends every client a snapshot of the world each
+tick. Clients send input, not outcomes.
+
+Three pieces make that playable over a real connection.
+
+**Prediction.** The client applies its own input immediately rather than
+waiting a round trip, so the controls answer at once.
+
+**Reconciliation.** Each snapshot carries the sequence number of the last input
+the server applied. The client resets to the authoritative state and replays
+everything the server had not yet seen, which brings that state back up to the
+present. Whatever remains is genuine prediction error, and it is carried as a
+visual offset that decays rather than a jolt.
+
+**Lag compensation.** A player fires at what their screen shows, which is
+already a hundred milliseconds old. The server keeps a short history of where
+everyone was and rewinds them by half the round trip plus the interpolation
+delay, capped at 200 ms, so it judges the shot the shooter actually took.
+
+Remote players are drawn slightly in the past, interpolated between the two
+snapshots that bracket that moment, because the alternative is guessing where
+someone went and being wrong every time they change direction.
+
+Both sides run one collision implementation, in plain TypeScript, against the
+level's oriented boxes. This is the reason prediction lands on the server's
+answer instead of near it: two implementations, however carefully written,
+disagree somewhere, and every disagreement surfaces as the player being yanked
+backwards.
+
+Snapshots are JSON with coordinates rounded to the centimetre. At four players
+that is about 800 bytes a tick, or 24 KB a second. A packed binary format would
+cut that substantially and is the obvious next optimisation; being able to read
+a capture has been worth more so far.
+
 ## Architecture
 
 ```
@@ -144,9 +190,11 @@ src/
   sim/      pure gameplay. No Babylon imports, so it can run on a server.
   view/     Babylon presentation of simulation state
   input/    pointer, keyboard and gyroscope handling
+  net/      protocol, client prediction, lag-compensation history
   engine/   render loop, quality tiers, audio synthesis, settings
   hud/      DOM overlay
   maps/     level definitions as data
+server/     authoritative game server
 ```
 
 Two rules hold the design together.
@@ -185,10 +233,12 @@ Measured for Phase 0:
 
 | Metric | Value |
 | --- | --- |
-| Bundle, gzipped | 407 KB |
+| Bundle, gzipped | 403 KB |
+| Server bundle | 79 KB |
 | Draw calls, empty level | 5 |
-| Navigation bake, at load | under 200 ms |
-| Frame rate, software rasteriser in CI | 34 to 60 fps |
+| Navigation bake, at load | about 30 ms |
+| Snapshot size, four players | about 800 bytes |
+| Frame rate, software rasteriser in CI | 30 to 60 fps |
 
 Every brush of a given surface kind is merged into one mesh, which is why the
 empty level costs five draw calls. Each bot costs three more: one merged body,

@@ -1,5 +1,63 @@
 # Changelog
 
+## Phase 3 — authoritative server, prediction, lag compensation
+
+The game is playable against other people. An authoritative server owns the
+match, clients predict their own movement and reconcile against it, and shots
+are judged against the world as the shooter's screen actually showed it.
+
+**Added**
+
+- Analytic collision and hitscan in plain TypeScript, against the level's
+  oriented boxes. One implementation now serves the client's prediction, the
+  server's authority, and the navigation bake.
+- Authoritative server on Node and `ws`, running the shared simulation at
+  30 Hz, filling empty slots with bots, and sending each client a snapshot per
+  tick. Configurable by environment variable, and bundled to 79 KB.
+- Client prediction with reconciliation: each snapshot acknowledges the last
+  input applied, and the client replays everything the server had not yet seen.
+  Residual error is carried as a decaying visual offset rather than a jolt.
+- Lag compensation: the server keeps a short position history and rewinds
+  everyone by half the round trip plus the interpolation delay, capped at
+  200 ms, before resolving a shot.
+- Remote players interpolated a hundred milliseconds in the past, between the
+  two snapshots bracketing that moment.
+- Free-for-all alongside team deathmatch, with hostility decided by mode rather
+  than by comparing team letters.
+- Lobby support for online play: a server address, a callsign, and a live
+  readout of round trip, interpolation delay and player count.
+- 27 further unit tests and 6 further browser tests, the latter running two
+  clients against a real server.
+
+**Changed**
+
+- The navigation bake no longer needs the renderer, so the server builds the
+  same grid the client does. It also got about seven times faster.
+- The Babylon collision coordinator and ray picking are gone, which is why the
+  bundle shrank despite everything added.
+
+**Fixed**
+
+- Ray-against-box returned an inverted entry normal, so every floor faced
+  downward. Nothing was walkable and the navigation bake produced no nodes at
+  all.
+- The capsule resolver applied a full push for each of its five sample spheres
+  from stale positions, over-correcting badly enough to throw a player backward
+  through the space they had just crossed.
+- Bots could strand on desk tops and crate lids: perfectly walkable surfaces
+  that nothing links to, because the climb exceeds the step limit. Unreachable
+  islands are now pruned from the navigation grid.
+
+**Measured**
+
+| Metric | Value |
+| --- | --- |
+| Bundle, gzipped | 403 KB |
+| Server bundle | 79 KB |
+| Navigation bake | about 30 ms |
+| Snapshot size, four players | about 800 bytes |
+| Server tick rate | 30 Hz |
+
 ## Phase 2 — bots, team deathmatch, match flow
 
 The prototype is now a game you can finish. Team deathmatch against bots that

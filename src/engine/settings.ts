@@ -14,6 +14,10 @@ export interface GameSettings {
   audioEnabled: boolean;
   difficulty: BotDifficulty["id"];
   teamSize: number;
+  /** Play against a server rather than local bots. */
+  online: boolean;
+  serverUrl: string;
+  playerName: string;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -27,6 +31,9 @@ export const DEFAULT_SETTINGS: GameSettings = {
   audioEnabled: true,
   difficulty: "regular",
   teamSize: 4,
+  online: false,
+  serverUrl: "",
+  playerName: "Player",
 };
 
 export const SETTINGS_LIMITS = {
@@ -96,6 +103,9 @@ export const loadSettings = (): GameSettings => {
           parsed.teamSize, limits.teamSize.min, limits.teamSize.max, DEFAULT_SETTINGS.teamSize,
         ),
       ),
+      online: typeof parsed.online === "boolean" ? parsed.online : DEFAULT_SETTINGS.online,
+      serverUrl: sanitiseServerUrl(parsed.serverUrl),
+      playerName: sanitisePlayerName(parsed.playerName),
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -115,3 +125,28 @@ const isQuality = (value: unknown): value is QualityTier | "auto" =>
 
 const isDifficulty = (value: unknown): value is BotDifficulty["id"] =>
   value === "recruit" || value === "regular" || value === "veteran";
+
+/**
+ * Only websocket addresses are accepted, and only up to a sane length.
+ * The value is stored, replayed on the next visit, and used to open a socket,
+ * so anything else is dropped rather than carried around.
+ */
+export const sanitiseServerUrl = (value: unknown): string => {
+  if (typeof value !== "string") return DEFAULT_SETTINGS.serverUrl;
+  const trimmed = value.trim().slice(0, 200);
+  if (trimmed === "") return "";
+  if (!/^wss?:\/\//i.test(trimmed)) return "";
+  try {
+    // Reject anything the URL parser will not accept, before it reaches a socket.
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "ws:" || parsed.protocol === "wss:" ? trimmed : "";
+  } catch {
+    return "";
+  }
+};
+
+export const sanitisePlayerName = (value: unknown): string => {
+  if (typeof value !== "string") return DEFAULT_SETTINGS.playerName;
+  const cleaned = value.replace(/[^\w \-.]/g, "").trim().slice(0, 16);
+  return cleaned.length > 0 ? cleaned : DEFAULT_SETTINGS.playerName;
+};

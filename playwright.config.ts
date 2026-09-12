@@ -23,10 +23,21 @@ export default defineConfig({
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },
     { name: "phone", use: { ...devices["Pixel 7 landscape"] } },
   ],
-  webServer: {
-    command: "npm run preview -- --port 4173 --strictPort",
-    url: "http://127.0.0.1:4173",
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      command: "npm run preview -- --port 4173 --strictPort",
+      url: "http://127.0.0.1:4173",
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+    {
+      // The authoritative game server, so the online tests have something to
+      // connect to. It speaks websocket, so it is waited on by port.
+      command: "node dist-server/server.mjs",
+      port: 8080,
+      env: { PORT: "8080", TEAM_SIZE: "2" },
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+  ],
 });

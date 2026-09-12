@@ -573,3 +573,45 @@ html, body {
 
 /* The HUD scales as one, so a phone-sized readout stays legible. */
 .hud { transform-origin: center center; }
+
+/* --- Online play ---------------------------------------------------------- */
+
+.text-field {
+  flex: 1 1 200px;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  padding: 9px 11px;
+  color: var(--hud);
+  background: rgba(232, 238, 245, 0.06);
+  border: 1px solid rgba(232, 238, 245, 0.2);
+  border-radius: 5px;
+}
+.text-field::placeholder { color: rgba(232, 238, 245, 0.35); }
+.text-field:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The lobby shows only the rows that belong to the chosen match type. */
+.screen-card.is-online .is-offline,
+.screen-card.is-offline .is-online { display: none; }
+
+.net-status {
+  margin: 14px 0 0;
+  min-height: 1.2em;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--hud-dim);
+}
+.net-status.is-error { color: #ff7a5c; }
+.net-status.is-live { color: var(--accent); }
+
+.netbar {
+  position: absolute;
+  top: calc(8px + var(--safe-t));
+  left: calc(12px + var(--safe-l));
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+  color: var(--hud-dim);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+.netbar.is-poor { color: #ffb46b; }

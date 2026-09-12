@@ -8,7 +8,6 @@ import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 import type { TargetPlacement } from "../maps/types";
 import { createTarget, type TargetState } from "../sim/targets";
-import type { DamageableMetadata } from "./hitscanWorld";
 
 /**
  * A practice plate: a body board and a smaller head board on a post, the
@@ -20,6 +19,8 @@ const POST = { diameter: 0.07, height: 0.55 };
 
 export interface TargetBinding {
   state: TargetState;
+  /** World position of the plate's base, for registering its hitboxes. */
+  origin: { x: number; y: number; z: number };
   /** Pivots at the base so the plate folds backwards when hit. */
   pivot: TransformNode;
   body: Mesh;
@@ -92,13 +93,18 @@ export class TargetField {
     head.material = this.headMaterial;
     head.parent = pivot;
 
-    // The metadata is what the hitscan layer reads to award damage.
-    const bodyMeta: DamageableMetadata = { targetId: placement.id, isHead: false };
-    const headMeta: DamageableMetadata = { targetId: placement.id, isHead: true };
-    body.metadata = { damageable: bodyMeta };
-    head.metadata = { damageable: headMeta };
+    // Purely visual. Shooting resolves against boxes registered in the shared
+    // world, so the same code decides a hit wherever it runs.
+    body.isPickable = false;
+    head.isPickable = false;
 
-    this.bindings.push({ state: createTarget(placement.id), pivot, body, head });
+    this.bindings.push({
+      state: createTarget(placement.id),
+      origin: { x: placement.x, y: placement.y, z: placement.z },
+      pivot,
+      body,
+      head,
+    });
   }
 
   get states(): TargetState[] {
@@ -115,9 +121,6 @@ export class TargetField {
     for (const binding of this.bindings) {
       // Fold backwards about the base rather than sinking into the floor.
       binding.pivot.rotation.x = binding.state.knockdown * (Math.PI / 2) * 0.92;
-      const down = binding.state.down;
-      binding.body.isPickable = !down;
-      binding.head.isPickable = !down;
       anyFlash = Math.max(anyFlash, binding.state.flash);
     }
     // One shared material means one flash for all plates; with six targets on

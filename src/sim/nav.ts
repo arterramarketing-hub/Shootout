@@ -253,3 +253,46 @@ export const randomNode = (grid: NavGrid, unit: number): NavNode | null => {
   const index = Math.min(grid.nodes.length - 1, Math.floor(unit * grid.nodes.length));
   return grid.nodes[index];
 };
+
+/**
+ * Drop walkable islands nothing can reach.
+ *
+ * A desk top or a crate lid is a perfectly flat, perfectly walkable surface
+ * that no one can step onto, because the climb exceeds the step limit. Left in
+ * the grid they are traps: a bot that starts on one snaps to it and can never
+ * leave, since it has no links to anywhere else.
+ */
+export const pruneIsolated = (grid: NavGrid, minComponentSize = 12): number => {
+  const component = new Int32Array(grid.nodes.length).fill(-1);
+  const sizes: number[] = [];
+
+  for (const node of grid.nodes) {
+    if (component[node.index] !== -1) continue;
+    const id = sizes.length;
+    let size = 0;
+    const stack = [node.index];
+    component[node.index] = id;
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      size += 1;
+      for (const link of grid.nodes[current].links) {
+        if (component[link] !== -1) continue;
+        component[link] = id;
+        stack.push(link);
+      }
+    }
+    sizes.push(size);
+  }
+
+  const keep = grid.nodes.filter((node) => sizes[component[node.index]] >= minComponentSize);
+  const removed = grid.nodes.length - keep.length;
+  if (removed === 0) return 0;
+
+  // Indices are positional, so surviving nodes have to be renumbered and the
+  // cell lists and links rebuilt from scratch.
+  grid.nodes = [];
+  grid.cells = Array.from({ length: grid.cols * grid.rows }, () => []);
+  for (const node of keep) addNode(grid, node.col, node.row, node.y);
+  linkNodes(grid);
+  return removed;
+};

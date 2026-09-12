@@ -7,3 +7,4 @@ blob-report/
 .vite/
 *.local
 .DS_Store
+dist-server/
