@@ -104,23 +104,36 @@ Recoil is a fixed per-shot pattern rather than random kick, so it can be
 learned. Sustained fire also widens the cone, which is why tapping beats
 holding at range.
 
-Each shot's kick splits in two. Most of it **climbs**: it moves the player's own
-aim, and stays there until they pull back down. The rest is a **spring** that
-offsets the camera and recovers on its own, which is the punch of the shot. A
-magazine of rifle fire held on the trigger walks the view about eight degrees
-up and to the right; letting go returns the spring and leaves the climb.
+Each shot's kick splits in two, and the halves are sized from their own knobs
+because they pull against each other.
 
-The split is what makes recoil something a player can fight. When the whole
-kick springs back, pulling down to hold a target is correcting for something
-that then removes itself, and the correction is left behind as error pointing
-at the floor — the longer the burst, the worse the aim, which is exactly when a
-player notices, as the magazine runs out. With the climb in the aim there is
-nothing to remove: holding the target leaves the aim where the player put it.
+The **punch** is what one shot looks like: it throws the camera several degrees
+and springs back within a few rounds. The **climb** is what a magazine adds up
+to: a fraction of the same kick that moves the player's own aim and stays there
+until they pull it down. One rifle round throws the view about 20 pixels;
+sustained fire sits eight to eleven degrees high and shaking; letting go drops
+the shake within a third of a second and leaves roughly eight degrees of climb
+to bring back down.
+
+They need separate knobs because a per-shot jolt large enough to see on a
+phone, summed over thirty rounds without recovering, would point the player at
+the sky — while a kick small enough to sum safely is invisible one shot at a
+time. The screen is about five pixels per degree in landscape, so a kick under
+a degree is a handful of pixels on an already-moving scene.
+
+The split is also what makes recoil something a player can fight. When the
+whole kick springs back, pulling down to hold a target is correcting for
+something that then removes itself, and the correction is left behind as error
+pointing at the floor — the longer the burst, the worse the aim, which is
+exactly when a player notices, as the magazine runs out. With the climb in the
+aim there is nothing to remove: holding the target leaves the aim where the
+player put it.
 
 The crosshair sits at the screen centre and the whole view climbs under it, so
-what the crosshair covers is always where the bullets go. It also opens with
-the current spread, so accuracy loss is visible before the shot rather than
-after it.
+what the crosshair covers is always where the bullets go — including down the
+sights, where the crosshair gives way to the weapon's own sight post and the
+world climbs behind it. The crosshair also opens with the current spread, so
+accuracy loss is visible before the shot rather than after it.
 
 ## Controls
 

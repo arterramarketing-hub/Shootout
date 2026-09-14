@@ -64,6 +64,21 @@ export interface RecoilProfile {
    * down is ordinary aiming, and nothing springs back to fight it.
    */
   climb: number;
+  /**
+   * How hard one shot throws the camera, as a multiple of the pattern entry.
+   *
+   * The climb is what a magazine adds up to; this is what a single shot looks
+   * like. They need separate knobs because they pull against each other: a
+   * per-shot jolt large enough to see on a phone, summed over thirty rounds
+   * without recovering, would put the player's aim in the sky. So the jolt is
+   * large and springs back within a few shots, and only the climb is kept.
+   *
+   * Sized in screen terms rather than ballistic ones. The view is about five
+   * pixels per degree on a phone in landscape, so a kick under a degree is a
+   * handful of pixels on a moving 3D scene — which is to say invisible, and
+   * exactly what this weapon used to produce.
+   */
+  punch: number;
   /** Kick multiplier while fully aimed. */
   adsMultiplier: number;
 }
@@ -141,8 +156,9 @@ const ridgeline: WeaponDefinition = {
       [0.5, 0.26], [0.48, 0.1], [0.46, -0.12], [0.44, -0.28],
       [0.44, -0.2], [0.44, 0.05], [0.44, 0.22],
     ],
-    recovery: 0.05,
+    recovery: 0.004,
     climb: 0.55,
+    punch: 5.5,
     adsMultiplier: 0.72,
   },
 };
@@ -187,8 +203,9 @@ const wasp: WeaponDefinition = {
       [0.4, -0.24], [0.4, 0.26], [0.4, -0.22], [0.38, 0.18],
       [0.38, -0.26], [0.36, 0.3],
     ],
-    recovery: 0.06,
+    recovery: 0.004,
     climb: 0.5,
+    punch: 5.5,
     adsMultiplier: 0.8,
   },
 };
@@ -228,8 +245,9 @@ const breaker: WeaponDefinition = {
   },
   recoil: {
     pattern: [[2.2, 0.25]],
-    recovery: 0.04,
+    recovery: 0.004,
     climb: 0.5,
+    punch: 2.0,
     adsMultiplier: 0.85,
   },
 };
@@ -269,8 +287,9 @@ const sidearm: WeaponDefinition = {
   },
   recoil: {
     pattern: [[0.72, 0.06], [0.76, -0.1], [0.78, 0.12], [0.8, -0.14]],
-    recovery: 0.05,
+    recovery: 0.004,
     climb: 0.5,
+    punch: 2.5,
     adsMultiplier: 0.75,
   },
 };

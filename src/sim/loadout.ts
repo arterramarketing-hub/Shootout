@@ -276,16 +276,24 @@ const tryFire = (
   const aimYaw = context.yaw + loadout.recoilYaw;
   const aimPitch = context.pitch + loadout.recoilPitch;
 
-  // The kick splits in two. The springy share offsets the camera and recovers
-  // on its own, which is the punch of the shot; the climb share is handed back
-  // to the caller to add to the player's aim, and stays until they pull it
-  // down. Only the springy share belongs in the recovering accumulator.
+  /*
+   * The kick splits in two, and the halves are sized independently.
+   *
+   * The spring throws the camera by `punch` times the pattern entry and
+   * recovers within a few shots: that is what one round looks like, and it
+   * has to be big enough to see. The climb is a fraction of the same entry
+   * and never recovers: that is what a magazine adds up to, and it has to
+   * stay small enough that thirty of them do not point the player at the sky.
+   * Deriving one from the other would force a single compromise that is
+   * either invisible per shot or absurd per magazine.
+   */
   const kick = recoilForShot(definition.recoil, weapon.shotIndex, loadout.adsProgress);
   const climbShare = clamp(definition.recoil.climb, 0, 1);
+  const punch = Math.max(0, definition.recoil.punch);
   const climbPitch = kick.pitch * climbShare;
   const climbYaw = kick.yaw * climbShare;
-  loadout.recoilPitch += kick.pitch - climbPitch;
-  loadout.recoilYaw += kick.yaw - climbYaw;
+  loadout.recoilPitch += kick.pitch * punch;
+  loadout.recoilYaw += kick.yaw * punch;
 
   weapon.magazine -= 1;
   weapon.fireCooldown = secondsPerShot(definition);

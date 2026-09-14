@@ -90,6 +90,55 @@ const holdTrigger = (
 
 const loadoutOf = (id: WeaponId): LoadoutState => createLoadout([id]);
 
+describe("one shot is visible on its own", () => {
+  it("throws the view far enough to see on a phone", () => {
+    /*
+     * The complaint this exists for: firing did not appear to move anything.
+     * A magazine climbed eight degrees, but a single round moved the view a
+     * degree — around six pixels on a phone in landscape, on a scene that is
+     * already moving. Whatever a magazine adds up to, one shot has to read.
+     */
+    const loadout = loadoutOf("ar");
+    const random = createRandom(7);
+    const shot = stepLoadout(loadout, input({ fire: true }), context(), tickInterval, random);
+    expect(shot).not.toBeNull();
+
+    const jolt = (loadout.recoilPitch + (shot?.climbPitch ?? 0)) * RAD_TO_DEG;
+    expect(jolt).toBeGreaterThan(2);
+  });
+
+  it("throws the view on every weapon, not just the rifle", () => {
+    for (const id of Object.keys(WEAPONS) as WeaponId[]) {
+      const loadout = loadoutOf(id);
+      const random = createRandom(7);
+      const shot = stepLoadout(loadout, input({ fire: true }), context(), tickInterval, random);
+      expect(shot, id).not.toBeNull();
+      const jolt = (loadout.recoilPitch + (shot?.climbPitch ?? 0)) * RAD_TO_DEG;
+      expect(jolt, `${id} barely twitches`).toBeGreaterThan(1.5);
+    }
+  });
+
+  it("declares a punch for every weapon", () => {
+    for (const id of Object.keys(WEAPONS) as WeaponId[]) {
+      expect(WEAPONS[id].recoil.punch, id).toBeGreaterThan(1);
+    }
+  });
+
+  it("settles most of the jolt within a second of the last shot", () => {
+    // A jolt that stays is not a jolt, it is a climb, and the climb is
+    // supposed to be the other half.
+    const loadout = loadoutOf("ar");
+    const random = createRandom(7);
+    stepLoadout(loadout, input({ fire: true }), context(), tickInterval, random);
+    const jolt = loadout.recoilPitch;
+
+    for (let i = 0; i < 60; i += 1) {
+      stepLoadout(loadout, input(), context(), tickInterval, random);
+    }
+    expect(loadout.recoilPitch).toBeLessThan(jolt * 0.05);
+  });
+});
+
 describe("recoil climbs the view", () => {
   it("lifts the rifle's view several degrees over one magazine", () => {
     // The number that matters is whether a player can see it. A degree of
@@ -103,10 +152,12 @@ describe("recoil climbs the view", () => {
   });
 
   it("keeps climbing as the magazine empties rather than settling", () => {
-    // A kick that plateaus is a kick the player stops having to fight.
+    // A kick that plateaus is a kick the player stops having to fight. The
+    // spring is meant to plateau, so the growth has to be read off the aim,
+    // which is the half that never recovers.
     const early = holdTrigger(loadoutOf("ar"), 1.1);
     const late = holdTrigger(loadoutOf("ar"), 2.9);
-    expect(late.viewPitchDegrees).toBeGreaterThan(early.viewPitchDegrees * 1.8);
+    expect(late.aimPitchDegrees).toBeGreaterThan(early.aimPitchDegrees * 1.8);
   });
 
   it("climbs on every weapon", () => {
@@ -241,23 +292,17 @@ describe("the shot goes where the view is pointing", () => {
     expect(second?.aimPitch).toBeGreaterThan(0.2);
   });
 
-  it("reports the same climb it withheld from the spring", () => {
+  it("sizes the jolt and the climb from their own knobs", () => {
+    // The two halves are deliberately not derived from each other: one is
+    // what a shot looks like, the other is what a magazine adds up to.
     const loadout = loadoutOf("ar");
     const random = createRandom(7);
     const shot = stepLoadout(loadout, input({ fire: true }), context(), tickInterval, random);
     expect(shot).not.toBeNull();
 
-    const total = WEAPONS.ar.recoil.pattern[0][0] / RAD_TO_DEG;
-    const climb = WEAPONS.ar.recoil.climb;
-    expect(shot?.climbPitch).toBeCloseTo(total * climb, 6);
-    // Whatever was not handed back is exactly what the spring is holding.
-    expect(activeLoadoutSpring(loadout)).toBeCloseTo(total * (1 - climb), 6);
+    const entry = WEAPONS.ar.recoil.pattern[0][0] / RAD_TO_DEG;
+    const { climb, punch } = WEAPONS.ar.recoil;
+    expect(shot?.climbPitch).toBeCloseTo(entry * climb, 6);
+    expect(loadout.recoilPitch).toBeCloseTo(entry * punch, 6);
   });
 });
-
-/** The springy pitch still on the loadout, after one step of recovery. */
-const activeLoadoutSpring = (loadout: LoadoutState): number => {
-  // One step of decay has already been applied by the step that fired.
-  void activeWeapon(loadout);
-  return loadout.recoilPitch;
-};
