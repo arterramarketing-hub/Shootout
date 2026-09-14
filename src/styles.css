@@ -7,6 +7,22 @@
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
+  /*
+   * Size of the on-screen touch controls, read by the arc and by the readouts
+   * that have to stay clear of it, so it lives here rather than on either.
+   *
+   * It is a product of two inputs that must not overwrite each other: --ctl-user
+   * is the player's setting, written inline by the settings screen, and
+   * --ctl-fit is what the screen can actually carry. Collapsing them into one
+   * variable makes the inline value win over every media query below, which
+   * silently disables the fit entirely.
+   */
+  --ctl-user: 1;
+  --ctl-fit: 1;
+  /* HUD readout size. Written by the settings screen; see the anchored
+     transforms further down for why it is not one transform on the root. */
+  --hud-scale: 1;
+  --ctl: calc(var(--ctl-user) * var(--ctl-fit));
   color-scheme: dark;
 }
 
@@ -118,55 +134,89 @@ html, body {
   transform: translate(-50%, -50%);
 }
 
-.buttons {
+/*
+ * Touch controls, laid out on the arc a thumb actually sweeps.
+ *
+ * A thumb pivots at the bottom corner of the device, so its reachable set is a
+ * quarter-disc centred there, not a row along the bottom edge. Each control is
+ * therefore placed by its distance and bearing from that corner: fire sits at
+ * the thumb's resting radius, the next most-used controls one step out, and
+ * weapon swap — the rarest — furthest. Size follows distance rather than
+ * fighting it, because a target that is harder to reach needs to be bigger to
+ * stay equally quick to hit, not smaller.
+ *
+ * Every offset and diameter is scaled by --ctl so the whole arc grows for a
+ * tablet or a large phone without any of it changing shape.
+ */
+.controls {
   position: absolute;
-  right: calc(14px + var(--safe-r));
-  bottom: calc(14px + var(--safe-b));
-  display: flex;
-  gap: 9px;
-  align-items: flex-end;
+  inset: 0;
+  pointer-events: none;
 }
-.button-column { display: flex; flex-direction: column; gap: 9px; }
 .pad-button {
-  width: 62px;
-  height: 62px;
+  position: absolute;
+  /* Placed by centre: --r/--b are the offsets from the bottom-right corner. */
+  right: calc(var(--r) * var(--ctl) * 1px + var(--safe-r) - (var(--d) * var(--ctl) * 1px) / 2);
+  bottom: calc(var(--b) * var(--ctl) * 1px + var(--safe-b) - (var(--d) * var(--ctl) * 1px) / 2);
+  width: calc(var(--d) * var(--ctl) * 1px);
+  height: calc(var(--d) * var(--ctl) * 1px);
   border-radius: 50%;
   border: 1.5px solid rgba(232, 238, 245, 0.32);
   background: rgba(18, 22, 26, 0.5);
   color: var(--hud);
   font: inherit;
-  font-size: 11px;
+  font-size: calc(11px * var(--ctl));
   letter-spacing: 0.06em;
   touch-action: none;
+  pointer-events: auto;
   backdrop-filter: blur(2px);
 }
-.pad-small { width: 50px; height: 50px; font-size: 10px; }
-.pad-aim {
-  width: 68px;
-  height: 68px;
-  border-color: rgba(232, 238, 245, 0.45);
-}
+
+/* Nearest the thumb's rest position, and the largest target on the screen. */
 .pad-fire {
-  width: 92px;
-  height: 92px;
-  font-size: 12px;
+  --r: 72; --b: 72; --d: 100;
+  font-size: calc(12px * var(--ctl));
   letter-spacing: 0.12em;
   border-color: rgba(126, 224, 168, 0.55);
   background: rgba(126, 224, 168, 0.1);
 }
-/* A second fire button on the left, for players who shoot with that thumb. */
+/* One step out along the arc: directly above fire, and beside it. */
+.pad-aim { --r: 80; --b: 176; --d: 80; border-color: rgba(232, 238, 245, 0.45); }
+.pad-reload { --r: 176; --b: 80; --d: 72; }
+/* Furthest out, because swapping weapon is the rarest thing a thumb does. */
+.pad-swap { --r: 180; --b: 180; --d: 64; font-size: calc(10px * var(--ctl)); }
+
+/*
+ * A second fire button for the left thumb, mirrored onto the left edge.
+ *
+ * It deliberately does not sit in the bottom-left corner. The movement stick
+ * spawns wherever the left thumb lands, so a button in the thumb's resting
+ * place swallows the touch that was meant to start walking — which is exactly
+ * what the old corner placement did.
+ */
 .pad-fire-left {
-  position: absolute;
-  left: calc(14px + var(--safe-l));
-  bottom: calc(14px + var(--safe-b));
+  right: auto;
+  left: calc(72px * var(--ctl) + var(--safe-l) - (80px * var(--ctl)) / 2);
+  bottom: calc(176px * var(--ctl) + var(--safe-b) - (80px * var(--ctl)) / 2);
+  width: calc(80px * var(--ctl));
+  height: calc(80px * var(--ctl));
   opacity: 0.5;
 }
+
 .pad-button.is-active {
   background: rgba(126, 224, 168, 0.24);
   border-color: var(--accent);
   color: var(--accent);
 }
 .pad-fire.is-active { background: rgba(126, 224, 168, 0.34); }
+/*
+ * A latched control has to be distinguishable from a held one at a glance:
+ * the player needs to know the sights will stay up when the thumb leaves.
+ */
+.pad-button.is-latched {
+  border-width: 2.5px;
+  box-shadow: 0 0 0 2px rgba(126, 224, 168, 0.25);
+}
 
 .chip {
   position: absolute;
@@ -399,10 +449,23 @@ html, body {
   transition: opacity 140ms linear;
 }
 
+/*
+ * The ammo readout clears the control arc rather than sitting inside it. The
+ * arc reaches 212px up the right edge at --ctl 1, so the counter sits just
+ * above that and rises with the controls when they are scaled up.
+ *
+ * The cap is what stops it rising off the top: with both the control and HUD
+ * sliders at maximum on a short screen, an uncapped clearance puts the
+ * counter past the top edge, and the largest setting is exactly the one a
+ * player who is struggling to read it will reach for.
+ */
 .ammo {
   position: absolute;
   right: calc(16px + var(--safe-r));
-  bottom: calc(122px + var(--safe-b));
+  bottom: min(
+    calc(212px * var(--ctl) + 20px + var(--safe-b)),
+    calc(100% - 100px)
+  );
   text-align: right;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
 }
@@ -475,10 +538,13 @@ html, body {
 .feed-info { color: var(--hud-dim); }
 
 /* On short landscape screens the ammo block would collide with the buttons. */
+/*
+ * A short landscape screen cannot carry the full arc. Pulling the outer ring
+ * in keeps every control on screen, and the readout shrinks to match.
+ */
 @media (max-height: 380px) {
-  .ammo { bottom: calc(108px + var(--safe-b)); }
+  :root { --ctl-fit: 0.82; }
   .ammo-current { font-size: 25px; }
-  .pad-fire { width: 80px; height: 80px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -572,7 +638,40 @@ html, body {
 }
 
 /* The HUD scales as one, so a phone-sized readout stays legible. */
-.hud { transform-origin: center center; }
+/*
+ * HUD scale, applied to each anchored group about its own anchor.
+ *
+ * Scaling the whole HUD about its centre instead pushes everything away from
+ * the middle of the screen in proportion to how far out it already sits. At
+ * the top of the slider that threw the score and clock off the top edge, the
+ * ammo count off the right, and the health readout below the bottom — the
+ * setting meant to make the HUD easier to read deleted most of it. Anchoring
+ * each group's transform to the edge it is pinned to keeps it pinned.
+ */
+.debug { transform: scale(var(--hud-scale)); transform-origin: left top; }
+.netbar { transform: scale(var(--hud-scale)); transform-origin: left top; }
+.feed { transform: scale(var(--hud-scale)); transform-origin: left center; }
+.vitals { transform: scale(var(--hud-scale)); transform-origin: left bottom; }
+.ammo { transform: scale(var(--hud-scale)); transform-origin: right bottom; }
+.killfeed { transform: scale(var(--hud-scale)); transform-origin: right top; }
+.matchbar {
+  transform: translateX(-50%) scale(var(--hud-scale));
+  transform-origin: center top;
+}
+.stance {
+  transform: translateX(-50%) scale(var(--hud-scale));
+  transform-origin: center bottom;
+}
+/*
+ * The dead-centre elements are the one case where scaling about the centre is
+ * right, since that is also where they are anchored.
+ */
+.crosshair,
+.hit-marker,
+.countdown {
+  transform: translate(-50%, -50%) scale(var(--hud-scale));
+  transform-origin: center center;
+}
 
 /* --- Online play ---------------------------------------------------------- */
 

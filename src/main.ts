@@ -34,7 +34,13 @@ import { resolveShot, type ShotResolution } from "./sim/combat";
 import { bakeNavGrid } from "./sim/navBake";
 import { STANCE } from "./sim/config";
 import { applyDamage, createHealth, revive, stepHealth } from "./sim/health";
-import { activeWeapon, createLoadout, stepLoadout, type ShotEvent } from "./sim/loadout";
+import {
+  activeWeapon,
+  createLoadout,
+  isSwapping,
+  stepLoadout,
+  type ShotEvent,
+} from "./sim/loadout";
 import {
   DEFAULT_MATCH,
   createMatch,
@@ -211,6 +217,10 @@ const boot = (): void => {
     else input.disableGyro();
     audio.setEnabled(next.audioEnabled);
     hud.setScale(next.hudScale);
+    input.setAimToggle(next.adsToggle);
+    // Only the player's half of the control scale. The stylesheet multiplies
+    // it by what the screen can carry, so a short screen still pulls the arc in.
+    document.documentElement.style.setProperty("--ctl-user", String(next.controlScale));
     const tier = next.quality === "auto" ? detectQuality() : settingsFor(next.quality);
     if (tier.tier !== quality.tier) {
       quality = tier;
@@ -741,7 +751,32 @@ const boot = (): void => {
     previousMagazine = magazine;
 
     if (match.phase === "over" && screens.activeScreen === "game") {
+      // The next round starts from the lobby, so anything the thumb latched
+      // during this one ends with it.
+      input.clearAimLatch();
       finishRound();
+    }
+  };
+
+  /**
+   * End a latched ADS whenever the game itself takes the sights away.
+   *
+   * Dying, sprinting and swapping weapon all block aiming in the simulation,
+   * which drives the sights back down on their own. A latch left set behind
+   * that block would raise them again the instant it lifted — the player taps
+   * once to aim, sprints to cover, and arrives already scoped without asking.
+   * Holding ADS has no equivalent problem because the thumb is the state.
+   *
+   * The conditions read simulation state rather than the input edge that
+   * caused it, and deliberately mirror the ones `advanceAds` blocks on. A
+   * swap press is dropped entirely on a frame that advances no simulation
+   * step, and clearing the latch on the press would take the sights away for
+   * a weapon swap that never happened.
+   */
+  const dropAimLatchIfTaken = (): void => {
+    if (!input.isAimLatched) return;
+    if (playerHealth.dead || player.sprinting || isSwapping(playerLoadout)) {
+      input.clearAimLatch();
     }
   };
 
@@ -761,6 +796,7 @@ const boot = (): void => {
         else stepSimulation(loop.stepSeconds, frame);
       }
     }
+    if (inGame) dropAimLatchIfTaken();
     input.endFrame();
 
     const weapon = activeWeapon(playerLoadout);

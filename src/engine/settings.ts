@@ -10,6 +10,10 @@ export interface GameSettings {
   invertY: boolean;
   fovDegrees: number;
   hudScale: number;
+  /** Size of the on-screen touch controls, independent of the HUD readouts. */
+  controlScale: number;
+  /** Tap to latch the sights on, rather than holding the button down. */
+  adsToggle: boolean;
   /** "auto" lets the benchmark decide. */
   quality: QualityTier | "auto";
   audioEnabled: boolean;
@@ -30,6 +34,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   invertY: LOOK.invertY,
   fovDegrees: CAMERA.defaultFovDegrees,
   hudScale: 1,
+  controlScale: 1,
+  adsToggle: true,
   quality: "auto",
   audioEnabled: true,
   difficulty: "regular",
@@ -45,6 +51,7 @@ export const SETTINGS_LIMITS = {
   gyro: { min: 0, max: 2, step: 0.05 },
   fov: { min: CAMERA.minFovDegrees, max: CAMERA.maxFovDegrees, step: 1 },
   hudScale: { min: 0.8, max: 1.4, step: 0.05 },
+  controlScale: { min: 0.8, max: 1.35, step: 0.05 },
   teamSize: { min: 1, max: 5, step: 1 },
 } as const;
 
@@ -94,6 +101,12 @@ export const loadSettings = (): GameSettings => {
       hudScale: clampNumber(
         parsed.hudScale, limits.hudScale.min, limits.hudScale.max, DEFAULT_SETTINGS.hudScale,
       ),
+      controlScale: clampNumber(
+        parsed.controlScale, limits.controlScale.min, limits.controlScale.max,
+        DEFAULT_SETTINGS.controlScale,
+      ),
+      adsToggle:
+        typeof parsed.adsToggle === "boolean" ? parsed.adsToggle : DEFAULT_SETTINGS.adsToggle,
       quality: isQuality(parsed.quality) ? parsed.quality : DEFAULT_SETTINGS.quality,
       audioEnabled:
         typeof parsed.audioEnabled === "boolean"

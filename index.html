@@ -77,16 +77,13 @@
         <div id="joystick-knob" class="joystick-knob"></div>
       </div>
 
-      <div class="buttons" id="buttons">
-        <div class="button-column">
-          <button class="pad-button pad-small" id="btn-swap" type="button" aria-label="Swap weapon">SWAP</button>
-          <button class="pad-button pad-small" id="btn-reload" type="button" aria-label="Reload">RELOAD</button>
-        </div>
-        <button class="pad-button pad-aim" id="btn-aim" type="button" aria-label="Aim down sights">ADS</button>
+      <div class="controls" id="controls">
         <button class="pad-button pad-fire" id="btn-fire" type="button" aria-label="Fire">FIRE</button>
+        <button class="pad-button pad-aim" id="btn-aim" type="button" aria-label="Aim down sights">ADS</button>
+        <button class="pad-button pad-reload" id="btn-reload" type="button" aria-label="Reload">RELOAD</button>
+        <button class="pad-button pad-swap" id="btn-swap" type="button" aria-label="Swap weapon">SWAP</button>
+        <button class="pad-button pad-fire pad-fire-left" id="btn-fire-left" type="button" aria-label="Fire">FIRE</button>
       </div>
-
-      <button class="pad-button pad-fire pad-fire-left" id="btn-fire-left" type="button" aria-label="Fire">FIRE</button>
 
       <button class="chip" id="btn-debug" type="button">DEBUG</button>
 
@@ -194,6 +191,15 @@
           <div class="setting"><label for="set-hud">HUD scale</label>
             <input type="range" id="set-hud" min="0.8" max="1.4" step="0.05" />
             <output id="out-hud">1.00</output></div>
+
+          <div class="setting"><label for="set-controls">Control size</label>
+            <input type="range" id="set-controls" min="0.8" max="1.35" step="0.05" />
+            <output id="out-controls">1.00</output></div>
+
+          <div class="setting setting-row">
+            <label for="set-ads">Tap to aim (ADS toggle)</label>
+            <input type="checkbox" id="set-ads" />
+          </div>
 
           <div class="setting setting-row">
             <label for="set-invert">Invert vertical look</label>

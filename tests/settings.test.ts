@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_SETTINGS, loadSettings, saveSettings } from "../src/engine/settings";
+import {
+  DEFAULT_SETTINGS,
+  SETTINGS_LIMITS,
+  loadSettings,
+  saveSettings,
+} from "../src/engine/settings";
 
 const STORAGE_KEY = "shootout.settings.v1";
 
@@ -94,5 +99,41 @@ describe("loadSettings", () => {
     storage.setItem(STORAGE_KEY, JSON.stringify({ teamSize: 3.7 }));
     install(storage);
     expect(Number.isInteger(loadSettings().teamSize)).toBe(true);
+  });
+});
+
+describe("touch control settings", () => {
+  it("defaults ADS to a tap that latches", () => {
+    expect(DEFAULT_SETTINGS.adsToggle).toBe(true);
+  });
+
+  it("keeps a saved ADS mode across a reload", () => {
+    install(makeStorage());
+    saveSettings({ ...DEFAULT_SETTINGS, adsToggle: false });
+    expect(loadSettings().adsToggle).toBe(false);
+  });
+
+  it("falls back when the stored ADS mode is not a boolean", () => {
+    const storage = makeStorage();
+    install(storage);
+    storage.setItem(STORAGE_KEY, JSON.stringify({ adsToggle: "yes please" }));
+    expect(loadSettings().adsToggle).toBe(DEFAULT_SETTINGS.adsToggle);
+  });
+
+  it("clamps a control size that would push the arc off the screen", () => {
+    const storage = makeStorage();
+    install(storage);
+    storage.setItem(STORAGE_KEY, JSON.stringify({ controlScale: 9 }));
+    expect(loadSettings().controlScale).toBe(SETTINGS_LIMITS.controlScale.max);
+
+    storage.setItem(STORAGE_KEY, JSON.stringify({ controlScale: -3 }));
+    expect(loadSettings().controlScale).toBe(SETTINGS_LIMITS.controlScale.min);
+  });
+
+  it("falls back when the stored control size is not a number", () => {
+    const storage = makeStorage();
+    install(storage);
+    storage.setItem(STORAGE_KEY, JSON.stringify({ controlScale: "big" }));
+    expect(loadSettings().controlScale).toBe(DEFAULT_SETTINGS.controlScale);
   });
 });

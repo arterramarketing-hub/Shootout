@@ -112,7 +112,7 @@ holding at range.
 | Sprint | Push the stick to its outer ring | Left Shift |
 | Look | Drag anywhere on the right half | Mouse, click to capture |
 | Fire | FIRE, on either side of the screen | Left mouse button |
-| Aim | ADS | Right mouse button |
+| Aim | ADS, a tap that latches by default | Right mouse button |
 | Reload | RELOAD | R |
 | Swap weapon | SWAP | Tab or F |
 | Crouch | Not on the touch layout | Ctrl or C |
@@ -121,6 +121,51 @@ holding at range.
 Crouch and lean stay in the simulation and on the keyboard, but they are off
 the touch layout. On a phone, thumb space is the scarcest resource, and it
 belongs to firing and aiming.
+
+**ADS is a toggle.** One tap raises the sights and they stay up when the thumb
+leaves; the next tap drops them. The button draws a brighter ring while it is
+latched, so a glance tells you whether the sights will stay. Holding the button
+instead is one checkbox away in settings.
+
+The game ends a latched ADS itself whenever it takes the sights away — on
+death, on a weapon swap, on breaking into a sprint, and at the end of a round.
+Those are the same conditions the simulation blocks aiming on. Without that,
+the latch outlives the block and puts the player back in the sights the moment
+it lifts: tap to aim, sprint to cover, arrive already scoped.
+
+### Where the buttons sit
+
+A thumb pivots at the bottom corner of the device, so what it can reach is a
+quarter-disc centred there, not a row along the bottom edge. Each control is
+placed by its distance and bearing from that corner:
+
+| Control | Reach from the corner | Diameter |
+| --- | --- | --- |
+| Fire | 102px | 100px |
+| ADS | 193px | 80px |
+| Reload | 193px | 72px |
+| Swap weapon | 255px | 64px |
+
+Fire sits at the thumb's resting radius. ADS and reload — the next two things a
+thumb does in a fight — sit one step out, one above fire and one beside it.
+Weapon swap, the rarest, is furthest. Size follows distance rather than
+fighting it: a target further away has to be bigger to stay equally quick to
+hit, and the old layout had the two hardest-to-reach controls as the two
+smallest.
+
+Climbing the right edge rather than running along the bottom also leaves the
+turn-swipe somewhere to go. The clear run of right-half screen at thumb height
+is 312px, against 180px when the controls were a row across the bottom.
+
+The second fire button deliberately does not sit in the bottom-left corner. The
+movement stick spawns wherever the left thumb lands, so a button in the thumb's
+resting place swallows the touch that was meant to start walking — which is
+what the corner placement did.
+
+Control size and HUD scale are separate sliders. HUD scale resizes each readout
+about the edge it is pinned to, not the whole overlay about its centre; the
+latter walks the score, clock, ammo and health readouts off their edges, and at
+the top of the slider off the screen entirely.
 
 ## Bots
 

@@ -56,8 +56,29 @@ export class InputManager {
     this.joystick = new Joystick(base, knob);
   }
 
-  registerButton(action: ButtonAction, element: HTMLElement, toggle = false): void {
-    this.buttons.register({ action, element, toggle });
+  registerButton(action: ButtonAction, element: HTMLElement): void {
+    this.buttons.register({ action, element });
+  }
+
+  /** Aim down sights on a tap that latches, rather than for as long as held. */
+  setAimToggle(enabled: boolean): void {
+    this.buttons.setToggle("aim", enabled);
+  }
+
+  /**
+   * End a latched ADS the player did not end themselves.
+   *
+   * Dying, swapping weapon and breaking into a sprint all take the sights away
+   * in the simulation. Leaving the latch set behind them would drop the player
+   * back into ADS the moment the block lifted, which reads as the game aiming
+   * on its own.
+   */
+  clearAimLatch(): void {
+    this.buttons.clearLatch("aim");
+  }
+
+  get isAimLatched(): boolean {
+    return this.buttons.isLatched("aim");
   }
 
   start(): void {
@@ -86,6 +107,7 @@ export class InputManager {
     window.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("blur", this.onBlur);
     document.removeEventListener("pointerlockchange", this.onPointerLockChange);
+    this.buttons.dispose();
   }
 
   /** Desktop convenience: click the canvas to capture the mouse. */

@@ -134,6 +134,8 @@ export class Screens {
     this.bindSlider("set-gyro", "out-gyro", "gyroScale", 2);
     this.bindSlider("set-fov", "out-fov", "fovDegrees", 0);
     this.bindSlider("set-hud", "out-hud", "hudScale", 2);
+    this.bindSlider("set-controls", "out-controls", "controlScale", 2);
+    this.bindToggle("set-ads", "adsToggle");
     this.bindToggle("set-invert", "invertY");
     this.bindToggle("set-audio", "audioEnabled");
 
@@ -313,7 +315,13 @@ export class Screens {
   private bindSlider(
     inputId: string,
     outputId: string,
-    key: "touchSensitivity" | "mouseSensitivity" | "gyroScale" | "fovDegrees" | "hudScale",
+    key:
+      | "touchSensitivity"
+      | "mouseSensitivity"
+      | "gyroScale"
+      | "fovDegrees"
+      | "hudScale"
+      | "controlScale",
     decimals: number,
   ): void {
     const input = byId<HTMLInputElement>(inputId);
@@ -329,7 +337,7 @@ export class Screens {
     render();
   }
 
-  private bindToggle(inputId: string, key: "invertY" | "audioEnabled"): void {
+  private bindToggle(inputId: string, key: "invertY" | "audioEnabled" | "adsToggle"): void {
     const input = byId<HTMLInputElement>(inputId);
     input.addEventListener("change", () => {
       this.settings[key] = input.checked;
@@ -348,6 +356,8 @@ export class Screens {
     set("set-gyro", this.settings.gyroScale);
     set("set-fov", this.settings.fovDegrees);
     set("set-hud", this.settings.hudScale);
+    set("set-controls", this.settings.controlScale);
+    byId<HTMLInputElement>("set-ads").checked = this.settings.adsToggle;
     byId<HTMLInputElement>("set-invert").checked = this.settings.invertY;
     byId<HTMLInputElement>("set-audio").checked = this.settings.audioEnabled;
     byId<HTMLOutputElement>("out-touch").textContent = this.settings.touchSensitivity.toFixed(2);
@@ -355,6 +365,7 @@ export class Screens {
     byId<HTMLOutputElement>("out-gyro").textContent = this.settings.gyroScale.toFixed(2);
     byId<HTMLOutputElement>("out-fov").textContent = this.settings.fovDegrees.toFixed(0);
     byId<HTMLOutputElement>("out-hud").textContent = this.settings.hudScale.toFixed(2);
+    byId<HTMLOutputElement>("out-controls").textContent = this.settings.controlScale.toFixed(2);
     this.selectDifficulty(this.settings.difficulty);
     this.selectTeamSize(String(this.settings.teamSize));
     this.selectQuality(this.settings.quality);

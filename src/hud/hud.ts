@@ -89,8 +89,16 @@ export class Hud {
   }
 
   /** Scale the whole HUD, so a small screen can get bigger readouts. */
+  /**
+   * Resize the readouts.
+   *
+   * This sets a variable the stylesheet applies to each anchored group about
+   * its own corner, rather than one transform on the HUD root. A single root
+   * transform scales positions as well as sizes, which walks every corner
+   * readout off its edge and, at the top of the slider, straight off screen.
+   */
   setScale(scale: number): void {
-    this.elements.root.style.transform = scale === 1 ? "" : `scale(${scale})`;
+    this.elements.root.style.setProperty("--hud-scale", String(scale));
   }
 
   update(frame: HudFrame): void {
