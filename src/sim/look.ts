@@ -58,3 +58,24 @@ export const applyLookDelta = (
   if (look.yaw < -Math.PI * 2) look.yaw += Math.PI * 2;
   return look;
 };
+
+/**
+ * Move the look angles by an offset the game itself produced, such as the
+ * climb share of a weapon's recoil.
+ *
+ * It goes through the same pitch clamp as a drag, so a long burst fired while
+ * already looking up cannot walk the camera over the top and invert it.
+ */
+export const addLookOffset = (
+  look: LookState,
+  deltaYaw: number,
+  deltaPitch: number,
+): LookState => {
+  look.yaw += deltaYaw;
+  look.pitch = clamp(
+    look.pitch + deltaPitch,
+    -CAMERA.maxPitchRadians,
+    CAMERA.maxPitchRadians,
+  );
+  return look;
+};

@@ -49,6 +49,7 @@ import {
   stepMatch,
   type MatchState,
 } from "./sim/match";
+import { addLookOffset } from "./sim/look";
 import { createPlayer, eyeOffset, stepPlayer } from "./sim/player";
 import { finishById } from "./sim/cosmetics";
 import {
@@ -424,7 +425,22 @@ const boot = (): void => {
   const eyePosition = () =>
     vec3(player.position.x, player.position.y + eyeOffset(player), player.position.z);
 
+  /**
+   * Fold the climb share of a shot into the aim.
+   *
+   * This belongs in the look angles, the same place the player's thumb writes
+   * to, so pulling back down is ordinary aiming rather than a fight with a
+   * spring. Online needs it as much as offline: the angles the client records
+   * and sends already carry it, so the server judges the shot from the same
+   * aim the player is looking down.
+   */
+  const applyShotClimb = (shot: ShotEvent): void => {
+    addLookOffset(input.look, shot.climbYaw, shot.climbPitch);
+  };
+
   const onPlayerShot = (shot: ShotEvent): void => {
+    applyShotClimb(shot);
+
     const origin = eyePosition();
     const resolution = resolveShot(shot, origin, world, PLAYER_ID);
 
@@ -654,6 +670,7 @@ const boot = (): void => {
       random,
     );
     if (!shot) return;
+    applyShotClimb(shot);
 
     // Local feedback only: the muzzle flash, the kick, the sound and a tracer.
     audio.shot(shot.weapon.id);

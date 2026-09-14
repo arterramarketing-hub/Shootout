@@ -81,6 +81,13 @@ export interface ShotEvent {
   /** Aim including recoil, which is where the bullets actually go. */
   aimYaw: number;
   aimPitch: number;
+  /**
+   * The share of this shot's kick that moves the player's own aim, in
+   * radians. The caller folds it into the look angles, so correcting for it
+   * is ordinary aiming rather than a fight with a spring.
+   */
+  climbPitch: number;
+  climbYaw: number;
 }
 
 const createRuntime = (id: WeaponId): WeaponRuntime => {
@@ -269,9 +276,16 @@ const tryFire = (
   const aimYaw = context.yaw + loadout.recoilYaw;
   const aimPitch = context.pitch + loadout.recoilPitch;
 
+  // The kick splits in two. The springy share offsets the camera and recovers
+  // on its own, which is the punch of the shot; the climb share is handed back
+  // to the caller to add to the player's aim, and stays until they pull it
+  // down. Only the springy share belongs in the recovering accumulator.
   const kick = recoilForShot(definition.recoil, weapon.shotIndex, loadout.adsProgress);
-  loadout.recoilPitch += kick.pitch;
-  loadout.recoilYaw += kick.yaw;
+  const climbShare = clamp(definition.recoil.climb, 0, 1);
+  const climbPitch = kick.pitch * climbShare;
+  const climbYaw = kick.yaw * climbShare;
+  loadout.recoilPitch += kick.pitch - climbPitch;
+  loadout.recoilYaw += kick.yaw - climbYaw;
 
   weapon.magazine -= 1;
   weapon.fireCooldown = secondsPerShot(definition);
@@ -280,5 +294,5 @@ const tryFire = (
   weapon.sinceLastShot = 0;
   if (definition.mode !== "auto") loadout.triggerLatched = true;
 
-  return { weapon: definition, pellets, spreadDegrees, aimYaw, aimPitch };
+  return { weapon: definition, pellets, spreadDegrees, aimYaw, aimPitch, climbPitch, climbYaw };
 };

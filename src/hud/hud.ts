@@ -46,6 +46,8 @@ export interface HudFrame {
 const FEED_LIFE = 2.6;
 const HIT_MARKER_LIFE = 0.18;
 
+const RAD_TO_DEG = 180 / Math.PI;
+
 export class Hud {
   private debugVisible = false;
   private debugAccumulator = 0;
@@ -269,6 +271,16 @@ export class Hud {
       `pos ${player.position.x.toFixed(1)} ${player.position.y.toFixed(1)} ${player.position.z.toFixed(1)}  ·  ` +
       `${speed.toFixed(1)} m/s  ·  ${player.grounded ? "ground" : "air"}\n` +
       `spread ${spread.toFixed(2)}deg  ·  ads ${(loadout.adsProgress * 100).toFixed(0)}%  ·  ` +
-      `bloom ${weapon.bloom.toFixed(2)}`;
+      `bloom ${weapon.bloom.toFixed(2)}\n` +
+      // Aim angles are here because the failure they diagnose — look going
+      // dead while the rest of the game keeps running — is invisible without
+      // a number to watch.
+      `yaw ${player.yaw.toFixed(3)}  ·  pitch ${player.pitch.toFixed(3)}  ·  ` +
+      `ammo ${weapon.magazine}/${weapon.reserve}\n` +
+      // The view angle is the player's aim plus the spring still on the
+      // camera. The climb share is already inside the aim, which is the whole
+      // point of it, so this line is what the player is actually looking at.
+      `view ${((player.pitch + loadout.recoilPitch) * RAD_TO_DEG).toFixed(2)}deg  ·  ` +
+      `spring ${(loadout.recoilPitch * RAD_TO_DEG).toFixed(2)}deg`;
   }
 }

@@ -93,6 +93,8 @@ const shot = (pellets: { yaw: number; pitch: number }[], weapon = WEAPONS.ar): S
   spreadDegrees: 1,
   aimYaw: 0,
   aimPitch: 0,
+  climbPitch: 0,
+  climbYaw: 0,
 });
 
 describe("resolveShot", () => {

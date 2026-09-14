@@ -204,11 +204,25 @@ export class InputManager {
       return;
     }
 
-    // Left half of the screen drives movement, right half drives aim.
+    /*
+     * Left half of the screen drives movement, right half drives aim. A touch
+     * that cannot do the job of the half it landed in is ignored rather than
+     * pressed into the other one.
+     *
+     * That fallback is what made looking die mid-fight: a second finger
+     * resting anywhere on the left, with the stick already under the first,
+     * was promoted to the look pointer, and the right thumb then had no way
+     * to turn the view until the stray finger lifted, because the look
+     * pointer was taken.
+     */
     const isLeftHalf = event.clientX < window.innerWidth * 0.5;
-    if (isLeftHalf && this.joystick && !this.joystick.isActive) {
-      this.joystick.start(event.pointerId, event.clientX, event.clientY);
-    } else if (!this.lookPointer) {
+    if (isLeftHalf) {
+      if (this.joystick && !this.joystick.isActive) {
+        this.joystick.start(event.pointerId, event.clientX, event.clientY);
+      }
+      return;
+    }
+    if (!this.lookPointer) {
       this.lookPointer = { id: event.pointerId, lastX: event.clientX, lastY: event.clientY };
     }
   };

@@ -52,6 +52,18 @@ export interface RecoilProfile {
   pattern: readonly (readonly [number, number])[];
   /** Fraction of the accumulated kick still present after one second. */
   recovery: number;
+  /**
+   * Share of each shot's kick that moves the player's own aim rather than
+   * springing back, 0 to 1.
+   *
+   * This is what makes recoil something to fight. A kick that only offsets
+   * the camera and then recovers is worse than no recoil at all: the player
+   * pulls down to hold the target, the offset springs back underneath them,
+   * and the correction they just made becomes permanent error in the other
+   * direction. Moving part of the kick into the aim itself means pulling
+   * down is ordinary aiming, and nothing springs back to fight it.
+   */
+  climb: number;
   /** Kick multiplier while fully aimed. */
   adsMultiplier: number;
 }
@@ -129,7 +141,8 @@ const ridgeline: WeaponDefinition = {
       [0.5, 0.26], [0.48, 0.1], [0.46, -0.12], [0.44, -0.28],
       [0.44, -0.2], [0.44, 0.05], [0.44, 0.22],
     ],
-    recovery: 0.02,
+    recovery: 0.05,
+    climb: 0.55,
     adsMultiplier: 0.72,
   },
 };
@@ -174,7 +187,8 @@ const wasp: WeaponDefinition = {
       [0.4, -0.24], [0.4, 0.26], [0.4, -0.22], [0.38, 0.18],
       [0.38, -0.26], [0.36, 0.3],
     ],
-    recovery: 0.03,
+    recovery: 0.06,
+    climb: 0.5,
     adsMultiplier: 0.8,
   },
 };
@@ -214,7 +228,8 @@ const breaker: WeaponDefinition = {
   },
   recoil: {
     pattern: [[2.2, 0.25]],
-    recovery: 0.01,
+    recovery: 0.04,
+    climb: 0.5,
     adsMultiplier: 0.85,
   },
 };
@@ -254,7 +269,8 @@ const sidearm: WeaponDefinition = {
   },
   recoil: {
     pattern: [[0.72, 0.06], [0.76, -0.1], [0.78, 0.12], [0.8, -0.14]],
-    recovery: 0.015,
+    recovery: 0.05,
+    climb: 0.5,
     adsMultiplier: 0.75,
   },
 };

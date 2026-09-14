@@ -104,6 +104,24 @@ Recoil is a fixed per-shot pattern rather than random kick, so it can be
 learned. Sustained fire also widens the cone, which is why tapping beats
 holding at range.
 
+Each shot's kick splits in two. Most of it **climbs**: it moves the player's own
+aim, and stays there until they pull back down. The rest is a **spring** that
+offsets the camera and recovers on its own, which is the punch of the shot. A
+magazine of rifle fire held on the trigger walks the view about eight degrees
+up and to the right; letting go returns the spring and leaves the climb.
+
+The split is what makes recoil something a player can fight. When the whole
+kick springs back, pulling down to hold a target is correcting for something
+that then removes itself, and the correction is left behind as error pointing
+at the floor — the longer the burst, the worse the aim, which is exactly when a
+player notices, as the magazine runs out. With the climb in the aim there is
+nothing to remove: holding the target leaves the aim where the player put it.
+
+The crosshair sits at the screen centre and the whole view climbs under it, so
+what the crosshair covers is always where the bullets go. It also opens with
+the current spread, so accuracy loss is visible before the shot rather than
+after it.
+
 ## Controls
 
 | Input | Touch | Keyboard and mouse |
@@ -132,6 +150,13 @@ death, on a weapon swap, on breaking into a sprint, and at the end of a round.
 Those are the same conditions the simulation blocks aiming on. Without that,
 the latch outlives the block and puts the player back in the sights the moment
 it lifts: tap to aim, sprint to cover, arrive already scoped.
+
+Each half of the screen owns one job: the left half moves, the right half
+looks. A touch that cannot do the job of the half it landed in is ignored
+rather than pressed into the other one. Without that, a second finger resting
+anywhere on the left — with the stick already under the first — was promoted to
+the look pointer, and the right thumb then had no way to turn the view until
+the stray finger lifted.
 
 ### Where the buttons sit
 
