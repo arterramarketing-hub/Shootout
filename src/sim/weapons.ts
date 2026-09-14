@@ -65,18 +65,20 @@ export interface RecoilProfile {
    */
   climb: number;
   /**
-   * How hard one shot throws the camera, as a multiple of the pattern entry.
+   * How hard one shot shakes the camera, as a multiple of the pattern entry.
    *
-   * The climb is what a magazine adds up to; this is what a single shot looks
-   * like. They need separate knobs because they pull against each other: a
-   * per-shot jolt large enough to see on a phone, summed over thirty rounds
-   * without recovering, would put the player's aim in the sky. So the jolt is
-   * large and springs back within a few shots, and only the climb is kept.
+   * Deliberately small. The violence of a shot belongs on the weapon, which
+   * kicks back and up in the player's hands; the camera only trembles. Putting
+   * it on the camera instead moves the whole world away from the target: at
+   * ten rounds a second the offsets stack, and the thing the player was aiming
+   * at ends up sitting far below the crosshair for as long as the trigger is
+   * held. They can no longer see where they are shooting, which is exactly
+   * what no shooter does and what this value being too high produced.
    *
-   * Sized in screen terms rather than ballistic ones. The view is about five
-   * pixels per degree on a phone in landscape, so a kick under a degree is a
-   * handful of pixels on a moving 3D scene — which is to say invisible, and
-   * exactly what this weapon used to produce.
+   * The rule it has to satisfy: during sustained fire the camera must stay
+   * within about a degree of where the player is actually aiming. Everything
+   * beyond that goes into `climb`, which moves the aim itself and is therefore
+   * something the player can follow and correct, or into the weapon model.
    */
   punch: number;
   /** Kick multiplier while fully aimed. */
@@ -158,7 +160,7 @@ const ridgeline: WeaponDefinition = {
     ],
     recovery: 0.004,
     climb: 0.55,
-    punch: 5.5,
+    punch: 0.9,
     adsMultiplier: 0.72,
   },
 };
@@ -205,7 +207,7 @@ const wasp: WeaponDefinition = {
     ],
     recovery: 0.004,
     climb: 0.5,
-    punch: 5.5,
+    punch: 0.8,
     adsMultiplier: 0.8,
   },
 };
@@ -247,7 +249,7 @@ const breaker: WeaponDefinition = {
     pattern: [[2.2, 0.25]],
     recovery: 0.004,
     climb: 0.5,
-    punch: 2.0,
+    punch: 1.1,
     adsMultiplier: 0.85,
   },
 };
@@ -289,7 +291,7 @@ const sidearm: WeaponDefinition = {
     pattern: [[0.72, 0.06], [0.76, -0.1], [0.78, 0.12], [0.8, -0.14]],
     recovery: 0.004,
     climb: 0.5,
-    punch: 2.5,
+    punch: 0.8,
     adsMultiplier: 0.75,
   },
 };

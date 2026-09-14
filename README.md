@@ -104,22 +104,31 @@ Recoil is a fixed per-shot pattern rather than random kick, so it can be
 learned. Sustained fire also widens the cone, which is why tapping beats
 holding at range.
 
-Each shot's kick splits in two, and the halves are sized from their own knobs
-because they pull against each other.
+Recoil is spread across three places, and which one carries what is the whole
+design.
 
-The **punch** is what one shot looks like: it throws the camera several degrees
-and springs back within a few rounds. The **climb** is what a magazine adds up
-to: a fraction of the same kick that moves the player's own aim and stays there
-until they pull it down. One rifle round throws the view about 20 pixels;
-sustained fire sits eight to eleven degrees high and shaking; letting go drops
-the shake within a third of a second and leaves roughly eight degrees of climb
-to bring back down.
+The **weapon model** does the violence. It kicks back, up and over in the
+player's hands, hard enough to be the obvious feedback that a round went off.
+It moves nothing else.
 
-They need separate knobs because a per-shot jolt large enough to see on a
-phone, summed over thirty rounds without recovering, would point the player at
-the sky — while a kick small enough to sum safely is invisible one shot at a
-time. The screen is about five pixels per degree in landscape, so a kick under
-a degree is a handful of pixels on an already-moving scene.
+The **climb** moves the player's own aim: a fraction of each shot's kick that
+stays until they pull it back down. A rifle magazine held on the trigger walks
+the aim about eight degrees up and to the right, arriving gradually — a degree
+every four rounds — so it can be followed and corrected as it happens.
+
+The **camera punch** is a tremble, and deliberately small: during sustained
+fire the camera stays within about a degree of where the player is actually
+pointing, three to five pixels on a phone.
+
+That last one is the constraint that matters, because the camera is the only
+one of the three that can move the world away from the target. Put the per-shot
+violence there instead and the offsets stack at ten rounds a second: the camera
+ends up five or six degrees — thirty pixels — off the player's aim for as long
+as the trigger is held, and whatever they were shooting at sits below the
+crosshair until they let go. No shooter does that. A test asserts the leftover
+shake when the next round goes off, which is the thing that stacks; a pump gun
+is free to thump the camera hard because the next shell is most of a second
+away and the shake is long gone by then.
 
 The split is also what makes recoil something a player can fight. When the
 whole kick springs back, pulling down to hold a target is correcting for

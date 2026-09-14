@@ -90,43 +90,113 @@ const holdTrigger = (
 
 const loadoutOf = (id: WeaponId): LoadoutState => createLoadout([id]);
 
-describe("one shot is visible on its own", () => {
-  it("throws the view far enough to see on a phone", () => {
-    /*
-     * The complaint this exists for: firing did not appear to move anything.
-     * A magazine climbed eight degrees, but a single round moved the view a
-     * degree — around six pixels on a phone in landscape, on a scene that is
-     * already moving. Whatever a magazine adds up to, one shot has to read.
-     */
-    const loadout = loadoutOf("ar");
-    const random = createRandom(7);
-    const shot = stepLoadout(loadout, input({ fire: true }), context(), tickInterval, random);
-    expect(shot).not.toBeNull();
+/**
+ * Sample the camera's offset from the player's aim across a sustained burst.
+ *
+ * This is the number that decides whether a player can see what they are
+ * shooting at. The offset is the gap between where they are pointing and where
+ * the camera is looking, so whatever it is, the target sits that far off the
+ * crosshair for as long as the trigger is held.
+ */
+const sustainedCameraOffset = (id: WeaponId, seconds = 2.4): { lo: number; hi: number } => {
+  const loadout = loadoutOf(id);
+  const random = createRandom(7);
+  const look = createLook();
+  const automatic = activeWeapon(loadout).definition.mode === "auto";
+  const steps = Math.round(seconds / tickInterval);
+  const offsets: number[] = [];
+  let holding = true;
 
-    const jolt = (loadout.recoilPitch + (shot?.climbPitch ?? 0)) * RAD_TO_DEG;
-    expect(jolt).toBeGreaterThan(2);
+  for (let i = 0; i < steps; i += 1) {
+    const ctx = context({ yaw: look.yaw, pitch: look.pitch });
+    const shot = stepLoadout(loadout, input({ fire: holding }), ctx, tickInterval, random);
+    if (!automatic) holding = !shot;
+    if (shot) addLookOffset(look, shot.climbYaw, shot.climbPitch);
+    // Skip the opening rounds, where the shake has not reached its level yet.
+    if (i > steps * 0.4) offsets.push(loadout.recoilPitch * RAD_TO_DEG);
+  }
+  return { lo: Math.min(...offsets), hi: Math.max(...offsets) };
+};
+
+describe("the player can still see what they are shooting at", () => {
+  it("keeps the camera within a degree of the aim while the trigger is held", () => {
+    /*
+     * The complaint this exists for. The shake used to be worth five or six
+     * degrees, so pulling the trigger threw the whole world about thirty
+     * pixels off the target and held it there until the trigger came up. The
+     * violence of a shot belongs on the weapon model, which kicks in the
+     * player's hands; the camera only trembles.
+     */
+    const { hi } = sustainedCameraOffset("ar");
+    expect(hi).toBeLessThan(1.2);
   });
 
-  it("throws the view on every weapon, not just the rifle", () => {
+  it("never lets the shake stack from one shot to the next, on any weapon", () => {
+    /*
+     * The hazard is accumulation, not the size of one thump. A pump gun can
+     * throw the camera hard because the next shell is most of a second away
+     * and the shake is long gone by then; a rifle at ten rounds a second
+     * cannot, because each kick lands on top of the last one and the pile is
+     * what walks the target off the screen. So the number to bound is what is
+     * still there when the next round goes off.
+     */
     for (const id of Object.keys(WEAPONS) as WeaponId[]) {
       const loadout = loadoutOf(id);
       const random = createRandom(7);
-      const shot = stepLoadout(loadout, input({ fire: true }), context(), tickInterval, random);
-      expect(shot, id).not.toBeNull();
-      const jolt = (loadout.recoilPitch + (shot?.climbPitch ?? 0)) * RAD_TO_DEG;
-      expect(jolt, `${id} barely twitches`).toBeGreaterThan(1.5);
+      const look = createLook();
+      const automatic = activeWeapon(loadout).definition.mode === "auto";
+      const steps = Math.round(2.4 / tickInterval);
+      let holding = true;
+      let worstLeftover = 0;
+      let fired = 0;
+
+      for (let i = 0; i < steps; i += 1) {
+        const ctx = context({ yaw: look.yaw, pitch: look.pitch });
+        // Whatever the previous shot left behind, read before this one lands.
+        const leftover = loadout.recoilPitch * RAD_TO_DEG;
+        const shot = stepLoadout(loadout, input({ fire: holding }), ctx, tickInterval, random);
+        if (!automatic) holding = !shot;
+        if (!shot) continue;
+        fired += 1;
+        if (fired > 1) worstLeftover = Math.max(worstLeftover, leftover);
+        addLookOffset(look, shot.climbYaw, shot.climbPitch);
+      }
+
+      expect(fired, id).toBeGreaterThan(1);
+      expect(worstLeftover, `${id} piles shake up between shots`).toBeLessThan(1.2);
     }
   });
 
-  it("declares a punch for every weapon", () => {
+  it("does not jerk the view between one frame and the next", () => {
+    // A target is trackable if it drifts. It is not trackable if it jumps.
+    const loadout = loadoutOf("ar");
+    const random = createRandom(7);
+    const look = createLook();
+    const steps = Math.round(2.4 / tickInterval);
+    let previous = 0;
+    let biggest = 0;
+
+    for (let i = 0; i < steps; i += 1) {
+      const ctx = context({ yaw: look.yaw, pitch: look.pitch });
+      const shot = stepLoadout(loadout, input({ fire: true }), ctx, tickInterval, random);
+      if (shot) addLookOffset(look, shot.climbYaw, shot.climbPitch);
+      const view = (look.pitch + loadout.recoilPitch) * RAD_TO_DEG;
+      if (i > 0) biggest = Math.max(biggest, Math.abs(view - previous));
+      previous = view;
+    }
+    // Under a degree a frame is a view that slides rather than snaps.
+    expect(biggest).toBeLessThan(1);
+  });
+
+  it("still trembles, so a shot is not silent on the camera", () => {
+    // Small is the point; zero is not. The camera should show the weapon is
+    // alive even though it is the weapon model doing the visible work.
     for (const id of Object.keys(WEAPONS) as WeaponId[]) {
-      expect(WEAPONS[id].recoil.punch, id).toBeGreaterThan(1);
+      expect(WEAPONS[id].recoil.punch, id).toBeGreaterThan(0.3);
     }
   });
 
-  it("settles most of the jolt within a second of the last shot", () => {
-    // A jolt that stays is not a jolt, it is a climb, and the climb is
-    // supposed to be the other half.
+  it("settles the tremble within a second of the last shot", () => {
     const loadout = loadoutOf("ar");
     const random = createRandom(7);
     stepLoadout(loadout, input({ fire: true }), context(), tickInterval, random);
