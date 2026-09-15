@@ -10,7 +10,12 @@ import {
   type QualitySettings,
 } from "./engine/quality";
 import { loadProfile, saveProfile } from "./engine/profile";
-import { loadSettings, saveSettings, type GameSettings } from "./engine/settings";
+import {
+  defaultServerUrl,
+  loadSettings,
+  saveSettings,
+  type GameSettings,
+} from "./engine/settings";
 import { Hud } from "./hud/hud";
 import { Screens } from "./hud/screens";
 import { InputManager } from "./input/inputManager";
@@ -565,16 +570,15 @@ const boot = (): void => {
     applySettings(settings);
 
     if (settings.online) {
-      if (settings.serverUrl === "") {
-        screens.setNetStatus("enter a server address first", "error");
-        return;
-      }
-      screens.setNetStatus(`connecting to ${settings.serverUrl}...`);
+      // Blank means "a server on this machine", which is what it is during
+      // every local test, rather than an error to be corrected.
+      const address = settings.serverUrl || defaultServerUrl(window.location);
+      screens.setNetStatus(`connecting to ${address}...`);
       // Online the server owns the loadout and hands everyone the full rack,
       // so levelling gates nothing there. Progression stays a solo concern
       // rather than turning into an advantage over other players.
       Object.assign(playerLoadout, createLoadout(DEFAULT_LOADOUT));
-      net.connect(settings.serverUrl, settings.playerName);
+      net.connect(address, settings.playerName);
       return;
     }
 

@@ -353,6 +353,58 @@ that grants only what a profile already records. There is no purchase path, no
 currency and no prompt, and anything plugged into that seam can still only
 unlock a set of colours.
 
+## Playing against someone else
+
+The published build is the solo game against bots. Playing against a person
+needs the server in `server/` running somewhere both players can reach, because
+it is the referee: clients send what they are pressing, and it decides what
+happened. That is why nobody can tell it they hit you.
+
+### On one desktop, which is where to start
+
+```bash
+npm install
+npm run play          # server on :8080 and the site on :5173, together
+```
+
+Open <http://localhost:5173> twice — two windows, or one window and one
+incognito — and in each: **Settings → Match type → Online**, then **Deploy**.
+Leave the server address blank; blank means a server on this machine. Give the
+two windows different names so the kill feed is readable.
+
+Run it in free-for-all if you want the two of you to be able to shoot each
+other, since team deathmatch may put you both on the same side:
+
+```bash
+MODE=ffa TEAM_SIZE=1 npm run play
+```
+
+Desktop controls are W/A/S/D to move, mouse to look (click the view to capture
+it), left mouse to fire, right to aim, R to reload, Tab or F to swap.
+
+`MODE`, `TEAM_SIZE`, `PORT`, `DIFFICULTY`, `ROUND_SECONDS` and `SCORE_LIMIT`
+all take environment variables.
+
+### Why the page and the server should share a scheme
+
+A page served over https cannot open an insecure `ws://` socket — browsers
+block it as mixed content, and it looks like the server is down rather than
+like a mismatch. Serving the page over plain http from the same machine, as
+`npm run play` does, sidesteps the question entirely. That is the main reason
+to run the site locally for this rather than pointing the published build at a
+local server.
+
+### Others on the same network
+
+Run the same command, and have them open `http://<your machine's IP>:5173`.
+The dev server already listens on every interface. The server address can stay
+blank there too: it follows the page's host, so a phone loading the page from
+your desktop looks for the server on your desktop.
+
+Over the internet the server needs a public address, which means hosting it —
+a small always-on box on Fly.io, Railway or Render, on their free tiers — and
+then `wss://` rather than `ws://`.
+
 ## Multiplayer
 
 The server owns the game. It runs the same simulation the client does, at

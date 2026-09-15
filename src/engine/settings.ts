@@ -153,6 +153,25 @@ const isDifficulty = (value: unknown): value is BotDifficulty["id"] =>
  * The value is stored, replayed on the next visit, and used to open a socket,
  * so anything else is dropped rather than carried around.
  */
+/** The port `npm run server` listens on. */
+export const DEFAULT_SERVER_PORT = 8080;
+
+/**
+ * Where to look for a server when the player has not named one.
+ *
+ * A server running on the same machine as the page is the common case by a
+ * distance — it is how you test before you host anything — and making someone
+ * type their own address for it is friction with nothing behind it. The scheme
+ * follows the page's: a page served over https cannot open an insecure socket,
+ * so guessing `ws://` there would fail in a way that looks like the server is
+ * down rather than like a mismatch.
+ */
+export const defaultServerUrl = (location: { protocol: string; hostname: string }): string => {
+  const scheme = location.protocol === "https:" ? "wss" : "ws";
+  const host = location.hostname === "" ? "localhost" : location.hostname;
+  return `${scheme}://${host}:${DEFAULT_SERVER_PORT}`;
+};
+
 export const sanitiseServerUrl = (value: unknown): string => {
   if (typeof value !== "string") return DEFAULT_SETTINGS.serverUrl;
   const trimmed = value.trim().slice(0, 200);
