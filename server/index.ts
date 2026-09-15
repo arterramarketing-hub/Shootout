@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import { greyboxMap } from "../src/maps/greybox";
 import {
@@ -613,7 +614,52 @@ const loop = (): void => {
 
 // --- Connections ------------------------------------------------------------
 
-const server = new WebSocketServer({ port: PORT });
+/*
+ * The sockets hang off a real HTTP server rather than standing alone.
+ *
+ * Two reasons, both practical. Hosting platforms decide whether a deploy
+ * worked by asking the port an ordinary HTTP question, and a bare WebSocket
+ * server answers every one of them with a 400, which reads as a broken
+ * service. And the person who deployed it needs some way to check it is alive
+ * that is not "install a game and try to join": opening the address in a
+ * browser now answers that in one line.
+ */
+const startedAt = Date.now();
+
+const httpServer = createServer((request, response) => {
+  const online = humans.size;
+  const body = JSON.stringify(
+    {
+      service: "shootout",
+      status: "ok",
+      mode: MODE,
+      players: online,
+      bots: bots.length,
+      teamSize: TEAM_SIZE,
+      uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
+    },
+    null,
+    2,
+  );
+  // Plain text for a browser, JSON for anything reading it, and no cache so a
+  // refresh reports the count now rather than the count when it first loaded.
+  response.writeHead(200, {
+    "content-type": request.headers.accept?.includes("text/html")
+      ? "text/plain; charset=utf-8"
+      : "application/json; charset=utf-8",
+    "cache-control": "no-store",
+  });
+  response.end(
+    request.headers.accept?.includes("text/html")
+      ? `Shootout server is running.\n\n${online} player${online === 1 ? "" : "s"} ` +
+          `online, ${MODE}.\n\nThis address is for the game to connect to, not ` +
+          `for playing in.\n\n${body}\n`
+      : body,
+  );
+});
+
+const server = new WebSocketServer({ server: httpServer });
+httpServer.listen(PORT);
 
 server.on("connection", (socket) => {
   let player: HumanPlayer | null = null;

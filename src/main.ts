@@ -570,9 +570,19 @@ const boot = (): void => {
     applySettings(settings);
 
     if (settings.online) {
-      // Blank means "a server on this machine", which is what it is during
-      // every local test, rather than an error to be corrected.
-      const address = settings.serverUrl || defaultServerUrl(window.location);
+      /*
+       * Three sources, most specific first: what the player typed, the server
+       * this build was published against, and failing both, a server on the
+       * machine serving the page.
+       *
+       * The middle one is what lets a published build be playable by someone
+       * who has never opened the settings screen, which is the only version of
+       * "send your friends a link" that actually works.
+       */
+      const address =
+        settings.serverUrl ||
+        (import.meta.env.VITE_SERVER_URL as string | undefined) ||
+        defaultServerUrl(window.location);
       screens.setNetStatus(`connecting to ${address}...`);
       // Online the server owns the loadout and hands everyone the full rack,
       // so levelling gates nothing there. Progression stays a solo concern

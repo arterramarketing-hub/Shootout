@@ -1,0 +1,27 @@
+# Render blueprint for the game server.
+#
+# It exists so that hosting needs no configuration typed into a web form: the
+# build and start commands, the Node version and the game mode all live here,
+# in the repository, where they can be reviewed and changed like anything else.
+#
+# Render supplies PORT, which the server already reads. Free instances sleep
+# after about fifteen minutes with nobody connected and take roughly a minute
+# to wake, so the first player to join after a quiet spell waits for that.
+services:
+  - type: web
+    name: shootout-server
+    runtime: node
+    plan: free
+    # Dev dependencies are needed here: esbuild bundles the server.
+    buildCommand: npm ci --include=dev && npm run build:server
+    startCommand: node dist-server/server.mjs
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Free-for-all, so two friends can shoot each other without having to
+      # land on opposite teams first.
+      - key: MODE
+        value: ffa
+      - key: TEAM_SIZE
+        value: "3"

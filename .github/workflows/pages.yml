@@ -41,6 +41,13 @@ jobs:
       - run: npm run lint
       - run: npm run test
       - run: npm run build
+        env:
+          # The public game server, set once in the repository's variables
+          # (Settings -> Secrets and variables -> Actions -> Variables) as
+          # SERVER_URL. Left unset the published build falls back to looking
+          # for a server on whatever host served the page, which is right for
+          # local play and simply finds nothing on GitHub Pages.
+          VITE_SERVER_URL: ${{ vars.SERVER_URL }}
 
       # Pages has to be switched on by hand once, under
       # Settings -> Pages -> Build and deployment -> Source -> GitHub Actions.

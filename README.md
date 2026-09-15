@@ -406,9 +406,29 @@ The dev server already listens on every interface. The server address can stay
 blank there too: it follows the page's host, so a phone loading the page from
 your desktop looks for the server on your desktop.
 
-Over the internet the server needs a public address, which means hosting it —
-a small always-on box on Fly.io, Railway or Render, on their free tiers — and
-then `wss://` rather than `ws://`.
+### Hosting it, so nobody runs anything
+
+`render.yaml` describes the server as a Render service: build command, start
+command, Node version and game mode all live in the repository rather than in a
+web form, so deploying is connecting the repo and confirming. Render supplies
+`PORT`, which the server already reads, and serves it over https, which means
+the socket is `wss://` and a published build can reach it.
+
+The address then goes in one place: a repository variable named `SERVER_URL`
+(Settings → Secrets and variables → Actions → Variables). The Pages workflow
+passes it to the build, and the published game connects there without anyone
+opening the settings screen — which is the only version of "send your friends a
+link" that actually works.
+
+Free instances sleep after about fifteen minutes with nobody connected and take
+roughly a minute to wake, so the first player to join after a quiet spell waits
+for that.
+
+Opening the server's address in a browser reports whether it is up and how many
+people are on it. It has to answer plain HTTP anyway: hosting platforms decide
+whether a deploy worked by asking the port an ordinary question, and a bare
+WebSocket server answers every one of them with a 400, which reads as a broken
+service.
 
 ## Multiplayer
 
