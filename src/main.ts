@@ -17,6 +17,7 @@ import {
   type GameSettings,
 } from "./engine/settings";
 import { Hud } from "./hud/hud";
+import { LiveBoard, type BoardRow } from "./hud/liveBoard";
 import { Screens } from "./hud/screens";
 import { InputManager } from "./input/inputManager";
 import { mapById } from "./maps";
@@ -38,7 +39,13 @@ import { BrushWorld } from "./sim/brushWorld";
 import { resolveShot, type ShotResolution } from "./sim/combat";
 import { bakeNavGrid } from "./sim/navBake";
 import { STANCE } from "./sim/config";
-import { applyDamage, createHealth, revive, stepHealth } from "./sim/health";
+import {
+  applyDamage,
+  createHealth,
+  endSpawnProtection,
+  revive,
+  stepHealth,
+} from "./sim/health";
 import {
   activeWeapon,
   createLoadout,
@@ -176,6 +183,8 @@ const boot = (): void => {
   const match: MatchState = createMatch({ ...DEFAULT_MATCH, teamSize: settings.teamSize });
   let bots: BotState[] = [];
   let combatants: Combatant[] = [];
+  /** The newest roster the server sent, empty while playing offline. */
+  let netRoster: BoardRow[] = [];
 
   const input = new InputManager(canvas);
   input.look.yaw = spawn.yaw;
@@ -210,9 +219,44 @@ const boot = (): void => {
     respawnTimer: byId("respawn-timer"),
     damageArcs: byId("damage-arcs"),
     damageNumbers: byId("damage-numbers"),
+    spawnShield: byId("spawn-shield"),
+    spawnShieldTime: byId("spawn-shield-time"),
     root: byId("hud"),
   });
   byId("btn-debug").addEventListener("click", () => hud.toggleDebug());
+
+  const liveBoard = new LiveBoard({
+    root: byId("live-board"),
+    title: byId("live-board-title"),
+    clock: byId("live-board-clock"),
+    rows: byId("live-board-rows"),
+  });
+
+  const setBoardOpen = (open: boolean): void => {
+    liveBoard.setOpen(open);
+    // The board is a pause screen in every way that matters on a desktop:
+    // releasing the mouse is what lets someone actually click the buttons on
+    // it, and re-capturing on close puts them straight back into the fight.
+    if (open && document.pointerLockElement) document.exitPointerLock();
+    else if (!open && screens.activeScreen === "game") input.requestPointerLock();
+  };
+
+  byId("btn-board").addEventListener("click", () => setBoardOpen(!liveBoard.isOpen));
+  byId("btn-board-close").addEventListener("click", () => setBoardOpen(false));
+  byId("btn-board-quit").addEventListener("click", () => {
+    setBoardOpen(false);
+    finishRound();
+  });
+  window.addEventListener("keydown", (event) => {
+    if (screens.activeScreen !== "game") return;
+    // Escape is what a desktop player reaches for, and the browser takes it
+    // away from the pointer lock first, so the board opens on the second press
+    // rather than fighting for the first.
+    if (event.code === "Escape" || event.code === "KeyB") {
+      event.preventDefault();
+      setBoardOpen(!liveBoard.isOpen);
+    }
+  });
 
   const applySettings = (next: GameSettings): void => {
     settings = next;
@@ -454,8 +498,43 @@ const boot = (): void => {
    * and sends already carry it, so the server judges the shot from the same
    * aim the player is looking down.
    */
+  /**
+   * The roster the board draws, from whichever source is running the match.
+   *
+   * Offline it is assembled from the local bots and the match's own counters;
+   * online it is whatever the server last sent. Same shape either way, so the
+   * board itself never learns which mode it is in.
+   */
+  const boardRows = (): BoardRow[] => {
+    if (online) return netRoster;
+    const rows: BoardRow[] = bots.map((bot) => ({
+      id: bot.id,
+      name: bot.name,
+      team: bot.team,
+      kills: bot.kills,
+      deaths: bot.deaths,
+      pingMs: 0,
+      human: false,
+      alive: !bot.health.dead,
+    }));
+    rows.push({
+      id: PLAYER_ID,
+      name: settings.playerName,
+      team: "a",
+      kills: match.playerKills,
+      deaths: match.playerDeaths,
+      pingMs: 0,
+      human: true,
+      alive: !playerHealth.dead,
+    });
+    return rows;
+  };
+
   const applyShotClimb = (shot: ShotEvent): void => {
     addLookOffset(input.look, shot.climbYaw, shot.climbPitch);
+    // Taking a shot is giving up the spawn's protection, which is what stops
+    // the safest moment in the round from also being the best time to attack.
+    endSpawnProtection(playerHealth);
   };
 
   const onPlayerShot = (shot: ShotEvent): void => {
@@ -501,6 +580,7 @@ const boot = (): void => {
 
   /** Fold one authoritative snapshot into the local view of the world. */
   const applySnapshot = (snapshot: SnapshotMessage): void => {
+    netRoster = snapshot.roster ?? [];
     net.reconcile(player, body);
 
     const self = snapshot.players.find((entry) => entry.id === net.selfId);
@@ -880,6 +960,15 @@ const boot = (): void => {
     targets.render();
     effects.update(delta);
     scene.render();
+
+    if (liveBoard.isOpen) {
+      liveBoard.render(
+        boardRows(),
+        online ? (net.selfId ?? PLAYER_ID) : PLAYER_ID,
+        match.timeRemaining,
+        online ? "IN THIS MATCH" : "SCOREBOARD",
+      );
+    }
 
     hud.update({
       player,

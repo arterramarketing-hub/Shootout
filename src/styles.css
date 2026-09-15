@@ -111,6 +111,30 @@ html, body {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
+/*
+ * The spawn window has to be visible to the person holding it, or they spend
+ * it walking carefully instead of using it to get somewhere.
+ */
+.spawn-shield {
+  position: absolute;
+  left: 50%;
+  top: calc(52% + 34px);
+  transform: translateX(-50%) scale(var(--hud-scale));
+  transform-origin: center top;
+  padding: 3px 10px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: #9fe8ff;
+  background: rgba(14, 34, 44, 0.55);
+  border: 1px solid rgba(159, 232, 255, 0.45);
+  border-radius: 4px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  transition: opacity 120ms linear;
+}
+.spawn-shield.is-visible { opacity: 1; }
+.spawn-shield b { font-variant-numeric: tabular-nums; }
+
 .joystick-base {
   position: absolute;
   width: 128px;
@@ -883,3 +907,85 @@ html, body {
   letter-spacing: 0.12em;
   color: var(--accent);
 }
+
+/* --- Live scoreboard ------------------------------------------------------ */
+
+/*
+ * Reachable mid-fight, so it sits beside the debug chip rather than behind a
+ * menu. On a phone there is no key to press, and a board you cannot open is a
+ * board that does not exist.
+ */
+.chip-board { right: calc(78px + var(--safe-r)); }
+
+.live-board {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 10, 13, 0.72);
+  backdrop-filter: blur(3px);
+  z-index: 5;
+}
+.live-board.is-hidden { display: none; }
+.live-board-card {
+  width: min(520px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  overflow: auto;
+  padding: 16px 18px;
+  background: rgba(16, 20, 25, 0.96);
+  border: 1px solid rgba(232, 238, 245, 0.16);
+  border-radius: 10px;
+}
+.live-board-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  color: var(--hud-dim);
+}
+.live-board-clock { font-variant-numeric: tabular-nums; color: var(--hud); }
+.live-board-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.live-board-table th {
+  text-align: right;
+  padding: 4px 6px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--hud-dim);
+  font-weight: 400;
+  border-bottom: 1px solid rgba(232, 238, 245, 0.14);
+}
+.live-board-table th:first-child { text-align: left; }
+.live-board-table td {
+  padding: 5px 6px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid rgba(232, 238, 245, 0.06);
+}
+.live-board-table td:first-child { text-align: left; }
+.live-board-table tr.is-self td { color: var(--accent); }
+/* A bot is named plainly but marked, so a full lobby is not mistaken for one. */
+.live-board-table tr.is-bot td { color: var(--hud-dim); }
+.live-board-table tr.is-dead td:first-child { opacity: 0.55; }
+.board-team {
+  display: inline-block;
+  width: 6px; height: 6px;
+  margin-right: 7px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.board-team.team-a { background: #7fb2dc; }
+.board-team.team-b { background: #dc9a7f; }
+.board-tag {
+  margin-left: 8px;
+  padding: 1px 5px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--hud-dim);
+  border: 1px solid rgba(232, 238, 245, 0.22);
+  border-radius: 3px;
+  vertical-align: middle;
+}
+.live-board-actions { display: flex; gap: 10px; margin-top: 14px; }
+.live-board-actions .start, .live-board-actions .ghost { flex: 1; }

@@ -16,7 +16,15 @@ import { BrushWorld, type CapsuleController } from "../src/sim/brushWorld";
 import { bearingTo } from "../src/sim/aim";
 import { resolveShot } from "../src/sim/combat";
 import { STANCE, tickInterval } from "../src/sim/config";
-import { applyDamage, createHealth, revive, stepHealth, type HealthState } from "../src/sim/health";
+import {
+  applyDamage,
+  createHealth,
+  endSpawnProtection,
+  grantSpawnProtection,
+  revive,
+  stepHealth,
+  type HealthState,
+} from "../src/sim/health";
 import {
   activeWeapon,
   createLoadout,
@@ -47,6 +55,7 @@ import {
   type KillEventMessage,
   type PlayerSnapshot,
   type ShotEventMessage,
+  type RosterEntry,
   type SnapshotMessage,
 } from "../src/net/protocol";
 
@@ -272,6 +281,13 @@ const scoreKill = (killerId: string, victimId: string, headshot: boolean): void 
   });
 };
 
+/** A fresh health state that starts its spawn window running. */
+const grantedHealth = () => {
+  const health = createHealth();
+  grantSpawnProtection(health);
+  return health;
+};
+
 const applyResolvedDamage = (
   resolution: ReturnType<typeof resolveShot>,
   attackerId: string,
@@ -357,6 +373,8 @@ const resolveHumanShot = (
 
   const origin = humanEye(player);
   const resolution = resolveShot(shot, origin, world, player.id);
+  // Firing gives up the rest of the spawn window, on the server's word.
+  endSpawnProtection(player.health);
   applyResolvedDamage(resolution, player.id, humanEye(player));
 
   shotEvents.push({
@@ -575,6 +593,7 @@ const buildSnapshot = (player: HumanPlayer): SnapshotMessage => {
     serverTime: now(),
     ack: player.lastAck,
     players,
+    roster: buildRoster(),
     shots: shotEvents,
     kills: killEvents,
     // Only this player's own damage is worth sending; nobody else's matters.
@@ -583,6 +602,45 @@ const buildSnapshot = (player: HumanPlayer): SnapshotMessage => {
     phase,
     timeRemaining: Math.round(timeRemaining),
   };
+};
+
+/**
+ * Everyone in the match, people and bots alike, for the scoreboard.
+ *
+ * Built once per tick rather than once per recipient: it is the same for
+ * everybody, and at ten players it is small enough that the alternative — a
+ * separate message whenever a score changed — would cost more in bookkeeping
+ * than it saves in bytes.
+ */
+const buildRoster = (): RosterEntry[] => {
+  const rows: RosterEntry[] = [];
+  for (const human of humans.values()) {
+    rows.push({
+      id: human.id,
+      name: human.name,
+      team: human.team,
+      kills: human.kills,
+      deaths: human.deaths,
+      pingMs: Math.round(human.rttMs),
+      human: true,
+      alive: !human.health.dead,
+    });
+  }
+  for (const bot of bots) {
+    rows.push({
+      id: bot.id,
+      name: bot.name,
+      team: bot.team,
+      kills: bot.kills,
+      deaths: bot.deaths,
+      pingMs: 0,
+      human: false,
+      alive: !bot.health.dead,
+    });
+  }
+  // Best first, and a tie broken by fewer deaths, so the order means something.
+  rows.sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+  return rows;
 };
 
 const loop = (): void => {
@@ -688,7 +746,9 @@ server.on("connection", (socket) => {
         socket,
         state: createPlayer(spawn.position, spawn.yaw),
         body,
-        health: createHealth(),
+        // Joining mid-round is arriving at a spawn point in a fight already in
+        // progress, which is precisely the case the window is for.
+        health: grantedHealth(),
         loadout: createLoadout(DEFAULT_LOADOUT),
         pending: [],
         lastAck: 0,

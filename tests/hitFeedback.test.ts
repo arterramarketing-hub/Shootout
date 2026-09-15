@@ -110,6 +110,8 @@ const makeHud = () => {
     respawnTimer: plain().el,
     damageArcs: arcs.el,
     damageNumbers: numbers.el,
+    spawnShield: plain().el,
+    spawnShieldTime: plain().el,
     root: plain().el,
   };
   return { hud: new Hud(elements), parts };

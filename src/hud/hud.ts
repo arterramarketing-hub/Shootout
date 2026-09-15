@@ -28,6 +28,8 @@ export interface HudElements {
   respawnTimer: HTMLElement;
   damageArcs: HTMLElement;
   damageNumbers: HTMLElement;
+  spawnShield: HTMLElement;
+  spawnShieldTime: HTMLElement;
   root: HTMLElement;
 }
 
@@ -186,6 +188,7 @@ export class Hud {
     this.updateCrosshair(player, loadout, deltaSeconds);
     this.updateDamageArcs(player.yaw, deltaSeconds);
     this.updateDamageNumbers(deltaSeconds);
+    this.updateSpawnShield(health);
     this.updateAmmo(loadout);
     this.updateHealth(health);
     this.updateFeed(deltaSeconds);
@@ -293,6 +296,15 @@ export class Hud {
         this.elements.hitMarker.style.opacity = fade.toFixed(3);
       }
     }
+  }
+
+  /** Count the spawn window down, so its end is expected rather than felt. */
+  private updateSpawnShield(health: HealthState): void {
+    const left = health.dead ? 0 : health.spawnProtectionTimer;
+    this.elements.spawnShield.classList.toggle("is-visible", left > 0);
+    if (left <= 0) return;
+    // Ceiling, so it reads 3, 2, 1 rather than spending most of its life on 0.
+    this.elements.spawnShieldTime.textContent = Math.ceil(left).toFixed(0);
   }
 
   /** Spin the damage arcs to face their attackers and let them expire. */

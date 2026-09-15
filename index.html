@@ -48,6 +48,8 @@
         <div id="damage-vignette" class="damage-vignette" aria-hidden="true"></div>
         <pre id="debug" class="debug"></pre>
         <div id="stance" class="stance">STAND</div>
+        <!-- Says the spawn window is still running, and for how much longer. -->
+        <div id="spawn-shield" class="spawn-shield">PROTECTED <b id="spawn-shield-time">3</b></div>
         <div id="feed" class="feed" aria-live="polite"></div>
 
         <div class="netbar" id="netbar"></div>
@@ -101,6 +103,31 @@
       </div>
 
       <button class="chip" id="btn-debug" type="button">DEBUG</button>
+      <button class="chip chip-board" id="btn-board" type="button" aria-label="Scoreboard">BOARD</button>
+
+      <!--
+        The live board. A separate screen from the end-of-round one: this
+        answers "who is here and how is it going" mid-fight, and has to be
+        leavable in one press.
+      -->
+      <div id="live-board" class="live-board is-hidden">
+        <div class="live-board-card">
+          <div class="live-board-head">
+            <span id="live-board-title">SCOREBOARD</span>
+            <span id="live-board-clock" class="live-board-clock">6:00</span>
+          </div>
+          <table class="live-board-table">
+            <thead>
+              <tr><th>Player</th><th>K</th><th>D</th><th>Ping</th></tr>
+            </thead>
+            <tbody id="live-board-rows"></tbody>
+          </table>
+          <div class="live-board-actions">
+            <button class="start" id="btn-board-close" type="button">RESUME</button>
+            <button class="ghost" id="btn-board-quit" type="button">LEAVE MATCH</button>
+          </div>
+        </div>
+      </div>
 
       <div id="boot" class="boot screen">
         <div class="screen-card">

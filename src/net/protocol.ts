@@ -132,6 +132,27 @@ export interface DamageEventMessage {
   headshot: boolean;
 }
 
+/**
+ * One row of the live scoreboard.
+ *
+ * Kept apart from `PlayerSnapshot` because it answers a different question and
+ * changes at a different rate: positions are the thirty-times-a-second stream
+ * that makes the game move, while a score changes a few times a minute and is
+ * only ever read when someone opens the board.
+ */
+export interface RosterEntry {
+  id: string;
+  name: string;
+  team: Team;
+  kills: number;
+  deaths: number;
+  /** Round-trip time the server measured, so the board can show connections. */
+  pingMs: number;
+  /** False for the bots filling out the sides. */
+  human: boolean;
+  alive: boolean;
+}
+
 export interface SnapshotMessage {
   type: "snapshot";
   tick: number;
@@ -139,6 +160,7 @@ export interface SnapshotMessage {
   /** The newest input command from this client the server has applied. */
   ack: number;
   players: PlayerSnapshot[];
+  roster: RosterEntry[];
   shots: ShotEventMessage[];
   kills: KillEventMessage[];
   damage: DamageEventMessage[];

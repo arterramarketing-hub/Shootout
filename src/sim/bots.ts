@@ -1,6 +1,6 @@
 import { aimForward } from "./aim";
 import { resolveShot, hasLineOfSight, type HitscanWorld, type ShotResolution } from "./combat";
-import { applyDamage, createHealth, stepHealth, type HealthState } from "./health";
+import { BOT_HEALTH, applyDamage, createHealth, stepHealth, type HealthState } from "./health";
 import {
   activeWeapon,
   createLoadout,
@@ -187,7 +187,7 @@ export const createBot = (
   velocity: vec3(),
   yaw,
   pitch: 0,
-  health: createHealth(),
+  health: createHealth(BOT_HEALTH),
   loadout: createLoadout(weapons),
   behaviour: "patrol",
   path: [],
