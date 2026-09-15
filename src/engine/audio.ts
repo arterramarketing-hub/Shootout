@@ -179,9 +179,20 @@ export class GameAudio {
     this.tick(3200, 0.035, 0.16 * attenuation, "highpass");
   }
 
-  /** Confirmation that a shot landed on a target. */
-  hitMarker(headshot: boolean): void {
-    this.tick(headshot ? 2100 : 1400, 0.05, 0.3, "bandpass");
+  /**
+   * Confirmation that a shot landed.
+   *
+   * A kill gets its own two-tone chime rather than a louder tick. In a
+   * firefight the ticks blur together, and the one thing a player needs to
+   * pick out of that run is the round that ended it.
+   */
+  hitMarker(headshot: boolean, killed = false): void {
+    if (!killed) {
+      this.tick(headshot ? 2100 : 1400, 0.05, 0.3, "bandpass");
+      return;
+    }
+    this.tick(1650, 0.06, 0.34, "bandpass");
+    window.setTimeout(() => this.tick(2450, 0.1, 0.3, "bandpass"), 55);
   }
 
   /** A plate going over. */

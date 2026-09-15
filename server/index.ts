@@ -12,6 +12,7 @@ import {
   type Team,
 } from "../src/sim/bots";
 import { BrushWorld, type CapsuleController } from "../src/sim/brushWorld";
+import { bearingTo } from "../src/sim/aim";
 import { resolveShot } from "../src/sim/combat";
 import { STANCE, tickInterval } from "../src/sim/config";
 import { applyDamage, createHealth, revive, stepHealth, type HealthState } from "../src/sim/health";
@@ -273,17 +274,20 @@ const scoreKill = (killerId: string, victimId: string, headshot: boolean): void 
 const applyResolvedDamage = (
   resolution: ReturnType<typeof resolveShot>,
   attackerId: string,
-  attackerYaw: number,
+  attackerOrigin: Vec3,
 ): void => {
   for (const entry of resolution.damage) {
     const victimHuman = humans.get(entry.targetId);
     if (victimHuman) {
       if (victimHuman.health.dead) continue;
-      const killed = applyDamage(victimHuman.health, entry.damage, attackerYaw);
+      // Measured from the victim toward the shooter, which is the direction
+      // the victim has to turn to find them.
+      const bearing = bearingTo(victimHuman.state.position, attackerOrigin);
+      const killed = applyDamage(victimHuman.health, entry.damage, bearing);
       damageEvents.push({
         victim: entry.targetId,
         amount: Math.round(entry.damage),
-        fromYaw: roundAngle(attackerYaw),
+        fromBearing: roundAngle(bearing),
         headshot: entry.headshot,
       });
       if (killed) {
@@ -295,7 +299,7 @@ const applyResolvedDamage = (
 
     const bot = bots.find((candidate) => candidate.id === entry.targetId);
     if (!bot || bot.health.dead) continue;
-    const killed = damageBot(bot, entry.damage, attackerYaw);
+    const killed = damageBot(bot, entry.damage, bearingTo(bot.position, attackerOrigin));
     if (killed) {
       bot.respawnTimer = RESPAWN_SECONDS;
       bot.deaths += 1;
@@ -352,7 +356,7 @@ const resolveHumanShot = (
 
   const origin = humanEye(player);
   const resolution = resolveShot(shot, origin, world, player.id);
-  applyResolvedDamage(resolution, player.id, player.state.yaw);
+  applyResolvedDamage(resolution, player.id, humanEye(player));
 
   shotEvents.push({
     shooter: player.id,
@@ -479,7 +483,7 @@ const stepBots = (dt: number): void => {
     }
     if (phase !== "active") continue;
     stepBot(bot, botWorld, dt, (shot) => {
-      applyResolvedDamage(shot.resolution, shot.botId, bot.yaw);
+      applyResolvedDamage(shot.resolution, shot.botId, shot.origin);
       shotEvents.push({
         shooter: shot.botId,
         weapon: shot.weapon,

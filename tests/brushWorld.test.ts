@@ -204,6 +204,25 @@ describe("navigation bake", () => {
 });
 
 describe("pruneIsolated", () => {
+  it("keeps the largest component whatever its size, not a fixed minimum", () => {
+    // The rule is reachability, not size: a big pocket nothing can climb into
+    // is as useless as a small one, and the flat top of a tall prop is a big
+    // pocket. Two components, the smaller one goes, however many nodes it has.
+    const grid = createEmptyGrid(1, 0, 0, 12, 4);
+    for (let row = 0; row < 4; row += 1) {
+      for (let col = 0; col < 5; col += 1) addNode(grid, col, row, 0);
+    }
+    // A sizeable perch, well clear of the ground and of any link to it.
+    for (let row = 0; row < 4; row += 1) {
+      for (let col = 8; col < 12; col += 1) addNode(grid, col, row, 9);
+    }
+    linkNodes(grid);
+
+    expect(pruneIsolated(grid)).toBe(16);
+    expect(grid.nodes).toHaveLength(20);
+    expect(grid.nodes.every((node) => node.y === 0)).toBe(true);
+  });
+
   it("removes an island nothing links to", () => {
     const grid = createEmptyGrid(1, 0, 0, 6, 6);
     for (let row = 0; row < 6; row += 1) {
@@ -214,7 +233,7 @@ describe("pruneIsolated", () => {
     linkNodes(grid);
     const before = grid.nodes.length;
 
-    const removed = pruneIsolated(grid, 12);
+    const removed = pruneIsolated(grid);
     expect(removed).toBe(1);
     expect(grid.nodes).toHaveLength(before - 1);
     expect(grid.nodes.every((node) => node.y === 0)).toBe(true);
@@ -226,7 +245,7 @@ describe("pruneIsolated", () => {
       for (let col = 0; col < 6; col += 1) addNode(grid, col, row, 0);
     }
     linkNodes(grid);
-    expect(pruneIsolated(grid, 12)).toBe(0);
+    expect(pruneIsolated(grid)).toBe(0);
     expect(grid.nodes).toHaveLength(36);
   });
 
@@ -237,7 +256,7 @@ describe("pruneIsolated", () => {
     }
     addNode(grid, 0, 0, 9);
     linkNodes(grid);
-    pruneIsolated(grid, 12);
+    pruneIsolated(grid);
     grid.nodes.forEach((node, index) => {
       expect(node.index).toBe(index);
       for (const link of node.links) expect(grid.nodes[link]).toBeDefined();

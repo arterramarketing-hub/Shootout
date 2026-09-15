@@ -9,7 +9,7 @@ import { Scene } from "@babylonjs/core/scene";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import type { QualitySettings } from "../engine/quality";
 import type { BoxBrush, MapDefinition, SurfaceKind } from "../maps/types";
-import { TEXEL_METRES, createMaterials } from "./materials";
+import { TEXEL_METRES, createMaterialLibrary } from "./materials";
 
 export interface BuiltScene {
   scene: Scene;
@@ -99,8 +99,11 @@ const faceUVs = (brush: BoxBrush): Vector4[] => {
 };
 
 const buildMap = (scene: Scene, map: MapDefinition, anisotropy: number): Mesh[] => {
-  const { materials } = createMaterials(scene, map.style, map.textureSeed, anisotropy);
-  const byKind = new Map<SurfaceKind, Mesh[]>();
+  const library = createMaterialLibrary(scene, map.style, map.textureSeed, anisotropy);
+  // Bucketed by kind and tint together: a zone's coloured brushes still merge
+  // with each other, so colour-coding costs one draw call per colour used
+  // rather than one per brush.
+  const buckets = new Map<string, { kind: SurfaceKind; tint?: string; meshes: Mesh[] }>();
 
   for (const [index, brush] of map.brushes.entries()) {
     const mesh = MeshBuilder.CreateBox(
@@ -116,20 +119,21 @@ const buildMap = (scene: Scene, map: MapDefinition, anisotropy: number): Mesh[] 
     );
     mesh.position.set(brush.x, brush.y, brush.z);
     mesh.rotation.set(brush.pitch ?? 0, brush.yaw ?? 0, 0);
-    const bucket = byKind.get(brush.kind);
-    if (bucket) bucket.push(mesh);
-    else byKind.set(brush.kind, [mesh]);
+    const key = `${brush.kind}|${brush.tint ?? ""}`;
+    const bucket = buckets.get(key);
+    if (bucket) bucket.meshes.push(mesh);
+    else buckets.set(key, { kind: brush.kind, tint: brush.tint, meshes: [mesh] });
   }
 
   const merged: Mesh[] = [];
-  for (const [kind, meshes] of byKind) {
-    // Merging collapses every brush of a kind into one draw call. The third
+  for (const [key, bucket] of buckets) {
+    // Merging collapses every brush in a bucket into one draw call. The third
     // argument disposes the sources; the sixth keeps submeshes so culling
     // still works per-brush.
-    const mesh = Mesh.MergeMeshes(meshes, true, true, undefined, false, true);
+    const mesh = Mesh.MergeMeshes(bucket.meshes, true, true, undefined, false, true);
     if (!mesh) continue;
-    mesh.name = `static_${kind}`;
-    mesh.material = materials[kind];
+    mesh.name = `static_${key.replace("|", "_")}`;
+    mesh.material = library.get(bucket.kind, bucket.tint);
     mesh.checkCollisions = false;
     mesh.isPickable = false;
     mesh.freezeWorldMatrix();

@@ -242,6 +242,33 @@ server in Phase 3, and plain arrays travel far more easily than a wasm navmesh;
 and the megabyte a navmesh library costs buys nothing here. Layers are what let
 the mezzanine and the floor beneath it coexist.
 
+## Hit feedback
+
+Four things answer "did that land, and who is shooting me".
+
+A **hit marker** confirms a shot landed, coloured for a headshot. A **kill**
+draws it heavier, redder and wider and holds it more than twice as long, with
+its own two-tone chime instead of the tick: in a firefight the ticks blur
+together, and the round that ended it is the one a player needs to pick out of
+that run. Without it the only signal a fight is over is that the other figure
+stopped moving, which is the slowest one in the game.
+
+**Damage numbers** float off the crosshair and fade, so a graze reads
+differently from a solid hit. A shotgun's eight pellets are one shot to the
+player, so they arrive as one number rather than eight.
+
+**Damage arcs** ring the crosshair and point at whoever is shooting. They store
+a world bearing, not a screen angle, and are rotated against the player's own
+yaw every frame — so an arc keeps pointing at the attacker while the player
+turns to look for them, which is the entire purpose of the thing. Four of them,
+so being caught by two people reads as two directions rather than one that
+flickers between them; repeated hits from the same direction reuse one arc.
+
+The bearing is measured from the victim toward the source. That is not the
+attacker's facing, which is what the field used to hold: someone shooting you
+in the back while running past faces a direction that has nothing to do with
+where you must look to find them.
+
 ## Match flow
 
 Team deathmatch. Six minute rounds, first to 50 kills, four second respawns.
@@ -280,6 +307,31 @@ level reads as stretched plastic.
 Each carries its own palette and light levels. Substation is cool and
 industrial, but deliberately not dark: a player standing still in a corner has
 to stay visible, and atmosphere is worth less than that.
+
+### Knowing where you are
+
+Every surface of a kind shares one generated texture, which left both maps the
+same grey in all four corners: a player mid-fight had nothing to navigate by
+except a layout they had not learned yet. Each zone now takes a colour, carried
+on the things you can see from across the map — pillars, rails, signage,
+containers — rather than on the floor, which nobody is looking at. Brushes
+sharing a kind and a colour still merge into one draw call, so a zone costs one
+extra call, not one per brush.
+
+Warehouse hangs a gantry crane over the middle, the one landmark visible from
+everywhere: a player who has lost their bearings finds the centre by looking
+up, from any corner, without having to recognise a wall. The offices wear amber
+signage and roof plant that shows over their walls, the mezzanine blue rails
+and racking, the loading bay rust containers and dock doors.
+
+Substation is the harder of the two to stay oriented in, being a symmetric grid
+of identical blocks. Its two ends take opposing colours and the four
+transformer rows step between them, so the tint of whatever is nearest says how
+far down the hall you are. The end landmarks differ in silhouette as well as
+colour — a stepped bank of switchgear at one end, round-capped cooling stacks
+at the other — so they still read for a player who cannot separate the hues.
+Both ends are equally marked and both teams see the same scheme, which makes it
+information rather than advantage.
 
 ## Progression
 

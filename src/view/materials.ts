@@ -28,6 +28,13 @@ export const TEXEL_METRES = 3;
 
 export type MaterialSet = Record<SurfaceKind, StandardMaterial>;
 
+/** Hands out one material per surface kind and tint, making each on demand. */
+export interface MaterialLibrary {
+  /** `tint` is a hex string; omitting it gives the surface's plain material. */
+  get(kind: SurfaceKind, tint?: string): StandardMaterial;
+  textures: TextureSet;
+}
+
 export const createMaterials = (
   scene: Scene,
   style: MapStyle,
@@ -56,4 +63,48 @@ export const createMaterials = (
     set[kind] = material;
   }
   return { materials: set, textures };
+};
+
+/**
+ * A library that adds tinted variants of the base materials as maps ask for
+ * them.
+ *
+ * A tint multiplies the generated texture rather than replacing it, so a zone
+ * takes on a colour while keeping the concrete, panelling or grating it is
+ * made of. Variants are cached by kind and tint because the merge step asks
+ * for the same one once per bucket.
+ */
+export const createMaterialLibrary = (
+  scene: Scene,
+  style: MapStyle,
+  seed: number,
+  anisotropy = 1,
+): MaterialLibrary => {
+  const { materials, textures } = createMaterials(scene, style, seed, anisotropy);
+  const variants = new Map<string, StandardMaterial>();
+
+  return {
+    textures,
+    get(kind, tint) {
+      if (!tint) return materials[kind];
+      const key = `${kind}|${tint}`;
+      const existing = variants.get(key);
+      if (existing) return existing;
+
+      const base = materials[kind];
+      const material = new StandardMaterial(`mat_${kind}_${tint.replace("#", "")}`, scene);
+      material.diffuseTexture = base.diffuseTexture;
+      material.ambientTexture = base.ambientTexture;
+      material.ambientColor = Color3.FromHexString(tint);
+      // diffuseColor multiplies the texture, which is what keeps the surface
+      // reading as the material it is made of rather than as flat paint.
+      material.diffuseColor = Color3.FromHexString(tint);
+      material.specularColor = base.specularColor.clone();
+      material.specularPower = base.specularPower;
+      material.useAlphaFromDiffuseTexture = false;
+      material.freeze();
+      variants.set(key, material);
+      return material;
+    },
+  };
 };

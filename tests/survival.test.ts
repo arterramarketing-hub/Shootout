@@ -64,7 +64,7 @@ describe("health", () => {
   it("records where the damage came from", () => {
     const health = createHealth();
     applyDamage(health, 10, 1.5);
-    expect(health.lastDamageYaw).toBe(1.5);
+    expect(health.lastDamageBearing).toBe(1.5);
   });
 
   it("does not regenerate the dead", () => {

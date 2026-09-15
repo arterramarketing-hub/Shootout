@@ -57,6 +57,7 @@ import {
   unlockedWeapons,
   type MatchReward,
 } from "./sim/progression";
+import { bearingTo } from "./sim/aim";
 import { createRandom } from "./sim/random";
 import { damageTarget, stepTargets } from "./sim/targets";
 import type { PlayerState } from "./sim/types";
@@ -202,6 +203,8 @@ const boot = (): void => {
     countdown: byId("countdown"),
     respawn: byId("respawn"),
     respawnTimer: byId("respawn-timer"),
+    damageArcs: byId("damage-arcs"),
+    damageNumbers: byId("damage-numbers"),
     root: byId("hud"),
   });
   byId("btn-debug").addEventListener("click", () => hud.toggleDebug());
@@ -353,10 +356,12 @@ const boot = (): void => {
   const applyShotDamage = (
     resolution: ShotResolution,
     attackerId: string,
-    attackerYaw: number,
+    attackerOrigin: Vec3,
   ): boolean => {
     let hitSomething = false;
     let headshot = false;
+    let killedSomeone = false;
+    let dealt = 0;
 
     for (const entry of resolution.damage) {
       const plate = targets.findState(entry.targetId);
@@ -365,6 +370,7 @@ const boot = (): void => {
         if (dropped && attackerId === PLAYER_ID) audio.targetDrop();
         hitSomething = true;
         headshot = headshot || entry.headshot;
+        dealt += entry.damage;
         continue;
       }
 
@@ -373,21 +379,29 @@ const boot = (): void => {
       if (!attacker || !victim) continue;
       hitSomething = true;
       headshot = headshot || entry.headshot;
+      // A shotgun lands eight pellets at once; they are one shot to the
+      // player, so they read as one number rather than eight.
+      dealt += entry.damage;
 
       let killed: boolean;
       if (entry.targetId === PLAYER_ID) {
-        killed = applyDamage(playerHealth, entry.damage, attackerYaw);
+        // The bearing is measured from the victim to the shooter, which is
+        // where the player has to look to find them.
+        const bearing = bearingTo(player.position, attackerOrigin);
+        killed = applyDamage(playerHealth, entry.damage, bearing);
+        hud.showDamageFrom(bearing);
         if (killed) playerRespawnTimer = match.config.respawnSeconds;
       } else {
         const bot = bots.find((candidate) => candidate.id === entry.targetId);
         if (!bot) continue;
-        killed = damageBot(bot, entry.damage, attackerYaw);
+        killed = damageBot(bot, entry.damage, bearingTo(bot.position, attackerOrigin));
         if (killed) {
           bot.respawnTimer = match.config.respawnSeconds;
           bot.deaths += 1;
         }
       }
 
+      if (killed) killedSomeone = true;
       if (!killed) continue;
       const killerBot = bots.find((candidate) => candidate.id === attackerId);
       if (killerBot) killerBot.kills += 1;
@@ -403,8 +417,9 @@ const boot = (): void => {
     }
 
     if (hitSomething && attackerId === PLAYER_ID) {
-      hud.showHitMarker(headshot);
-      audio.hitMarker(headshot);
+      hud.showHitMarker(headshot, killedSomeone);
+      audio.hitMarker(headshot, killedSomeone);
+      if (dealt > 0) hud.showDamageNumber(dealt, headshot, killedSomeone);
     }
     return hitSomething;
   };
@@ -454,17 +469,16 @@ const boot = (): void => {
       effects.addPellet(tracerOrigin, impact);
       if (impact.hit && !impact.targetId) audio.impact(impact.distance);
     }
-    applyShotDamage(resolution, PLAYER_ID, player.yaw);
+    applyShotDamage(resolution, PLAYER_ID, eyePosition());
   };
 
   const onBotShot = (shot: BotShot): void => {
-    const bot = bots.find((entry) => entry.id === shot.botId);
     const distance = lengthXZ(sub(shot.origin, eyePosition()));
     audio.remoteShot(shot.weapon, distance);
     for (const impact of shot.resolution.impacts) {
       effects.addPellet(shot.origin, impact);
     }
-    applyShotDamage(shot.resolution, shot.botId, bot?.yaw ?? 0);
+    applyShotDamage(shot.resolution, shot.botId, shot.origin);
   };
 
   const respawnPlayer = (): void => {
@@ -494,7 +508,8 @@ const boot = (): void => {
 
     for (const event of snapshot.damage) {
       playerHealth.sinceDamage = 0;
-      playerHealth.lastDamageYaw = event.fromYaw;
+      playerHealth.lastDamageBearing = event.fromBearing;
+      hud.showDamageFrom(event.fromBearing);
     }
 
     for (const event of snapshot.kills) {
@@ -515,8 +530,9 @@ const boot = (): void => {
       });
       if (match.feed.length > 6) match.feed.length = 6;
       if (byMe) {
-        hud.showHitMarker(event.headshot);
-        audio.hitMarker(event.headshot);
+        // A kill event is by definition a kill, so the marker says so.
+        hud.showHitMarker(event.headshot, true);
+        audio.hitMarker(event.headshot, true);
       }
     }
 

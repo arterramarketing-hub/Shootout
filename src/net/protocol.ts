@@ -123,8 +123,12 @@ export interface KillEventMessage {
 export interface DamageEventMessage {
   victim: string;
   amount: number;
-  /** Direction the damage came from, for the indicator. */
-  fromYaw: number;
+  /**
+   * World bearing from the victim toward the source, for the indicator. Not
+   * the attacker's facing: someone shooting you in the back while running
+   * past faces a direction unrelated to where you must look to find them.
+   */
+  fromBearing: number;
   headshot: boolean;
 }
 

@@ -30,6 +30,21 @@
         <div id="hit-marker" class="hit-marker" aria-hidden="true">
           <span></span><span></span><span></span><span></span>
         </div>
+        <!--
+          Damage arcs ring the crosshair and point at whoever is shooting.
+          Four of them, so being caught by two people reads as two directions
+          rather than one that keeps flickering between them.
+        -->
+        <div id="damage-arcs" class="damage-arcs" aria-hidden="true">
+          <div class="damage-arc"><i></i></div>
+          <div class="damage-arc"><i></i></div>
+          <div class="damage-arc"><i></i></div>
+          <div class="damage-arc"><i></i></div>
+        </div>
+        <!-- Damage dealt, floating off the crosshair as it fades. -->
+        <div id="damage-numbers" class="damage-numbers" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
         <div id="damage-vignette" class="damage-vignette" aria-hidden="true"></div>
         <pre id="debug" class="debug"></pre>
         <div id="stance" class="stance">STAND</div>

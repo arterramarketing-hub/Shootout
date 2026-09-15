@@ -10,6 +10,16 @@ export const aimForward = (yaw: number, pitch: number): Vec3 => {
   return vec3(Math.sin(yaw) * cosPitch, Math.sin(pitch), Math.cos(yaw) * cosPitch);
 };
 
+/**
+ * The world bearing from one point toward another, ignoring height.
+ *
+ * This is what a damage indicator needs, and it is not the attacker's facing
+ * yaw: someone shooting you in the back while running past is facing a
+ * direction that has nothing to do with where you should look to find them.
+ */
+export const bearingTo = (from: Vec3, to: Vec3): number =>
+  Math.atan2(to.x - from.x, to.z - from.z);
+
 /** The shooter's right, horizontal regardless of pitch. */
 export const aimRight = (yaw: number): Vec3 => vec3(Math.cos(yaw), 0, -Math.sin(yaw));
 

@@ -586,8 +586,8 @@ const updateWeapon = (
 export const damageBot = (
   bot: BotState,
   amount: number,
-  fromYaw: number | null = null,
-): boolean => applyDamage(bot.health, amount, fromYaw);
+  fromBearing: number | null = null,
+): boolean => applyDamage(bot.health, amount, fromBearing);
 
 export const respawnBot = (bot: BotState, spawn: Vec3, yaw: number): void => {
   bot.position = copy(spawn);

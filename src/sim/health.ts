@@ -19,8 +19,12 @@ export interface HealthState {
   /** Seconds since the last damage, for the screen effect. */
   sinceDamage: number;
   dead: boolean;
-  /** Direction the last damage came from, in radians, or null. */
-  lastDamageYaw: number | null;
+  /**
+   * World bearing from here toward whatever last did the damage, in radians,
+   * or null. Turning this into a screen direction needs the victim's own yaw
+   * subtracted, so the arrow keeps pointing at the attacker as they turn.
+   */
+  lastDamageBearing: number | null;
 }
 
 export const createHealth = (config: HealthConfig = HEALTH): HealthState => ({
@@ -28,21 +32,21 @@ export const createHealth = (config: HealthConfig = HEALTH): HealthState => ({
   regenTimer: 0,
   sinceDamage: Infinity,
   dead: false,
-  lastDamageYaw: null,
+  lastDamageBearing: null,
 });
 
 /** Apply damage. Returns true when this hit was lethal. */
 export const applyDamage = (
   state: HealthState,
   amount: number,
-  fromYaw: number | null = null,
+  fromBearing: number | null = null,
   config: HealthConfig = HEALTH,
 ): boolean => {
   if (state.dead || amount <= 0) return false;
   state.current = Math.max(0, state.current - amount);
   state.regenTimer = config.regenDelay;
   state.sinceDamage = 0;
-  state.lastDamageYaw = fromYaw;
+  state.lastDamageBearing = fromBearing;
   if (state.current <= 0) {
     state.dead = true;
     return true;
@@ -71,5 +75,5 @@ export const revive = (state: HealthState, config: HealthConfig = HEALTH): void 
   state.regenTimer = 0;
   state.sinceDamage = Infinity;
   state.dead = false;
-  state.lastDamageYaw = null;
+  state.lastDamageBearing = null;
 };

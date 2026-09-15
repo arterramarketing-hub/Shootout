@@ -100,11 +100,11 @@ html, body {
   white-space: pre;
 }
 
+/* Above the health bar, out of the corridor the ammo readout now uses. */
 .stance {
   position: absolute;
-  left: 50%;
-  bottom: calc(18px + var(--safe-b));
-  transform: translateX(-50%);
+  left: calc(16px + var(--safe-l));
+  bottom: calc(44px + var(--safe-b));
   font-size: 11px;
   letter-spacing: 0.18em;
   color: var(--hud-dim);
@@ -434,6 +434,71 @@ html, body {
 .hit-marker span:nth-child(3) { bottom: 3px; left: 2px; transform: rotate(-45deg); }
 .hit-marker span:nth-child(4) { bottom: 3px; right: 2px; transform: rotate(45deg); }
 .hit-marker.is-headshot span { background: #ff8d6b; }
+/*
+ * A kill reads differently from a hit at a glance: heavier, red, and turned
+ * square-on. Without it the only way to know a fight is over is that the
+ * other figure stopped moving, which is the slowest signal in the game.
+ */
+.hit-marker.is-kill span {
+  background: #ff5340;
+  width: 12px;
+  height: 3px;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.95);
+}
+.hit-marker.is-kill { width: 34px; height: 34px; }
+
+/*
+ * Damage arcs.
+ *
+ * Each is a full-screen box rotated about the centre, with the arc itself
+ * pinned above the crosshair inside it. Rotating the box rather than
+ * positioning the arc is what keeps the arc pointing at a world direction as
+ * the player turns, with one transform per frame and no trigonometry in CSS.
+ */
+.damage-arcs {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.damage-arc {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: rotate(0deg);
+}
+.damage-arc i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 74px;
+  height: 74px;
+  margin: -37px 0 0 -37px;
+  border-radius: 50%;
+  /* Only the top of the ring is drawn, which is what makes it a pointer. */
+  border: 3px solid transparent;
+  border-top-color: #ff5340;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.9));
+}
+
+.damage-numbers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.damage-numbers span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--hud);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+  opacity: 0;
+  white-space: nowrap;
+}
+.damage-numbers span.is-headshot { color: #ff8d6b; }
+.damage-numbers span.is-kill { color: #ff5340; }
 
 .damage-vignette {
   position: absolute;
@@ -450,22 +515,19 @@ html, body {
 }
 
 /*
- * The ammo readout clears the control arc rather than sitting inside it. The
- * arc reaches 212px up the right edge at --ctl 1, so the counter sits just
- * above that and rises with the controls when they are scaled up.
+ * The ammo readout sits beside the control arc, not above it.
  *
- * The cap is what stops it rising off the top: with both the control and HUD
- * sliders at maximum on a short screen, an uncapped clearance puts the
- * counter past the top edge, and the largest setting is exactly the one a
- * player who is struggling to read it will reach for.
+ * Above was the obvious place and it was wrong: clearing an arc that reaches
+ * 212px up the right edge pushes the counter into the middle of the screen,
+ * where the kill feed comes down to meet it. Sitting to the arc's left keeps
+ * it in the bottom-right corner where a player looks for it, clear of the feed
+ * entirely, and the offset tracks the control scale so it stays clear when the
+ * arc grows.
  */
 .ammo {
   position: absolute;
-  right: calc(16px + var(--safe-r));
-  bottom: min(
-    calc(212px * var(--ctl) + 20px + var(--safe-b)),
-    calc(100% - 100px)
-  );
+  right: calc(232px * var(--ctl) + var(--safe-r));
+  bottom: calc(22px + var(--safe-b));
   text-align: right;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
 }
@@ -584,6 +646,20 @@ html, body {
   position: absolute;
   right: calc(16px + var(--safe-r));
   top: calc(46px + var(--safe-t));
+  /*
+   * The feed yields to the control arc rather than growing into it.
+   *
+   * Both live on the right edge: the feed comes down from the top, the arc
+   * climbs from the bottom, and at the largest control size on a short screen
+   * they meet. The space between them is what is left after the arc's reach,
+   * divided by the HUD scale because that scale grows the feed visually
+   * without changing the box this limit applies to. Newest lines are drawn
+   * first, so what gets clipped is the kill nobody is still reading.
+   */
+  max-height: calc(
+    (100% - 60px - 212px * var(--ctl) - var(--safe-t) - var(--safe-b)) / var(--hud-scale)
+  );
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -659,8 +735,8 @@ html, body {
   transform-origin: center top;
 }
 .stance {
-  transform: translateX(-50%) scale(var(--hud-scale));
-  transform-origin: center bottom;
+  transform: scale(var(--hud-scale));
+  transform-origin: left bottom;
 }
 /*
  * The dead-centre elements are the one case where scaling about the centre is

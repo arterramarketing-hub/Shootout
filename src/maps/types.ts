@@ -16,6 +16,17 @@ export interface BoxBrush {
   pitch?: number;
   /** Set false for decoration the player should walk through. */
   solid?: boolean;
+  /**
+   * Multiplies this brush's surface colour, as a hex string.
+   *
+   * This is how a zone gets an identity. Every surface of a kind shares one
+   * generated texture, so without it a level's four corners are the same grey
+   * from every angle and a player has nothing to navigate by but the layout
+   * they have not learned yet. Brushes sharing a kind and a tint still merge
+   * into one draw call, so colour-coding a zone costs one extra call, not one
+   * per brush.
+   */
+  tint?: string;
 }
 
 export interface SpawnPoint {

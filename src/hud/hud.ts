@@ -26,6 +26,8 @@ export interface HudElements {
   countdown: HTMLElement;
   respawn: HTMLElement;
   respawnTimer: HTMLElement;
+  damageArcs: HTMLElement;
+  damageNumbers: HTMLElement;
   root: HTMLElement;
 }
 
@@ -45,6 +47,25 @@ export interface HudFrame {
 /** How long a line stays in the feed. */
 const FEED_LIFE = 2.6;
 const HIT_MARKER_LIFE = 0.18;
+/** A kill marker holds longer, because it is the answer to "is it over?". */
+const KILL_MARKER_LIFE = 0.42;
+/** Long enough to turn and find whoever is shooting, short enough to expire. */
+const DAMAGE_ARC_LIFE = 2.2;
+const DAMAGE_NUMBER_LIFE = 0.8;
+
+/** One live damage indicator: a world direction and what is left of its life. */
+interface DamageArc {
+  element: HTMLElement;
+  bearing: number;
+  life: number;
+}
+
+interface DamageNumber {
+  element: HTMLElement;
+  life: number;
+  /** Where it drifts to, so two numbers at once do not stack on each other. */
+  driftX: number;
+}
 
 const RAD_TO_DEG = 180 / Math.PI;
 
@@ -52,6 +73,10 @@ export class Hud {
   private debugVisible = false;
   private debugAccumulator = 0;
   private hitMarkerLife = 0;
+  private hitMarkerHold = HIT_MARKER_LIFE;
+  private readonly arcs: DamageArc[] = [];
+  private readonly numbers: DamageNumber[] = [];
+  private nextNumber = 0;
   private readonly feedEntries: { element: HTMLElement; life: number }[] = [];
   private lastAmmo = -1;
   private lastWeapon = "";
@@ -62,6 +87,15 @@ export class Hud {
 
   constructor(private readonly elements: HudElements) {
     this.elements.debug.style.display = "none";
+    // The arc and number pools are fixed: they are recycled rather than
+    // created per hit, because a firefight would otherwise churn the DOM at
+    // ten elements a second.
+    for (const element of Array.from(this.elements.damageArcs.children)) {
+      this.arcs.push({ element: element as HTMLElement, bearing: 0, life: 0 });
+    }
+    for (const element of Array.from(this.elements.damageNumbers.children)) {
+      this.numbers.push({ element: element as HTMLElement, life: 0, driftX: 0 });
+    }
   }
 
   toggleDebug(): void {
@@ -70,10 +104,51 @@ export class Hud {
   }
 
   /** Flash the hit marker. Headshots get their own colour. */
-  showHitMarker(headshot: boolean): void {
-    this.hitMarkerLife = HIT_MARKER_LIFE;
-    this.elements.hitMarker.classList.toggle("is-headshot", headshot);
+  /**
+   * Confirm a shot landed.
+   *
+   * A kill is drawn differently and held longer than a hit, because the
+   * question it answers — is this fight over, can I turn away — is the one
+   * the player most needs answered and the slowest to read off the world.
+   */
+  showHitMarker(headshot: boolean, killed = false): void {
+    this.hitMarkerHold = killed ? KILL_MARKER_LIFE : HIT_MARKER_LIFE;
+    this.hitMarkerLife = this.hitMarkerHold;
+    this.elements.hitMarker.classList.toggle("is-headshot", headshot && !killed);
+    this.elements.hitMarker.classList.toggle("is-kill", killed);
     this.elements.hitMarker.style.opacity = "1";
+  }
+
+  /**
+   * Point an arc at whatever just hit the player.
+   *
+   * The bearing is a world direction, not a screen one: the arc is rotated
+   * against the player's own yaw every frame, so it keeps pointing at the
+   * attacker while the player turns to look for them. That is the entire
+   * purpose of the thing, and storing a screen angle instead would leave it
+   * pointing at empty floor the moment they moved.
+   */
+  showDamageFrom(bearing: number): void {
+    // Reuse the arc already pointing that way rather than spending a second
+    // one on it, so two attackers stay legible as two directions.
+    const existing = this.arcs.find(
+      (arc) => arc.life > 0 && Math.abs(shortestAngle(arc.bearing - bearing)) < 0.5,
+    );
+    const arc = existing ?? this.arcs.reduce((a, b) => (a.life <= b.life ? a : b));
+    arc.bearing = bearing;
+    arc.life = DAMAGE_ARC_LIFE;
+  }
+
+  /** Float the damage a shot did, so a graze reads differently from a hit. */
+  showDamageNumber(amount: number, headshot: boolean, killed: boolean): void {
+    const slot = this.numbers[this.nextNumber % this.numbers.length];
+    this.nextNumber += 1;
+    slot.life = DAMAGE_NUMBER_LIFE;
+    // Alternate sides and vary the throw so a burst does not stack in place.
+    slot.driftX = (this.nextNumber % 2 === 0 ? 1 : -1) * (26 + (this.nextNumber % 3) * 12);
+    slot.element.textContent = String(Math.round(amount));
+    slot.element.classList.toggle("is-headshot", headshot && !killed);
+    slot.element.classList.toggle("is-kill", killed);
   }
 
   /** Add a line to the feed, newest at the bottom. */
@@ -109,6 +184,8 @@ export class Hud {
     const weapon = activeWeapon(loadout);
 
     this.updateCrosshair(player, loadout, deltaSeconds);
+    this.updateDamageArcs(player.yaw, deltaSeconds);
+    this.updateDamageNumbers(deltaSeconds);
     this.updateAmmo(loadout);
     this.updateHealth(health);
     this.updateFeed(deltaSeconds);
@@ -206,7 +283,53 @@ export class Hud {
 
     if (this.hitMarkerLife > 0) {
       this.hitMarkerLife -= deltaSeconds;
-      if (this.hitMarkerLife <= 0) this.elements.hitMarker.style.opacity = "0";
+      if (this.hitMarkerLife <= 0) {
+        this.elements.hitMarker.style.opacity = "0";
+        this.elements.hitMarker.classList.remove("is-kill", "is-headshot");
+      } else {
+        // Fading over its whole life, rather than snapping off, is what makes
+        // a burst read as a run of hits instead of one long flicker.
+        const fade = this.hitMarkerLife / this.hitMarkerHold;
+        this.elements.hitMarker.style.opacity = fade.toFixed(3);
+      }
+    }
+  }
+
+  /** Spin the damage arcs to face their attackers and let them expire. */
+  private updateDamageArcs(playerYaw: number, deltaSeconds: number): void {
+    for (const arc of this.arcs) {
+      if (arc.life <= 0) continue;
+      arc.life -= deltaSeconds;
+      if (arc.life <= 0) {
+        arc.element.style.opacity = "0";
+        continue;
+      }
+      // Screen angle is the world bearing less where the player is looking,
+      // recomputed every frame so turning sweeps the arc around the crosshair.
+      const screenAngle = shortestAngle(arc.bearing - playerYaw) * RAD_TO_DEG;
+      // Hold full strength for the first stretch, then fade, so a hit is
+      // unmissable at the moment it lands and gone before it becomes clutter.
+      const remaining = arc.life / DAMAGE_ARC_LIFE;
+      const opacity = remaining > 0.55 ? 1 : remaining / 0.55;
+      arc.element.style.transform = `rotate(${screenAngle.toFixed(1)}deg)`;
+      arc.element.style.opacity = opacity.toFixed(3);
+    }
+  }
+
+  /** Float the damage numbers up and out as they fade. */
+  private updateDamageNumbers(deltaSeconds: number): void {
+    for (const slot of this.numbers) {
+      if (slot.life <= 0) continue;
+      slot.life -= deltaSeconds;
+      if (slot.life <= 0) {
+        slot.element.style.opacity = "0";
+        continue;
+      }
+      const spent = 1 - slot.life / DAMAGE_NUMBER_LIFE;
+      const rise = 18 + spent * 26;
+      slot.element.style.transform =
+        `translate(calc(-50% + ${(slot.driftX * spent).toFixed(1)}px), ${(-rise).toFixed(1)}px)`;
+      slot.element.style.opacity = (1 - spent * spent).toFixed(3);
     }
   }
 
@@ -284,3 +407,11 @@ export class Hud {
       `spring ${(loadout.recoilPitch * RAD_TO_DEG).toFixed(2)}deg`;
   }
 }
+
+/** Wrap an angle into the range that answers "which way is shortest". */
+const shortestAngle = (radians: number): number => {
+  let value = radians;
+  while (value > Math.PI) value -= Math.PI * 2;
+  while (value < -Math.PI) value += Math.PI * 2;
+  return value;
+};

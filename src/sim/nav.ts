@@ -263,7 +263,7 @@ export const randomNode = (grid: NavGrid, unit: number): NavNode | null => {
  * leave, since it has no links to anywhere else. The threshold has to clear
  * the largest piece of furniture in any map, not merely the smallest.
  */
-export const pruneIsolated = (grid: NavGrid, minComponentSize = 60): number => {
+export const pruneIsolated = (grid: NavGrid): number => {
   const component = new Int32Array(grid.nodes.length).fill(-1);
   const sizes: number[] = [];
 
@@ -285,7 +285,22 @@ export const pruneIsolated = (grid: NavGrid, minComponentSize = 60): number => {
     sizes.push(size);
   }
 
-  const keep = grid.nodes.filter((node) => sizes[component[node.index]] >= minComponentSize);
+  /*
+   * Keep only the largest component.
+   *
+   * A size threshold was the previous rule and it is the wrong question: a
+   * pocket is useless because nothing can reach it, not because it is small.
+   * The flat top of a four-metre cabinet is eighty walkable cells that no
+   * player or bot can climb onto, and it sailed past any threshold low enough
+   * to keep real ground. Nothing in this game climbs or jumps, so anything not
+   * joined to the main body is unreachable by definition.
+   *
+   * The reachability tests assert that every spawn lands in the surviving
+   * component, which is what would catch a map whose halves are genuinely
+   * separate rather than merely decorated.
+   */
+  const largest = sizes.indexOf(Math.max(...sizes));
+  const keep = grid.nodes.filter((node) => component[node.index] === largest);
   const removed = grid.nodes.length - keep.length;
   if (removed === 0) return 0;
 
