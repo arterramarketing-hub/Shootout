@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist-server/server.mjs --external:ws",
     "server": "npm run build:server && node dist-server/server.mjs",
-    "play": "concurrently --kill-others --names server,site --prefix-colors cyan,magenta \"npm run server\" \"npm run dev\""
+    "play": "concurrently --kill-others --names server,site --prefix-colors cyan,magenta \"npm run server\" \"npm run dev\"",
+    "play:ffa": "cross-env MODE=ffa TEAM_SIZE=1 npm run play"
   },
   "dependencies": {
     "@babylonjs/core": "^9.26.0",
@@ -26,6 +27,7 @@
     "@playwright/test": "^1.63.0",
     "@types/ws": "^8.18.1",
     "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.10.0",
     "typescript": "^6.0.3",

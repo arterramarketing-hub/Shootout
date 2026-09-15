@@ -376,8 +376,13 @@ Run it in free-for-all if you want the two of you to be able to shoot each
 other, since team deathmatch may put you both on the same side:
 
 ```bash
-MODE=ffa TEAM_SIZE=1 npm run play
+npm run play:ffa
 ```
+
+That has its own script rather than an inline `MODE=ffa` because the shell
+syntax for setting a variable in front of a command is a Unix one: written
+that way it fails in PowerShell, which is the shell most Windows players
+will be typing into.
 
 Desktop controls are W/A/S/D to move, mouse to look (click the view to capture
 it), left mouse to fire, right to aim, R to reload, Tab or F to swap.
