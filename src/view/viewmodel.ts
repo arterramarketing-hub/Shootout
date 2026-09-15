@@ -33,6 +33,23 @@ const DEG_TO_RAD = Math.PI / 180;
  */
 export const VIEWMODEL_FOV_DEGREES = 45;
 
+/**
+ * How much of the world's aiming magnification the weapon camera takes.
+ *
+ * Narrowing the world's field of view is most of what makes a sight picture
+ * feel closer, and if the weapon camera ignored that, the sights would stay
+ * the same size while the target grew — the one thing they are supposed to be
+ * measured against. Matching it exactly is too much the other way: the weapon
+ * swells until it owns the screen. A share of it grows the sight picture
+ * enough to aim with and leaves the weapon the size of a weapon.
+ */
+export const VIEWMODEL_ZOOM_SHARE = 0.6;
+
+const BOLT = {
+  /** Seconds for a full cycle, back and home again. */
+  cycleSeconds: 0.075,
+} as const;
+
 const SWAY = {
   /** Metres of lag per radian of look movement. */
   positionPerRadian: 0.16,
@@ -71,6 +88,10 @@ export class ViewmodelRig {
   private readonly flash: Mesh;
   private flashLife = 0;
   private current: WeaponId | null = null;
+
+  private restFov = VIEWMODEL_FOV_DEGREES;
+  private zoom = 1;
+  private boltPhase = 1;
 
   private swayX = 0;
   private swayY = 0;
@@ -131,7 +152,21 @@ export class ViewmodelRig {
   }
 
   setFieldOfView(verticalDegrees: number = VIEWMODEL_FOV_DEGREES): void {
-    this.camera.fov = verticalDegrees * DEG_TO_RAD;
+    this.restFov = verticalDegrees;
+    this.applyFieldOfView();
+  }
+
+  /**
+   * Apply the rest field of view narrowed by the current aiming zoom.
+   *
+   * The narrowing is done on the tangent rather than on the angle, because
+   * that is what magnification actually is: half the width of the view at a
+   * given distance, divided by what it was.
+   */
+  private applyFieldOfView(): void {
+    const scale = Math.pow(Math.max(0.001, this.zoom), VIEWMODEL_ZOOM_SHARE);
+    const rest = Math.tan((this.restFov * DEG_TO_RAD) / 2);
+    this.camera.fov = 2 * Math.atan(rest / scale);
   }
 
   /** Muzzle position in world space, used as the tracer origin. */
@@ -154,6 +189,10 @@ export class ViewmodelRig {
   addRecoil(strength: number, randomRoll: number): void {
     this.recoilAmount = Math.min(RECOIL.maxAccumulated, this.recoilAmount + strength);
     this.recoilRoll = (randomRoll * 2 - 1) * RECOIL.roll;
+    // Start the bolt on its way back. This is the detail that says the weapon
+    // is a mechanism rather than a prop playing an animation: the carrier
+    // rides back, the port opens, and it is home before the next round.
+    this.boltPhase = 0;
   }
 
   update(
@@ -161,7 +200,13 @@ export class ViewmodelRig {
     loadout: LoadoutState,
     worldCamera: FreeCamera,
     deltaSeconds: number,
+    magnification = 1,
   ): void {
+    if (magnification !== this.zoom) {
+      this.zoom = magnification;
+      this.applyFieldOfView();
+    }
+
     this.camera.position.copyFrom(worldCamera.position);
     this.camera.rotation.copyFrom(worldCamera.rotation);
     // Babylon composes both cameras and transform nodes from the same
@@ -177,6 +222,7 @@ export class ViewmodelRig {
 
     const weapon = activeWeapon(loadout);
     this.showWeapon(weapon.definition.id);
+    this.updateBolt(deltaSeconds);
 
     this.updateSway(player, deltaSeconds);
     this.recoilAmount = this.recoilAmount * Math.pow(RECOIL.recovery, deltaSeconds);
@@ -191,10 +237,33 @@ export class ViewmodelRig {
     this.applyPose(model, player, ads, sprinting, reloading, swapping, deltaSeconds);
   }
 
+  /**
+   * Run the bolt, slide or pump through its cycle.
+   *
+   * One smooth trip back and home rather than a snap each way: at sixty frames
+   * a second a seventy-millisecond cycle is four frames, and a linear one
+   * would read as the weapon flickering rather than working.
+   */
+  private updateBolt(deltaSeconds: number): void {
+    if (this.boltPhase >= 1) return;
+    this.boltPhase = Math.min(1, this.boltPhase + deltaSeconds / BOLT.cycleSeconds);
+    if (!this.current) return;
+    const model = this.models[this.current];
+    model.bolt.position.z = -Math.sin(this.boltPhase * Math.PI) * model.spec.boltTravel;
+  }
+
   private showWeapon(id: WeaponId): void {
     if (this.current === id) return;
-    if (this.current) this.models[this.current].root.setEnabled(false);
+    if (this.current) {
+      // Put the outgoing weapon's bolt back where it belongs. Swapping part
+      // way through a cycle would otherwise leave it hanging open until the
+      // next time that weapon is fired.
+      this.models[this.current].bolt.position.z = 0;
+      this.models[this.current].root.setEnabled(false);
+    }
     this.models[id].root.setEnabled(true);
+    this.models[id].bolt.position.z = 0;
+    this.boltPhase = 1;
     this.current = id;
     // Start the new weapon's bob where the old one left off, so a swap does
     // not snap the weapon to the top of its stride.

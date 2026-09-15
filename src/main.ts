@@ -939,7 +939,7 @@ const boot = (): void => {
       playerLoadout.recoilPitch,
       playerLoadout.recoilYaw,
     );
-    viewmodel.update(player, playerLoadout, rig.camera, delta);
+    viewmodel.update(player, playerLoadout, rig.camera, delta, rig.magnification(settings.fovDegrees));
 
     if (online) {
       // Everyone else is drawn a little in the past, between the snapshots
@@ -1146,8 +1146,10 @@ const boot = (): void => {
         if (!mesh) return null;
         const width = engine.getRenderWidth();
         const height = engine.getRenderHeight();
+        // The middle of the weapon's body, not the node it hangs off: the
+        // parts are baked into one mesh, so the node sits at the grip.
         const projected = Vector3.Project(
-          mesh.getAbsolutePosition(),
+          mesh.getBoundingInfo().boundingBox.centerWorld,
           Matrix.Identity(),
           scene.getTransformMatrix(),
           viewmodel.camera.viewport.toGlobal(width, height),

@@ -149,6 +149,17 @@ test("the player spawns standing on the floor", async ({ page }) => {
 
 test("keyboard input moves the player", async ({ page }) => {
   await bootGame(page);
+  // The round opens on a countdown with everyone held in place, so measuring
+  // from the moment the level loads measures the countdown, not the walking.
+  await page.waitForFunction(() => window.__shootout.match.phase === "active", null, {
+    timeout: 20_000,
+  });
+  // And the spawn faces a wall, which is what the next test walks into on
+  // purpose. Start from the middle of the floor, facing down the open lane.
+  await page.evaluate(() => window.__shootout.teleport(0, 0, -Math.PI / 2));
+  // Long enough to land and shake off the landing, which costs speed for a
+  // moment and would otherwise be measured as walking slowly.
+  await page.waitForTimeout(1200);
   const before = (await readState(page)).position;
 
   await page.keyboard.down("w");
@@ -157,7 +168,9 @@ test("keyboard input moves the player", async ({ page }) => {
 
   const after = (await readState(page)).position;
   const travelled = Math.hypot(after.x - before.x, after.z - before.z);
-  expect(travelled).toBeGreaterThan(1.0);
+  // Seven tenths of a second at four metres a second, less the moment spent
+  // accelerating into it and the moment spent stopping.
+  expect(travelled).toBeGreaterThan(2.3);
 });
 
 test("the player cannot walk through the level geometry", async ({ page }) => {

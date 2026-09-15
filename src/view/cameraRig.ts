@@ -63,6 +63,21 @@ export class CameraRig {
     this.setFieldOfView(this.currentFov);
   }
 
+  /**
+   * How much closer the view is than the player's own setting makes it, as a
+   * scale rather than an angle.
+   *
+   * Aiming narrows the field of view, and magnification is what that narrowing
+   * means: half the width of the view at a given distance against what it was.
+   * The weapon camera needs the same figure so the sights grow with the target
+   * they are measured against.
+   */
+  magnification(baseDegrees: number): number {
+    return (
+      Math.tan((baseDegrees * DEG_TO_RAD) / 2) / Math.tan((this.currentFov * DEG_TO_RAD) / 2)
+    );
+  }
+
   update(
     previousPosition: Vec3,
     current: PlayerState,
