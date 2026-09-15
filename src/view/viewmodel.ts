@@ -12,6 +12,8 @@ import type { PlayerState } from "../sim/types";
 import type { WeaponId } from "../sim/weapons";
 import { clamp, damp } from "../sim/vec3";
 import { createWeaponModels, type FinishPainter, type WeaponModel } from "./weaponModels";
+import { RECOIL, recoilPose } from "./recoilPose";
+import { POSE, headroomDegrees, holdPosition } from "./weaponGeometry";
 import type { Finish } from "../sim/cosmetics";
 
 /** Meshes on this layer render only through the viewmodel camera. */
@@ -31,32 +33,6 @@ const DEG_TO_RAD = Math.PI / 180;
  */
 export const VIEWMODEL_FOV_DEGREES = 45;
 
-const POSE = {
-  /**
-   * Hip-fire rest pose, right of centre and low.
-   *
-   * The z figure is what keeps the weapon in proportion. Its parts run from
-   * roughly a quarter metre behind the origin to two thirds of a metre ahead,
-   * so a small z puts the stock level with the eye, where perspective blows
-   * the near end up until it swallows the screen.
-   */
-  hip: { x: 0.13, y: -0.095, z: 0.40 },
-  /** Pulled in and tilted when sprinting, so the sights are plainly unusable. */
-  sprint: { x: 0.14, y: -0.15, z: 0.32 },
-  sprintRoll: -0.42,
-  sprintPitch: 0.30,
-  sprintYaw: 0.34,
-  /** Lowered and rolled during a reload. */
-  reload: { x: 0.11, y: -0.23, z: 0.34 },
-  reloadRoll: 0.55,
-  reloadPitch: 0.42,
-  /** Dropped out of frame while a swap is in progress. */
-  swap: { x: 0.105, y: -0.40, z: 0.36 },
-  swapPitch: 0.55,
-  /** Distance the weapon sits at when aimed. */
-  aimZ: 0.30,
-} as const;
-
 const SWAY = {
   /** Metres of lag per radian of look movement. */
   positionPerRadian: 0.16,
@@ -69,17 +45,6 @@ const SWAY = {
 } as const;
 
 const BOB = { amount: 0.016, roll: 0.022, frequency: 0.55 } as const;
-
-const RECOIL = {
-  /** Metres the weapon travels back per unit of kick. */
-  back: 0.055,
-  up: 0.018,
-  pitch: 1.9,
-  /** Random roll per shot, so a burst does not look stamped. */
-  roll: 0.5,
-  /** Fraction of the kick left after one second. */
-  recovery: 0.000002,
-} as const;
 
 /**
  * The weapon viewmodel.
@@ -187,7 +152,7 @@ export class ViewmodelRig {
 
   /** Kick the weapon. Called once per shot. */
   addRecoil(strength: number, randomRoll: number): void {
-    this.recoilAmount = Math.min(2.4, this.recoilAmount + strength);
+    this.recoilAmount = Math.min(RECOIL.maxAccumulated, this.recoilAmount + strength);
     this.recoilRoll = (randomRoll * 2 - 1) * RECOIL.roll;
   }
 
@@ -269,15 +234,12 @@ export class ViewmodelRig {
     swapping: number,
     deltaSeconds: number,
   ): void {
-    // Aiming puts the sight on the screen centre: cancel the sight's own
-    // offset rather than guessing a pose, so every weapon lines up exactly.
-    const aimX = -model.sight.x;
-    const aimY = -model.sight.y;
-    const aimZ = POSE.aimZ;
-
-    let x = POSE.hip.x + (aimX - POSE.hip.x) * ads;
-    let y = POSE.hip.y + (aimY - POSE.hip.y) * ads;
-    let z = POSE.hip.z + (aimZ - POSE.hip.z) * ads;
+    // Where the weapon is held comes from the shared geometry, so the pose a
+    // test inspects is the pose the player is given.
+    const rest = holdPosition(model.spec, ads);
+    let x = rest.x;
+    let y = rest.y;
+    let z = rest.z;
     let pitch = 0;
     let yaw = 0;
     let roll = 0;
@@ -319,10 +281,14 @@ export class ViewmodelRig {
     pitch += -this.swayY * SWAY.rotationPerRadian * 8 * swayScale;
 
     // Recoil: back, up and rotated, easing out over the following frames.
-    z -= this.recoilAmount * RECOIL.back;
-    y += this.recoilAmount * RECOIL.up;
-    pitch -= this.recoilAmount * RECOIL.pitch * DEG_TO_RAD * 10;
-    roll += this.recoilRoll;
+    // The amounts come from recoilPose so the rule they have to obey — that
+    // the weapon never climbs over what the player is shooting at — can be
+    // asserted against the same numbers the renderer uses.
+    const kick = recoilPose(this.recoilAmount, ads, headroomDegrees(model.spec, ads));
+    z -= kick.back;
+    y += kick.up;
+    pitch -= kick.pitch;
+    roll += this.recoilRoll * kick.rollScale;
 
     // One last smoothing pass so no pose change can pop in a single frame.
     this.position.set(x, y, z);

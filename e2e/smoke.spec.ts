@@ -130,8 +130,11 @@ test("boots, builds the level, and renders frames", async ({ page }) => {
   // Every brush is merged into one mesh per surface kind, so a handful of
   // visible meshes is the whole level.
   expect(state.activeMeshes).toBeGreaterThan(0);
-  // Five merged level meshes, three per practice target, and the viewmodel.
-  expect(state.activeMeshes).toBeLessThan(60);
+  // The merged level surfaces, three meshes per practice target, the map's
+  // landmarks and the weapon in hand. The ceiling is about draw calls on a
+  // phone rather than an exact count, so it has room for the map to grow —
+  // but not room for the merge to quietly stop happening.
+  expect(state.activeMeshes).toBeLessThan(120);
   expect(["low", "medium", "high"]).toContain(state.quality);
   expect(errors).toEqual([]);
 });
@@ -258,12 +261,16 @@ test("reloading refills the magazine from the reserve", async ({ page }) => {
   expect(reloaded.weapon.reserve).toBeLessThan(spent.weapon.reserve);
 });
 
-test("aiming raises the sights and lowering them releases", async ({ page }) => {
+test("aiming is a toggle: one tap raises the sights, the next drops them", async ({ page }) => {
+  // A phone has no spare thumb to hold an aim button down with, so the sights
+  // latch. Releasing the button must not drop them, which is the whole point.
   await bootGame(page);
   await button(page, "btn-aim", true);
+  await button(page, "btn-aim", false);
   await page.waitForTimeout(500);
   expect((await readState(page)).weapon.ads).toBeGreaterThan(0.9);
 
+  await button(page, "btn-aim", true);
   await button(page, "btn-aim", false);
   await page.waitForTimeout(500);
   expect((await readState(page)).weapon.ads).toBeLessThan(0.1);
@@ -320,6 +327,35 @@ test("the weapon viewmodel is on screen", async ({ page }) => {
   expect(position!.x).toBeLessThan(0.95);
   expect(position!.y).toBeGreaterThan(0.05);
   expect(position!.y).toBeLessThan(0.95);
+});
+
+test("the weapon stays below the crosshair through a burst", async ({ page }) => {
+  /*
+   * Recoil degrades a player's aim; it must never degrade their vision. The
+   * pose maths is pinned by unit tests, but only this says the weapon on the
+   * real screen stays out of the way of what the player is shooting at — and
+   * that it is on the screen at all, which a single stray NaN is enough to
+   * undo without raising an error.
+   */
+  await bootGame(page);
+  await button(page, "btn-aim", true);
+  await button(page, "btn-aim", false);
+  await page.waitForTimeout(600);
+
+  const resting = await page.evaluate(() => window.__shootout.weaponScreenPosition());
+  expect(resting).not.toBeNull();
+  expect(Number.isFinite(resting!.y)).toBe(true);
+  // Centred left to right, because aiming lines the sight up with the middle.
+  expect(resting!.x).toBeCloseTo(0.5, 1);
+
+  await button(page, "btn-fire", true);
+  for (let i = 0; i < 8; i += 1) {
+    await page.waitForTimeout(120);
+    const position = await page.evaluate(() => window.__shootout.weaponScreenPosition());
+    // Well into the lower half of the screen, every frame of the burst.
+    expect(position!.y).toBeGreaterThan(0.6);
+  }
+  await button(page, "btn-fire", false);
 });
 
 test("the navigation grid is built from the level", async ({ page }) => {
