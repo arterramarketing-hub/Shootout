@@ -157,16 +157,32 @@ const isDifficulty = (value: unknown): value is BotDifficulty["id"] =>
 export const DEFAULT_SERVER_PORT = 8080;
 
 /**
+ * The public server this build is published against.
+ *
+ * Here rather than in a deployment variable because it is a fact about the
+ * game, it is not a secret, and someone opening a link should not have to be
+ * told a second thing before they can play.
+ */
+export const PUBLISHED_SERVER_URL = "wss://shootout-server.onrender.com";
+
+/**
  * Where to look for a server when the player has not named one.
  *
- * A server running on the same machine as the page is the common case by a
- * distance — it is how you test before you host anything — and making someone
- * type their own address for it is friction with nothing behind it. The scheme
- * follows the page's: a page served over https cannot open an insecure socket,
- * so guessing `ws://` there would fail in a way that looks like the server is
- * down rather than like a mismatch.
+ * The page's own scheme decides, and it is a better signal than the hostname.
+ * A page served over plain http is a development one — `npm run play` on this
+ * machine, or the same thing reached across a room from a phone — and the
+ * server it means is the one on whatever host served it. A page served over
+ * https is the published game, and the server it means is the published one.
+ *
+ * The scheme also has to match either way: a secure page cannot open an
+ * insecure socket, and guessing `ws://` from https fails in a way that looks
+ * like the server being down rather than a mismatch anyone could fix.
  */
-export const defaultServerUrl = (location: { protocol: string; hostname: string }): string => {
+export const defaultServerUrl = (
+  location: { protocol: string; hostname: string },
+  published: string = PUBLISHED_SERVER_URL,
+): string => {
+  if (location.protocol === "https:" && published) return published;
   const scheme = location.protocol === "https:" ? "wss" : "ws";
   const host = location.hostname === "" ? "localhost" : location.hostname;
   return `${scheme}://${host}:${DEFAULT_SERVER_PORT}`;

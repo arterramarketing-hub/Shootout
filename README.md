@@ -414,11 +414,17 @@ web form, so deploying is connecting the repo and confirming. Render supplies
 `PORT`, which the server already reads, and serves it over https, which means
 the socket is `wss://` and a published build can reach it.
 
-The address then goes in one place: a repository variable named `SERVER_URL`
-(Settings → Secrets and variables → Actions → Variables). The Pages workflow
-passes it to the build, and the published game connects there without anyone
-opening the settings screen — which is the only version of "send your friends a
-link" that actually works.
+The address of the server this build is published against lives in
+`PUBLISHED_SERVER_URL` in `src/engine/settings.ts`. A build served over https
+uses it; a build served over plain http looks for a server on whatever host
+served the page instead, because http is the development case — `npm run play`
+on this machine, or the same thing reached from a phone across the room — and
+sending that out to the internet would leave the local server looking broken
+for reasons nothing on screen explains.
+
+A `SERVER_URL` repository variable (Settings → Secrets and variables → Actions
+→ Variables) overrides it at build time without editing the source, and the
+player's own setting overrides everything.
 
 Free instances sleep after about fifteen minutes with nobody connected and take
 roughly a minute to wake, so the first player to join after a quiet spell waits

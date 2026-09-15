@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SERVER_PORT, defaultServerUrl } from "../src/engine/settings";
+import {
+  DEFAULT_SERVER_PORT,
+  PUBLISHED_SERVER_URL,
+  defaultServerUrl,
+} from "../src/engine/settings";
 
 /**
  * Leaving the server field blank means "a server on this machine", which is
@@ -19,9 +23,34 @@ describe("defaultServerUrl", () => {
     expect(url).toBe(`ws://192.168.1.24:${DEFAULT_SERVER_PORT}`);
   });
 
-  it("asks for a secure socket from a secure page", () => {
+  it("sends the published game to the published server", () => {
+    // Someone opening the link should not have to be told a second thing
+    // before they can play.
     const url = defaultServerUrl({ protocol: "https:", hostname: "example.github.io" });
+    expect(url).toBe(PUBLISHED_SERVER_URL);
+  });
+
+  it("asks for a secure socket from a secure page with no published server", () => {
+    const url = defaultServerUrl({ protocol: "https:", hostname: "example.github.io" }, "");
     expect(url).toBe(`wss://example.github.io:${DEFAULT_SERVER_PORT}`);
+  });
+
+  it("leaves local play pointed at the machine serving the page", () => {
+    /*
+     * The trap this avoids: a published server address used as a blanket
+     * fallback sends someone testing on their own machine out to the internet
+     * instead of to the server they just started, and the local one then looks
+     * broken for reasons nothing on screen explains.
+     */
+    expect(defaultServerUrl({ protocol: "http:", hostname: "localhost" }))
+      .toBe(`ws://localhost:${DEFAULT_SERVER_PORT}`);
+    // A phone reaching the same dev server across the room means that machine.
+    expect(defaultServerUrl({ protocol: "http:", hostname: "192.168.1.24" }))
+      .toBe(`ws://192.168.1.24:${DEFAULT_SERVER_PORT}`);
+  });
+
+  it("publishes a secure address, since an insecure one a secure page cannot open", () => {
+    expect(PUBLISHED_SERVER_URL.startsWith("wss://")).toBe(true);
   });
 
   it("falls back to localhost for a page opened from a file", () => {
