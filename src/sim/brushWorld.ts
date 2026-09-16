@@ -119,7 +119,7 @@ export class CapsuleController implements CollisionWorld {
         const centre = vec3(this.position.x, this.position.y + span * t, this.position.z);
 
         let deepest: { depth: number; normal: Vec3 } | null = null;
-        for (const box of this.world.solids) {
+        for (const box of this.world.solidsNear(centre, this.radius)) {
           if (!sphereNearBox(box, centre, this.radius)) continue;
           const hit = sphereObb(box, centre, this.radius);
           if (!hit || hit.depth <= 0) continue;
@@ -148,9 +148,31 @@ const sphereNearBox = (box: Obb, centre: Vec3, radius: number): boolean =>
   centre.z + radius >= box.minZ &&
   centre.z - radius <= box.maxZ;
 
+/**
+ * Size of a broadphase cell, in metres.
+ *
+ * A few times the largest thing that moves. Smaller cells put a long wall
+ * into hundreds of them; larger ones hand every query most of the level.
+ */
+const CELL = 4;
+
 export class BrushWorld implements HitscanWorld {
   readonly solids: Obb[] = [];
   private readonly hitboxes = new Map<string, Hitbox[]>();
+  /**
+   * Which solids overlap each column of the level, on a grid over the ground.
+   *
+   * A level made of a few dozen boxes could afford to test every one of them
+   * against every ray and every capsule. A building with a frame — columns,
+   * beams, spandrels, rail — runs to several hundred, and the server resolves
+   * a dozen capsules against all of it sixty times a second. Bucketing by
+   * ground cell means a query only ever sees what is actually near it.
+   */
+  private readonly cells = new Map<number, number[]>();
+  /** Scratch for deduplicating a query's results without allocating. */
+  private readonly stamp: Uint32Array;
+  private query = 0;
+  private readonly scratch: Obb[] = [];
 
   constructor(brushes: readonly BoxBrush[]) {
     for (const brush of brushes) {
@@ -163,6 +185,43 @@ export class BrushWorld implements HitscanWorld {
           brush.pitch ?? 0,
         ),
       );
+    }
+    this.stamp = new Uint32Array(this.solids.length);
+    for (const [index, box] of this.solids.entries()) {
+      for (let cx = cellOf(box.minX); cx <= cellOf(box.maxX); cx += 1) {
+        for (let cz = cellOf(box.minZ); cz <= cellOf(box.maxZ); cz += 1) {
+          const key = cellKey(cx, cz);
+          const bucket = this.cells.get(key);
+          if (bucket) bucket.push(index);
+          else this.cells.set(key, [index]);
+        }
+      }
+    }
+  }
+
+  /** Every solid that could touch a sphere. A superset, never a subset. */
+  solidsNear(centre: Vec3, radius: number): readonly Obb[] {
+    this.beginQuery();
+    for (let cx = cellOf(centre.x - radius); cx <= cellOf(centre.x + radius); cx += 1) {
+      for (let cz = cellOf(centre.z - radius); cz <= cellOf(centre.z + radius); cz += 1) {
+        this.gather(cx, cz);
+      }
+    }
+    return this.scratch;
+  }
+
+  private beginQuery(): void {
+    this.query += 1;
+    this.scratch.length = 0;
+  }
+
+  private gather(cx: number, cz: number): void {
+    const bucket = this.cells.get(cellKey(cx, cz));
+    if (!bucket) return;
+    for (const index of bucket) {
+      if (this.stamp[index] === this.query) continue;
+      this.stamp[index] = this.query;
+      this.scratch.push(this.solids[index]);
     }
   }
 
@@ -233,10 +292,10 @@ export class BrushWorld implements HitscanWorld {
 
   raycastSolids(origin: Vec3, direction: Vec3, maxDistance: number): RayHit | null {
     let best: RayHit | null = null;
-    for (const box of this.solids) {
-      if (!segmentNearBox(box, origin, direction, best ? best.distance : maxDistance)) continue;
+    const consider = (box: Obb): void => {
+      if (!segmentNearBox(box, origin, direction, best ? best.distance : maxDistance)) return;
       const hit = rayObb(box, origin, direction, best ? best.distance : maxDistance);
-      if (!hit) continue;
+      if (!hit) return;
       best = {
         distance: hit.distance,
         point: vec3(
@@ -248,10 +307,56 @@ export class BrushWorld implements HitscanWorld {
         targetId: null,
         headshot: false,
       };
+    };
+
+    // Walk the ground cells the ray passes over, nearest first, and stop as
+    // soon as the nearest hit so far is closer than the next cell: nothing
+    // beyond it can beat it.
+    this.beginQuery();
+    let cx = cellOf(origin.x);
+    let cz = cellOf(origin.z);
+    const endX = cellOf(origin.x + direction.x * maxDistance);
+    const endZ = cellOf(origin.z + direction.z * maxDistance);
+    const stepX = direction.x > 0 ? 1 : direction.x < 0 ? -1 : 0;
+    const stepZ = direction.z > 0 ? 1 : direction.z < 0 ? -1 : 0;
+    // Distance along the ray to the next cell boundary on each axis, and the
+    // distance one whole cell costs.
+    const deltaX = stepX === 0 ? Infinity : Math.abs(CELL / direction.x);
+    const deltaZ = stepZ === 0 ? Infinity : Math.abs(CELL / direction.z);
+    let nextX =
+      stepX === 0
+        ? Infinity
+        : ((stepX > 0 ? (cx + 1) * CELL : cx * CELL) - origin.x) / direction.x;
+    let nextZ =
+      stepZ === 0
+        ? Infinity
+        : ((stepZ > 0 ? (cz + 1) * CELL : cz * CELL) - origin.z) / direction.z;
+
+    for (let guard = 0; guard < 4096; guard += 1) {
+      this.gather(cx, cz);
+      for (const box of this.scratch) consider(box);
+      this.scratch.length = 0;
+
+      const entry = Math.min(nextX, nextZ);
+      if (entry > maxDistance) break;
+      if (best !== null && (best as RayHit).distance <= entry) break;
+      if (cx === endX && cz === endZ) break;
+      if (nextX < nextZ) {
+        cx += stepX;
+        nextX += deltaX;
+      } else {
+        cz += stepZ;
+        nextZ += deltaZ;
+      }
     }
     return best;
   }
 }
+
+const cellOf = (value: number): number => Math.floor(value / CELL);
+
+/** One integer per cell, for a Map that must not allocate a string a query. */
+const cellKey = (cx: number, cz: number): number => (cx + 32768) * 65536 + (cz + 32768);
 
 /** Cheap rejection: does the ray's own bounding box overlap the brush's? */
 const segmentNearBox = (

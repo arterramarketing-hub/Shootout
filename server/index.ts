@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import { greyboxMap } from "../src/maps/greybox";
+import { DEFAULT_MAP_ID, mapById } from "../src/maps";
 import {
   DIFFICULTIES,
   botAsCombatant,
@@ -94,8 +94,11 @@ interface HumanPlayer {
   firing: boolean;
 }
 
-const world = new BrushWorld(greyboxMap.brushes);
-const nav = bakeNavGrid(world);
+/** Which level this server runs. One server, one map, chosen at launch. */
+const MAP = mapById(process.env.MAP ?? DEFAULT_MAP_ID);
+
+const world = new BrushWorld(MAP.brushes);
+const nav = bakeNavGrid(world, MAP.nav);
 const random = createRandom(0x9e3779b9);
 
 const humans = new Map<string, HumanPlayer>();
@@ -190,7 +193,7 @@ const displayName = (id: string): { name: string; team: Team } => {
 
 /** Spawn point for a team, as far as possible from living enemies. */
 const chooseSpawn = (team: Team, self: string): { position: Vec3; yaw: number } => {
-  const options = greyboxMap.spawns.filter((point) => point.team === team);
+  const options = MAP.spawns.filter((point) => point.team === team);
   const enemies = combatants().filter(
     (entry) => entry.alive && isEnemy({ id: self, team }, entry),
   );
@@ -771,7 +774,7 @@ server.on("connection", (socket) => {
           team,
           tickRate: SERVER_TICK_RATE,
           mode: MODE,
-          mapId: greyboxMap.id,
+          mapId: MAP.id,
           serverTime: now(),
         }),
       );

@@ -165,13 +165,16 @@ const heuristic = (grid: NavGrid, a: NavNode, b: NavNode): number => {
  * A* between two nodes. Returns world positions, start excluded.
  *
  * `maxVisited` caps the work one call can do, so a bot asking for an
- * unreachable destination cannot stall a frame.
+ * unreachable destination cannot stall a frame. It scales with the grid:
+ * a fixed few thousand was plenty for a hall on one floor and not nearly
+ * enough for a building three storeys high, where a route to the far side
+ * legitimately visits most of the grid before it finds the way up.
  */
 export const findPath = (
   grid: NavGrid,
   startIndex: number,
   goalIndex: number,
-  maxVisited = 4000,
+  maxVisited = Math.max(4000, grid.nodes.length * 2),
 ): Vec3[] | null => {
   if (startIndex === goalIndex) return [];
   const start = grid.nodes[startIndex];

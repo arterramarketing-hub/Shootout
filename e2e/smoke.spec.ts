@@ -22,7 +22,7 @@ interface GameState {
 
 /** The development handle the game exposes on `window`. */
 interface DebugHandle extends GameState {
-  teleport: (x: number, z: number, yaw?: number) => void;
+  teleport: (x: number, z: number, yaw?: number, y?: number) => void;
   weaponScreenPosition: () => { x: number; y: number } | null;
   startMatch: () => void;
   match: {
@@ -659,6 +659,38 @@ test.describe("maps and progression", () => {
     const bots = await page.evaluate(() => window.__shootout.bots);
     expect(bots.length).toBeGreaterThan(0);
     for (const bot of bots) expect(bot.position.y).toBeLessThan(5);
+  });
+
+  test("the ruined plant loads, with three floors of navigation", async ({ page }) => {
+    /*
+     * Boulevard Works is several times the geometry of either hall, stacked
+     * three high, with a bridge in the air. It has to load in the same blink
+     * on a phone, and its bots have to stay off the roofs.
+     */
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "shootout.settings.v1",
+        JSON.stringify({ mapId: "boulevard", online: false, audioEnabled: false }),
+      );
+    });
+    await page.goto("/");
+    await page.waitForFunction(() => window.__shootout?.ready === true, null, {
+      timeout: 30_000,
+    });
+    await page.getByRole("button", { name: "DEPLOY" }).click();
+    await page.waitForTimeout(3000);
+
+    expect(await page.evaluate(() => window.__shootout.map.id)).toBe("boulevard");
+    const nav = await page.evaluate(() => window.__shootout.nav);
+    expect(nav.nodes).toBeGreaterThan(8000);
+    expect(nav.millis).toBeLessThan(1500);
+
+    const bots = await page.evaluate(() => window.__shootout.bots);
+    expect(bots.length).toBeGreaterThan(0);
+    for (const bot of bots) expect(bot.position.y).toBeLessThan(9.6);
+    expect(errors).toEqual([]);
   });
 
   test("a new player carries two weapons, not four", async ({ page }) => {

@@ -70,7 +70,7 @@ describe.each(MAP_IDS)("%s", (id) => {
 
   it("bakes a navigation grid a bot can actually cross", () => {
     const world = new BrushWorld(map.brushes);
-    const result = bakeNavGrid(world);
+    const result = bakeNavGrid(world, map.nav);
     expect(result.grid.nodes.length).toBeGreaterThan(800);
 
     // Every spawn must stand on navigable ground, or bots start stranded.

@@ -19,7 +19,14 @@ export interface NavBakeOptions {
   headroom: number;
   /** Surfaces steeper than this are not walkable. About 33 degrees. */
   maxSlopeNormalY: number;
-  /** How many stacked surfaces to record per cell. */
+  /**
+   * How many walkable surfaces to record per cell.
+   *
+   * Only surfaces a bot can stand on count. The ray also meets beams, roof
+   * decks and the undersides of things on its way down, and if those spent
+   * the budget a building with a frame would lose its ground floor along
+   * every grid line — which chops it into islands the size of one bay.
+   */
   maxLayers: number;
 }
 
@@ -50,9 +57,10 @@ export interface NavBakeResult {
  */
 export const bakeNavGrid = (
   world: BrushWorld,
-  options: NavBakeOptions = DEFAULT_NAV_BAKE,
+  overrides: Partial<NavBakeOptions> = {},
 ): NavBakeResult => {
   const started = Date.now();
+  const options: NavBakeOptions = { ...DEFAULT_NAV_BAKE, ...overrides };
   const { cellSize, halfExtent, ceilingY, headroom, maxSlopeNormalY, maxLayers, maxWalkableY } =
     options;
 
@@ -68,7 +76,11 @@ export const bakeNavGrid = (
       const z = -halfExtent + row * cellSize;
       let searchFrom = ceilingY;
 
-      for (let layer = 0; layer < maxLayers; layer += 1) {
+      let found = 0;
+      // Bounded separately from the walkable count, so a column of clutter
+      // cannot keep the search going forever, and generously enough that it
+      // still reaches the floor under three storeys of structure.
+      for (let step = 0; step < maxLayers * 4 && found < maxLayers; step += 1) {
         const hit = world.raycast(vec3(x, searchFrom, z), down, searchFrom + 1);
         raycasts += 1;
         if (!hit) break;
@@ -78,7 +90,10 @@ export const bakeNavGrid = (
         if (walkable) {
           const clear = world.raycast(vec3(x, surfaceY + 0.15, z), up, headroom);
           raycasts += 1;
-          if (!clear) addNode(grid, col, row, surfaceY);
+          if (!clear) {
+            addNode(grid, col, row, surfaceY);
+            found += 1;
+          }
         }
 
         // Keep searching underneath, which is what finds the floor below the

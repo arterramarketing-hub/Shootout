@@ -1,3 +1,4 @@
+import { boulevardMap } from "./boulevard";
 import { greyboxMap } from "./greybox";
 import { substationMap } from "./substation";
 import type { MapDefinition } from "./types";
@@ -5,6 +6,7 @@ import type { MapDefinition } from "./types";
 export const MAPS: Record<string, MapDefinition> = {
   warehouse: greyboxMap,
   substation: substationMap,
+  boulevard: boulevardMap,
 };
 
 export const MAP_IDS = Object.keys(MAPS);

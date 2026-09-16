@@ -1,5 +1,7 @@
 import "@babylonjs/core/Meshes/Builders/boxBuilder";
+import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
+import { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascadedShadowGenerator";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3, Vector4 } from "@babylonjs/core/Maths/math.vector";
@@ -7,6 +9,7 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { Scene } from "@babylonjs/core/scene";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
+import type { Camera } from "@babylonjs/core/Cameras/camera";
 import type { QualitySettings } from "../engine/quality";
 import type { BoxBrush, MapDefinition, SurfaceKind } from "../maps/types";
 import { TEXEL_METRES, createMaterialLibrary } from "./materials";
@@ -15,6 +18,8 @@ export interface BuiltScene {
   scene: Scene;
   /** One merged mesh per surface kind. Keeps the draw call count in single digits. */
   staticMeshes: Mesh[];
+  /** The sun, for anything that wants to hang shadows off it. */
+  key: DirectionalLight;
 }
 
 export const createScene = (
@@ -26,7 +31,10 @@ export const createScene = (
   const scene = new Scene(engine);
   const fog = Color3.FromHexString(style.fog);
 
-  scene.clearColor = new Color4(fog.r * 0.5, fog.g * 0.5, fog.b * 0.55, 1);
+  // The sky is whatever is drawn where the level is not. An interior wants
+  // the fog's own darkness there; a street wants a sky.
+  const sky = style.sky ? Color3.FromHexString(style.sky) : fog.scale(0.5);
+  scene.clearColor = new Color4(sky.r, sky.g, sky.b, 1);
   // Ambient lifts the shadowed side of every surface. Without it, vertical
   // walls facing away from the key light read as flat black, and a player
   // standing in one is invisible rather than merely hard to see.
@@ -39,22 +47,67 @@ export const createScene = (
 
   if (quality.fog) {
     scene.fogMode = Scene.FOGMODE_LINEAR;
-    scene.fogColor = fog.scale(0.55);
+    // Fog fades into the sky where there is one, so a distant roofline
+    // dissolves into blue rather than into a grey that the sky is not.
+    scene.fogColor = style.sky ? fog : fog.scale(0.55);
     scene.fogStart = quality.viewDistance * 0.4;
     scene.fogEnd = quality.viewDistance;
   }
 
-  buildLighting(scene, map);
+  const key = buildLighting(scene, map);
   const staticMeshes = buildMap(scene, map, quality.tier === "high" ? 4 : 1);
 
-  return { scene, staticMeshes };
+  return { scene, staticMeshes, key };
 };
 
-const buildLighting = (scene: Scene, map: MapDefinition): void => {
+/**
+ * Sun shadows, on the tier that can afford them.
+ *
+ * Shadow is what makes a frame read as a frame: without it a column in front
+ * of a wall and a column painted on it are the same picture. Cascaded so the
+ * near cascade can afford to be sharp across a street and the far one only
+ * has to be there. Only the level casts and receives; the weapon has its own
+ * camera, and everything that moves is cheap enough to leave unlit rather
+ * than redraw the shadow map for.
+ *
+ * Takes the camera it is fitted to, and it must be the world camera: the
+ * weapon renders through a second one whose far plane is five metres, and a
+ * cascade fitted to that frustum shadows nothing the player can see. It is a
+ * constructor argument rather than a property set afterward, because setting
+ * it afterward rebuilds the shadow map and quietly drops every caster added
+ * before.
+ */
+export const addSunShadows = (built: BuiltScene, camera: Camera): CascadedShadowGenerator => {
+  const { scene, key, staticMeshes: meshes } = built;
+  const generator = new CascadedShadowGenerator(1024, key, false, camera);
+  generator.numCascades = 2;
+  generator.lambda = 0.85;
+  generator.shadowMaxZ = 90;
+  generator.stabilizeCascades = true;
+  generator.usePercentageCloserFiltering = true;
+  generator.filteringQuality = CascadedShadowGenerator.QUALITY_MEDIUM;
+  generator.bias = 0.004;
+  generator.normalBias = 0.03;
+  for (const mesh of meshes) {
+    generator.addShadowCaster(mesh, false);
+    mesh.receiveShadows = true;
+  }
+  // The level's materials were frozen before shadows existed. Thaw and
+  // refreeze so the next compile sees the receivers.
+  for (const material of scene.materials) {
+    if (!material.isFrozen) continue;
+    material.unfreeze();
+    material.freeze();
+  }
+  return generator;
+};
+
+const buildLighting = (scene: Scene, map: MapDefinition): DirectionalLight => {
   const style = map.style;
 
   // Two lights only. A hemispheric fill for shape, one directional for
-  // direction. Real-time shadows stay off on every mobile tier.
+  // direction. Its shadows are added below, on the one tier that can afford
+  // them.
   const fill = new HemisphericLight("fill", new Vector3(0.15, 1, 0.1), scene);
   fill.intensity = style.fillIntensity;
   fill.diffuse = Color3.FromHexString(style.skyLight);
@@ -73,6 +126,7 @@ const buildLighting = (scene: Scene, map: MapDefinition): void => {
   key.intensity = style.keyIntensity;
   key.diffuse = Color3.FromHexString(style.keyLight);
   key.specular = new Color3(0.16, 0.16, 0.16);
+  return key;
 };
 
 /**

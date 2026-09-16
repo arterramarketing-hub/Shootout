@@ -80,7 +80,7 @@ import { INTERPOLATION_DELAY_MS, type SnapshotMessage } from "./net/protocol";
 import { BotField } from "./view/botView";
 import { CameraRig } from "./view/cameraRig";
 import { ShotEffects } from "./view/effects";
-import { createScene } from "./view/scene";
+import { addSunShadows, createScene } from "./view/scene";
 import { TargetField } from "./view/targetView";
 import { ViewmodelRig, WORLD_LAYER } from "./view/viewmodel";
 
@@ -135,8 +135,10 @@ const boot = (): void => {
     activeMap = map;
     scene?.dispose();
 
-    scene = createScene(engine, map, quality).scene;
+    const built = createScene(engine, map, quality);
+    scene = built.scene;
     rig = new CameraRig(scene, quality, settings.fovDegrees);
+    if (quality.shadows) addSunShadows(built, rig.camera);
     viewmodel = new ViewmodelRig(scene);
     // The world camera must not draw the weapon, and the weapon camera must
     // not draw the world. Babylon clears depth between them, so the weapon
@@ -154,7 +156,7 @@ const boot = (): void => {
     botField = new BotField(scene);
 
     // The navigation grid is baked once per map, from the level itself.
-    nav = bakeNavGrid(world);
+    nav = bakeNavGrid(world, activeMap.nav);
     console.info(
       `[shootout] ${map.name}: ${nav.grid.nodes.length} nav nodes, ` +
         `${nav.raycasts} rays, ${nav.pruned} pruned, ${nav.millis} ms`,
@@ -178,6 +180,7 @@ const boot = (): void => {
   const playerLoadout = createLoadout(carried());
   const random = createRandom(0x51f2a3);
   let previousPosition = copy(player.position);
+  let debugInvulnerable = false;
   let playerRespawnTimer = 0;
 
   const match: MatchState = createMatch({ ...DEFAULT_MATCH, teamSize: settings.teamSize });
@@ -437,7 +440,7 @@ const boot = (): void => {
         // The bearing is measured from the victim to the shooter, which is
         // where the player has to look to find them.
         const bearing = bearingTo(player.position, attackerOrigin);
-        killed = applyDamage(playerHealth, entry.damage, bearing);
+        killed = debugInvulnerable ? false : applyDamage(playerHealth, entry.damage, bearing);
         hud.showDamageFrom(bearing);
         if (killed) playerRespawnTimer = match.config.respawnSeconds;
       } else {
@@ -1124,8 +1127,9 @@ const boot = (): void => {
         };
       },
       /** Development helper: drop the player at a spot on the map. */
-      teleport(x: number, z: number, yaw?: number) {
-        body.setPosition(vec3(x, player.halfHeight + 0.05, z));
+      teleport(x: number, z: number, yaw?: number, y = 0) {
+        // `y` is the floor height to land on, for maps with floors stacked.
+        body.setPosition(vec3(x, y + player.halfHeight + 0.05, z));
         player.velocity.x = 0;
         player.velocity.y = 0;
         player.velocity.z = 0;
@@ -1135,6 +1139,13 @@ const boot = (): void => {
       /** Development helper: exercise the health and damage HUD. */
       hurt(amount: number) {
         applyDamage(playerHealth, amount, player.yaw);
+      },
+      /**
+       * Development helper: stop the bots from ending a screenshot session.
+       * Nothing in the game reads this; it is set from the console only.
+       */
+      set invulnerable(value: boolean) {
+        debugInvulnerable = value;
       },
       /**
        * Development helper: where the weapon sits on screen, as a fraction of

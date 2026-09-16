@@ -1,4 +1,29 @@
-export type SurfaceKind = "floor" | "wall" | "prop" | "accent" | "catwalk" | "hazard";
+import type { NavBakeOptions } from "../sim/navBake";
+
+/**
+ * What a brush is made of, which decides its texture and its shine.
+ *
+ * The first six are the industrial-interior set the early maps were built
+ * from. The rest arrived with the ruined factory: an exposed concrete frame
+ * with brick between the columns needs materials that read as brick, as
+ * stained structural concrete and as corrugated sheet, none of which a wall
+ * panel or a crate can be tinted into.
+ */
+export type SurfaceKind =
+  | "floor"
+  | "wall"
+  | "prop"
+  | "accent"
+  | "catwalk"
+  | "hazard"
+  | "brick"
+  | "frame"
+  | "cladding"
+  | "spandrel"
+  | "asphalt"
+  | "rubble"
+  | "foliage"
+  | "graffiti";
 
 export interface BoxBrush {
   kind: SurfaceKind;
@@ -55,8 +80,23 @@ export interface MapStyle {
   grate: string;
   hazard: string;
   hazardStripe: string;
+  /** The ruin set: brickwork, structural concrete, sheet metal, paint, road. */
+  brick: string;
+  frame: string;
+  cladding: string;
+  spandrel: string;
+  asphalt: string;
+  rubble: string;
+  foliage: string;
+  graffiti: string;
   /** Fog and the colour beyond the level's edges. */
   fog: string;
+  /**
+   * What is drawn where there is no level: the sky. Left out, the fog colour
+   * stands in for it, which suits an interior with no horizon and not a
+   * street with a roofline against a blue sky.
+   */
+  sky?: string;
   /** Overhead fill and the warmer bounce coming back off the floor. */
   skyLight: string;
   groundLight: string;
@@ -84,6 +124,13 @@ export interface MapDefinition {
   /** Playable bounds, used for the minimap and out-of-bounds checks. */
   size: number;
   brushes: BoxBrush[];
+  /**
+   * How the navigation grid is sampled for this map, where the defaults do
+   * not fit. A single-storey hall never needs this; a building with floors
+   * stacked three high has to say how high its ceiling is, how far up a
+   * bot may go, and how many surfaces can lie under one spot.
+   */
+  nav?: Partial<NavBakeOptions>;
   spawns: SpawnPoint[];
   /** Practice targets. Replaced by bots in Phase 2. */
   targets: TargetPlacement[];

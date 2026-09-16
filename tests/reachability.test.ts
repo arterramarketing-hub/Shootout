@@ -91,7 +91,7 @@ describe.each(MAP_IDS)("%s is not a trap", (id) => {
 
   it("connects the whole navigable level into one piece", () => {
     const world = new BrushWorld(map.brushes);
-    const { grid } = bakeNavGrid(world);
+    const { grid } = bakeNavGrid(world, map.nav);
 
     const component = new Int32Array(grid.nodes.length).fill(-1);
     const sizes: number[] = [];

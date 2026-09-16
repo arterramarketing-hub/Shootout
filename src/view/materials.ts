@@ -17,6 +17,14 @@ const SURFACES: Record<SurfaceKind, { texture: SurfaceTextureId; specular: numbe
   accent: { texture: "metal", specular: 0.14, power: 48 },
   catwalk: { texture: "grate", specular: 0.1, power: 40 },
   hazard: { texture: "hazard", specular: 0.06, power: 24 },
+  brick: { texture: "brick", specular: 0.02, power: 12 },
+  frame: { texture: "frame", specular: 0.03, power: 14 },
+  cladding: { texture: "cladding", specular: 0.18, power: 40 },
+  spandrel: { texture: "spandrel", specular: 0.05, power: 20 },
+  asphalt: { texture: "asphalt", specular: 0.02, power: 10 },
+  rubble: { texture: "rubble", specular: 0.02, power: 10 },
+  foliage: { texture: "foliage", specular: 0.0, power: 8 },
+  graffiti: { texture: "graffiti", specular: 0.04, power: 18 },
 };
 
 /**
