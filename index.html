@@ -101,18 +101,19 @@
 
       <!--
         The right-thumb cluster: fire nearest the thumb's rest and largest,
-        aim above and inward, dodge at the top, reload tucked in beside aim.
-        Each is a dark disc with a glyph and a small label under it.
+        aim above and inward, dodge at the top, reload tucked beside aim. A
+        second fire button mirrors onto the left edge for the other thumb.
       -->
       <div class="controls" id="controls">
-        <button class="pad-button pad-fire" id="btn-fire" type="button" aria-label="Fire"><i class="glyph glyph-ring"></i></button>
-        <button class="pad-button pad-aim" id="btn-aim" type="button" aria-label="Aim down sights"><i class="glyph">&#8982;</i><span class="pad-label">Aim</span></button>
-        <button class="pad-button pad-dodge" id="btn-dodge" type="button" aria-label="Dodge"><i class="glyph">&#991;</i><span class="pad-label">Dodge</span></button>
-        <button class="pad-button pad-reload" id="btn-reload" type="button" aria-label="Reload"><i class="glyph">&#8635;</i><span class="pad-label">Reload</span></button>
+        <button class="pad-button pad-fire" id="btn-fire" type="button" aria-label="Fire">FIRE</button>
+        <button class="pad-button pad-aim" id="btn-aim" type="button" aria-label="Aim down sights">ADS</button>
+        <button class="pad-button pad-dodge" id="btn-dodge" type="button" aria-label="Dodge">DODGE</button>
+        <button class="pad-button pad-reload" id="btn-reload" type="button" aria-label="Reload">RELOAD</button>
+        <button class="pad-button pad-fire pad-fire-left" id="btn-fire-left" type="button" aria-label="Fire">FIRE</button>
       </div>
 
-      <button class="tile" id="btn-debug" type="button" aria-label="Debug readout">DBG</button>
-      <button class="tile tile-board" id="btn-board" type="button" aria-label="Pause and scoreboard">II</button>
+      <button class="chip" id="btn-debug" type="button">DEBUG</button>
+      <button class="chip chip-board" id="btn-board" type="button" aria-label="Pause and scoreboard">BOARD</button>
 
       <!--
         The live board. A separate screen from the end-of-round one: this

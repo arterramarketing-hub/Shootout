@@ -206,6 +206,7 @@ const boot = (): void => {
   input.look.yaw = spawn.yaw;
   input.attachJoystick(byId("joystick-base"), byId("joystick-knob"));
   input.registerButton("fire", byId("btn-fire"));
+  input.registerButton("fire", byId("btn-fire-left"));
   input.registerButton("aim", byId("btn-aim"));
   input.registerButton("reload", byId("btn-reload"));
   input.registerButton("dodge", byId("btn-dodge"));
