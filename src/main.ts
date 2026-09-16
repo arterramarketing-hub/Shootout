@@ -81,10 +81,19 @@ import { BotField } from "./view/botView";
 import { CameraRig } from "./view/cameraRig";
 import { ShotEffects } from "./view/effects";
 import { addSunShadows, createScene } from "./view/scene";
+import type { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascadedShadowGenerator";
 import { TargetField } from "./view/targetView";
 import { ViewmodelRig, WORLD_LAYER } from "./view/viewmodel";
 
 /** Callsigns for the bots. Original, and short enough for a kill feed. */
+/**
+ * How far out along the muzzle's screen ray a tracer starts, in metres.
+ *
+ * Far enough that the tracer clears the drawn barrel; close enough that it
+ * still comes from the gun rather than from a point in front of it.
+ */
+const TRACER_START = 0.9;
+
 const CALLSIGNS = [
   "Mercer", "Vale", "Kestrel", "Odom", "Brant", "Wilder",
   "Nyx", "Corbin", "Ash", "Rell", "Sable", "Tavish",
@@ -129,6 +138,7 @@ const boot = (): void => {
   let targets!: TargetField;
   let effects!: ShotEffects;
   let botField!: BotField;
+  let sun: CascadedShadowGenerator | null = null;
   let nav!: ReturnType<typeof bakeNavGrid>;
 
   const buildWorld = (map: MapDefinition): void => {
@@ -138,7 +148,7 @@ const boot = (): void => {
     const built = createScene(engine, map, quality);
     scene = built.scene;
     rig = new CameraRig(scene, quality, settings.fovDegrees);
-    if (quality.shadows) addSunShadows(built, rig.camera);
+    sun = quality.shadows ? addSunShadows(built, rig.camera) : null;
     viewmodel = new ViewmodelRig(scene);
     // The world camera must not draw the weapon, and the weapon camera must
     // not draw the world. Babylon clears depth between them, so the weapon
@@ -154,6 +164,9 @@ const boot = (): void => {
     targets = new TargetField(scene, map.targets);
     effects = new ShotEffects(scene);
     botField = new BotField(scene);
+    // Figures cast the sun's shadow like the level does; without it they
+    // float over the ground they stand on.
+    botField.onFigure = (mesh) => sun?.addShadowCaster(mesh, false);
 
     // The navigation grid is baked once per map, from the level itself.
     nav = bakeNavGrid(world, activeMap.nav);
@@ -551,7 +564,7 @@ const boot = (): void => {
     audio.shot(shot.weapon.id);
     viewmodel.addRecoil(0.55 + shot.weapon.recoil.pattern[0][0] * 0.35, random.next());
     viewmodel.fireFlash(0.7 + random.next() * 0.6);
-    const muzzle = viewmodel.muzzleWorldPosition();
+    const muzzle = viewmodel.muzzleOnScreen(rig.camera, TRACER_START);
     const tracerOrigin = muzzle ? vec3(muzzle.x, muzzle.y, muzzle.z) : origin;
 
     for (const impact of resolution.impacts) {
@@ -791,7 +804,7 @@ const boot = (): void => {
     audio.shot(shot.weapon.id);
     viewmodel.addRecoil(0.55 + shot.weapon.recoil.pattern[0][0] * 0.35, random.next());
     viewmodel.fireFlash(0.7 + random.next() * 0.6);
-    const muzzle = viewmodel.muzzleWorldPosition();
+    const muzzle = viewmodel.muzzleOnScreen(rig.camera, TRACER_START);
     const origin = muzzle ? vec3(muzzle.x, muzzle.y, muzzle.z) : eyePosition();
     const local = resolveShot(shot, eyePosition(), world, PLAYER_ID);
     for (const impact of local.impacts) {
@@ -1129,14 +1142,37 @@ const boot = (): void => {
         };
       },
       /** Development helper: drop the player at a spot on the map. */
-      teleport(x: number, z: number, yaw?: number, y = 0) {
+      teleport(x: number, z: number, yaw?: number, y = 0, pitch = 0) {
         // `y` is the floor height to land on, for maps with floors stacked.
         body.setPosition(vec3(x, y + player.halfHeight + 0.05, z));
         player.velocity.x = 0;
         player.velocity.y = 0;
         player.velocity.z = 0;
-        input.look.pitch = 0;
+        input.look.pitch = pitch;
         if (yaw !== undefined) input.look.yaw = yaw;
+      },
+      /**
+       * Development helper: where the muzzle is drawn on screen, and where a
+       * tracer starting from `muzzleOnScreen` lands on screen. The two should
+       * agree to a pixel; if they do not, tracers leave from beside the gun.
+       */
+      muzzleScreenCheck() {
+        const width = engine.getRenderWidth();
+        const height = engine.getRenderHeight();
+        const drawn = viewmodel.muzzleWorldPosition();
+        const start = viewmodel.muzzleOnScreen(rig.camera, TRACER_START);
+        if (!drawn || !start) return null;
+        const weaponView = viewmodel.camera.getViewMatrix().multiply(viewmodel.camera.getProjectionMatrix());
+        const worldView = rig.camera.getViewMatrix().multiply(rig.camera.getProjectionMatrix());
+        const viewport = rig.camera.viewport.toGlobal(width, height);
+        const a = Vector3.Project(drawn, Matrix.Identity(), weaponView, viewport);
+        const b = Vector3.Project(start, Matrix.Identity(), worldView, viewport);
+        const naive = Vector3.Project(drawn, Matrix.Identity(), worldView, viewport);
+        return {
+          drawn: { x: +a.x.toFixed(1), y: +a.y.toFixed(1) },
+          tracer: { x: +b.x.toFixed(1), y: +b.y.toFixed(1) },
+          naive: { x: +naive.x.toFixed(1), y: +naive.y.toFixed(1) },
+        };
       },
       /** Development helper: exercise the health and damage HUD. */
       hurt(amount: number) {

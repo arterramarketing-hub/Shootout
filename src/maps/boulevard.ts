@@ -347,14 +347,112 @@ const barrel = (x: number, z: number, yaw = 0, fallen = false): void => {
   else box({ kind: "hazard", x, y: 0.45, z, width: 0.6, height: 0.9, depth: 0.6, yaw, tint: TINT.barrel });
 };
 
+/**
+ * A part of a vehicle, placed in the vehicle's own frame: `dx` along its
+ * length, `dz` across it, turned with it.
+ */
+const vehiclePart = (
+  x: number,
+  z: number,
+  yaw: number,
+  kind: BoxBrush["kind"],
+  dx: number,
+  y: number,
+  dz: number,
+  width: number,
+  height: number,
+  depth: number,
+  extra: Partial<BoxBrush> = {},
+): void => {
+  const cos = Math.cos(yaw);
+  const sin = Math.sin(yaw);
+  box({
+    kind,
+    x: x + dx * cos - dz * sin,
+    y,
+    z: z + dx * sin + dz * cos,
+    width,
+    height,
+    depth,
+    yaw,
+    ...extra,
+  });
+};
+
+/** A wheel: a tyre with a hub, or a bare rim where the tyre has gone. */
+const wheel = (x: number, z: number, yaw: number, dx: number, dz: number, flat = false): void => {
+  const y = flat ? 0.24 : 0.33;
+  vehiclePart(x, z, yaw, "accent", dx, y, dz, 0.66, flat ? 0.48 : 0.66, 0.24, { tint: "#1c1b1d", solid: false });
+  vehiclePart(x, z, yaw, "accent", dx, y, dz, 0.3, 0.3, 0.27, { tint: "#6d6a66", solid: false });
+};
+
 /** A car that has been here longer than anyone can remember. */
 const car = (x: number, z: number, yaw: number): void => {
-  box({ kind: "accent", x, y: 0.62, z, width: 4.4, height: 0.7, depth: 1.8, yaw, tint: TINT.car });
-  box({ kind: "accent", x: x - Math.sin(yaw) * 0.2, y: 1.18, z: z + Math.cos(yaw) * 0.2, width: 2.3, height: 0.5, depth: 1.6, yaw, tint: "#2a2528" });
-  for (const [dx, dz] of [[-1.4, -0.9], [1.4, -0.9], [-1.4, 0.9], [1.4, 0.9]]) {
-    const wx = x + dx * Math.cos(yaw) - dz * Math.sin(yaw);
-    const wz = z + dx * Math.sin(yaw) + dz * Math.cos(yaw);
-    box({ kind: "accent", x: wx, y: 0.3, z: wz, width: 0.6, height: 0.6, depth: 0.25, yaw, tint: "#1c1c1e", solid: false });
+  const body = "#5e4d69";
+  const glass = "#1e2226";
+  const p = (kind: BoxBrush["kind"], dx: number, y: number, dz: number, w: number, h: number, d: number, extra: Partial<BoxBrush> = {}) =>
+    vehiclePart(x, z, yaw, kind, dx, y, dz, w, h, d, extra);
+  // Sills, body, bonnet sloping down to the nose, boot behind.
+  p("accent", 0, 0.3, 0, 4.4, 0.2, 1.9, { tint: "#2a2528" });
+  p("accent", 0, 0.62, 0, 4.5, 0.48, 1.85, { tint: body });
+  box({ kind: "accent", x: x + 1.55 * Math.cos(yaw), y: 0.93, z: z + 1.55 * Math.sin(yaw), width: 1.5, height: 0.1, depth: 1.75, yaw, pitch: 0, tint: body });
+  p("accent", -1.6, 0.98, 0, 1.2, 0.3, 1.75, { tint: body });
+  // The cabin: glass all round under a roof, with the pillars showing.
+  p("accent", -0.1, 1.15, 0, 1.95, 0.42, 1.68, { tint: glass, solid: false });
+  p("accent", -0.1, 1.4, 0, 2.05, 0.08, 1.74, { tint: body });
+  for (const [dx, dz] of [[0.85, 0.8], [0.85, -0.8], [-1.05, 0.8], [-1.05, -0.8]]) {
+    p("accent", dx, 1.15, dz, 0.08, 0.44, 0.08, { tint: body });
+  }
+  // Bumpers, lights, and the grille.
+  p("accent", 2.32, 0.42, 0, 0.16, 0.18, 1.9, { tint: "#8c8a86" });
+  p("accent", -2.32, 0.42, 0, 0.16, 0.18, 1.9, { tint: "#8c8a86" });
+  p("accent", 2.24, 0.72, 0.62, 0.06, 0.16, 0.34, { tint: "#e9e4cf", solid: false });
+  p("accent", 2.24, 0.72, -0.62, 0.06, 0.16, 0.34, { tint: "#e9e4cf", solid: false });
+  p("accent", 2.24, 0.7, 0, 0.05, 0.22, 0.7, { tint: "#2a2528", solid: false });
+  p("accent", -2.24, 0.72, 0.65, 0.05, 0.14, 0.3, { tint: "#7a2a22", solid: false });
+  p("accent", -2.24, 0.72, -0.65, 0.05, 0.14, 0.3, { tint: "#7a2a22", solid: false });
+  // Wheels, one of them flat.
+  wheel(x, z, yaw, 1.45, 0.95);
+  wheel(x, z, yaw, 1.45, -0.95);
+  wheel(x, z, yaw, -1.45, 0.95, true);
+  wheel(x, z, yaw, -1.45, -0.95);
+  // Rust creeping up from the sills, as a band that breaks the flat paint.
+  p("rubble", 0.4, 0.42, 0.93, 2.2, 0.16, 0.02, { solid: false });
+  p("rubble", -0.6, 0.44, -0.93, 1.6, 0.14, 0.02, { solid: false });
+};
+
+/**
+ * A box truck, stripped: a cab with its glass gone and the corrugated body
+ * behind it, up on six wheels and going nowhere.
+ */
+const truck = (x: number, z: number, yaw: number): void => {
+  const paint = "#7c6a58";
+  const p = (kind: BoxBrush["kind"], dx: number, y: number, dz: number, w: number, h: number, d: number, extra: Partial<BoxBrush> = {}) =>
+    vehiclePart(x, z, yaw, kind, dx, y, dz, w, h, d, extra);
+  // Chassis rails and the body over them.
+  p("accent", -0.6, 0.55, 0, 7.0, 0.3, 1.0, { tint: "#2a2528" });
+  p("cladding", -1.8, 2.05, 0, 4.6, 2.5, 2.35);
+  p("accent", -1.8, 3.35, 0, 4.7, 0.1, 2.45, { tint: "#2f2b28" });
+  p("accent", -4.12, 1.6, 0, 0.1, 1.6, 2.0, { tint: "#2a2528", solid: false });
+  // Cab: floor, a dashboard, the shell, the glass gone, a roof.
+  p("accent", 2.3, 0.95, 0, 2.2, 0.5, 2.2, { tint: paint });
+  p("accent", 1.7, 1.6, 0, 0.9, 0.8, 2.2, { tint: paint });
+  p("accent", 2.3, 2.15, 0, 2.3, 0.1, 2.3, { tint: paint });
+  for (const dz of [-1.06, 1.06]) p("accent", 2.3, 1.6, dz, 2.2, 0.8, 0.08, { tint: paint, solid: false });
+  for (const [dx, dz] of [[3.35, 1.08], [3.35, -1.08], [1.25, 1.08], [1.25, -1.08]]) {
+    p("accent", dx, 1.6, dz, 0.1, 0.9, 0.1, { tint: paint });
+  }
+  p("accent", 3.42, 0.9, 0, 0.16, 0.5, 2.2, { tint: "#8c8a86" });
+  p("accent", 3.36, 1.2, 0.7, 0.06, 0.2, 0.4, { tint: "#e9e4cf", solid: false });
+  p("accent", 3.36, 1.2, -0.7, 0.06, 0.2, 0.4, { tint: "#e9e4cf", solid: false });
+  // Six wheels: singles at the front, pairs at the back.
+  wheel(x, z, yaw, 2.4, 1.0);
+  wheel(x, z, yaw, 2.4, -1.0);
+  for (const dx of [-2.2, -3.1]) {
+    wheel(x, z, yaw, dx, 1.05);
+    wheel(x, z, yaw, dx, 0.78);
+    wheel(x, z, yaw, dx, -1.05, dx === -3.1);
+    wheel(x, z, yaw, dx, -0.78, dx === -3.1);
   }
 };
 
@@ -610,6 +708,7 @@ for (let z = -22; z < 24; z += 4) {
   span("floor", -0.08, 0.08, 0, 0.012, z, z + 2, { tint: "#d8d3c4", solid: false });
 }
 car(-3.2, -13.5, 0.18);
+truck(-3.2, 15, 1.62);
 barrel(4.6, -8.2);
 barrel(5.2, -9.1, 0.4, true);
 barrel(-5.8, 15.2);

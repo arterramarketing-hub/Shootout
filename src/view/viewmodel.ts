@@ -1,7 +1,7 @@
 import { FreeCamera } from "@babylonjs/core/Cameras/freeCamera";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
-import { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
@@ -169,10 +169,42 @@ export class ViewmodelRig {
     this.camera.fov = 2 * Math.atan(rest / scale);
   }
 
-  /** Muzzle position in world space, used as the tracer origin. */
+  /** Muzzle position in world space, in the weapon camera's terms. */
   muzzleWorldPosition(): Vector3 | null {
     if (!this.current) return null;
     return this.models[this.current].muzzle.getAbsolutePosition();
+  }
+
+  /**
+   * Where the muzzle appears to be, as a point in the world.
+   *
+   * The weapon is drawn through its own camera at a narrow field of view,
+   * so the muzzle's true world position lands somewhere else entirely when
+   * the world camera projects it — and a tracer started there leaves from a
+   * point beside the gun rather than from its tip. This projects the muzzle
+   * through the weapon camera to find where it is on the screen, then walks
+   * the world camera's ray through that same pixel out to `distance`. A
+   * tracer from that point starts exactly where the barrel ends.
+   */
+  muzzleOnScreen(worldCamera: FreeCamera, distance: number): Vector3 | null {
+    const muzzle = this.muzzleWorldPosition();
+    if (!muzzle) return null;
+    const engine = this.camera.getEngine();
+    const width = engine.getRenderWidth();
+    const height = engine.getRenderHeight();
+    const weaponView = this.camera.getViewMatrix().multiply(this.camera.getProjectionMatrix());
+    const screen = Vector3.Project(muzzle, Matrix.Identity(), weaponView, this.camera.viewport.toGlobal(width, height));
+    const far = Vector3.Unproject(
+      new Vector3(screen.x, screen.y, 0.9),
+      width,
+      height,
+      Matrix.Identity(),
+      worldCamera.getViewMatrix(),
+      worldCamera.getProjectionMatrix(),
+    );
+    const eye = worldCamera.globalPosition;
+    const direction = far.subtract(eye).normalize();
+    return eye.add(direction.scale(distance));
   }
 
   /** Light the muzzle flash for a frame or two. */

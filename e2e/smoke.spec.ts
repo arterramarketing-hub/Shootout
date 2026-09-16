@@ -22,7 +22,7 @@ interface GameState {
 
 /** The development handle the game exposes on `window`. */
 interface DebugHandle extends GameState {
-  teleport: (x: number, z: number, yaw?: number, y?: number) => void;
+  teleport: (x: number, z: number, yaw?: number, y?: number, pitch?: number) => void;
   weaponScreenPosition: () => { x: number; y: number } | null;
   startMatch: () => void;
   match: {
