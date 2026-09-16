@@ -526,10 +526,12 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
     const paints = ["#d8d6cf", "#d8d6cf", "#2a2729", "#c9c3b8", random() < 0.5 ? "#c74a3d" : "#3a6fb5"];
     const baseline = SIZE * 0.5 + (random() - 0.5) * SIZE * 0.3;
     let x = random() * SIZE * 0.2;
-    for (let i = 0; i < 6 && x < SIZE; i += 1) {
+    for (let i = 0; i < 4 && x < SIZE; i += 1) {
       const colour = paints[Math.floor(random() * paints.length)];
-      const w = 26 + random() * 40;
-      const h = 34 + random() * 40;
+      // Wide and low: a row of round ones reads as a row of eyes from across
+      // the street, and a wall full of eyes is not the mood.
+      const w = 48 + random() * 50;
+      const h = 22 + random() * 26;
       const y = baseline + (random() - 0.5) * 12;
       context.globalAlpha = 0.55 + random() * 0.35;
       context.lineWidth = 3 + random() * 3;
