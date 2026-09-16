@@ -104,8 +104,8 @@ html, body {
 .stance {
   position: absolute;
   left: calc(16px + var(--safe-l));
-  bottom: calc(44px + var(--safe-b));
-  font-size: 11px;
+  top: calc(36px + var(--safe-t));
+  font-size: 10px;
   letter-spacing: 0.18em;
   color: var(--hud-dim);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
@@ -195,7 +195,21 @@ html, body {
   touch-action: none;
   pointer-events: auto;
   backdrop-filter: blur(2px);
+  /* An icon, not a word: nothing for a long press to select and highlight. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+.pad-button .icon {
+  width: 46%;
+  height: 46%;
+  display: block;
+  pointer-events: none;
+}
+.pad-fire .icon { width: 40%; height: 40%; }
 
 /*
  * The arc: fire nearest the thumb's rest and largest, aim above and inward,
@@ -565,9 +579,9 @@ html, body {
   transform-origin: center bottom;
   display: flex;
   align-items: center;
-  gap: 18px;
-  min-width: 220px;
-  padding: 8px 16px;
+  gap: 14px;
+  min-width: 170px;
+  padding: 7px 14px;
   border-radius: 8px;
   border: 1px solid rgba(232, 238, 245, 0.2);
   background: rgba(18, 22, 26, 0.5);
@@ -578,21 +592,13 @@ html, body {
   touch-action: none;
   pointer-events: auto;
   backdrop-filter: blur(2px);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
-.banner-weapon { display: flex; flex-direction: column; gap: 3px; min-width: 76px; }
 .weapon-name { font-size: 11px; letter-spacing: 0.12em; }
-.weapon-class { font-size: 10px; letter-spacing: 0.08em; color: var(--hud-dim); }
-.ammo-counts {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-}
-.ammo-current { font-size: 30px; font-weight: 600; line-height: 1; }
-.ammo-current.is-empty { color: #ff7a5c; }
-.ammo-slash { font-size: 15px; color: var(--hud-dim); }
-.ammo-reserve { font-size: 15px; color: var(--hud-dim); }
+.weapon-class { font-size: 10px; letter-spacing: 0.08em; color: var(--hud-dim); margin-left: auto; }
+.ammo-counts[hidden] { display: none; }
 .reload-hint {
   position: absolute;
   left: 0; right: 0;
@@ -609,7 +615,7 @@ html, body {
 .vitals {
   position: absolute;
   left: calc(16px + var(--safe-l));
-  bottom: calc(20px + var(--safe-b));
+  top: calc(12px + var(--safe-t));
 }
 .health { display: flex; align-items: center; gap: 9px; }
 .health-track {
@@ -778,7 +784,7 @@ html, body {
 .debug { transform: scale(var(--hud-scale)); transform-origin: left top; }
 .netbar { transform: scale(var(--hud-scale)); transform-origin: left top; }
 .feed { transform: scale(var(--hud-scale)); transform-origin: left center; }
-.vitals { transform: scale(var(--hud-scale)); transform-origin: left bottom; }
+.vitals { transform: scale(var(--hud-scale)); transform-origin: left top; }
 .killfeed { transform: scale(var(--hud-scale)); transform-origin: right top; }
 .matchbar {
   transform: translateX(-50%) scale(var(--hud-scale));
@@ -786,7 +792,7 @@ html, body {
 }
 .stance {
   transform: scale(var(--hud-scale));
-  transform-origin: left bottom;
+  transform-origin: left top;
 }
 /*
  * The dead-centre elements are the one case where scaling about the centre is

@@ -82,13 +82,11 @@
           it swaps weapons, in place of a button on the arc.
         -->
         <button class="banner" id="weapon-banner" type="button" aria-label="Swap weapon">
-          <span class="banner-weapon">
-            <span id="weapon-name" class="weapon-name">Ridgeline</span>
-            <span id="weapon-class" class="weapon-class">5.56</span>
-          </span>
-          <span class="ammo-counts">
+          <span id="weapon-name" class="weapon-name">Ridgeline</span>
+          <span id="weapon-class" class="weapon-class">5.56</span>
+          <!-- The count itself is on the weapon; these only feed it. -->
+          <span class="ammo-counts" hidden>
             <span id="ammo-current" class="ammo-current">30</span>
-            <span class="ammo-slash">/</span>
             <span id="ammo-reserve" class="ammo-reserve">150</span>
           </span>
           <span id="reload-hint" class="reload-hint">RELOAD</span>
@@ -105,11 +103,21 @@
         second fire button mirrors onto the left edge for the other thumb.
       -->
       <div class="controls" id="controls">
-        <button class="pad-button pad-fire" id="btn-fire" type="button" aria-label="Fire">FIRE</button>
-        <button class="pad-button pad-aim" id="btn-aim" type="button" aria-label="Aim down sights">ADS</button>
-        <button class="pad-button pad-dodge" id="btn-dodge" type="button" aria-label="Dodge">DODGE</button>
-        <button class="pad-button pad-reload" id="btn-reload" type="button" aria-label="Reload">RELOAD</button>
-        <button class="pad-button pad-fire pad-fire-left" id="btn-fire-left" type="button" aria-label="Fire">FIRE</button>
+        <button class="pad-button pad-fire" id="btn-fire" type="button" aria-label="Fire">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>
+        </button>
+        <button class="pad-button pad-aim" id="btn-aim" type="button" aria-label="Aim down sights">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 2.5v5M12 16.5v5M2.5 12h5M16.5 12h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </button>
+        <button class="pad-button pad-dodge" id="btn-dodge" type="button" aria-label="Dodge">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3L5 13h6l-1 8 9-11h-6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="pad-button pad-reload" id="btn-reload" type="button" aria-label="Reload">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M19.5 3.5v4.5H15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="pad-button pad-fire pad-fire-left" id="btn-fire-left" type="button" aria-label="Fire">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>
+        </button>
       </div>
 
       <button class="chip" id="btn-debug" type="button">DEBUG</button>

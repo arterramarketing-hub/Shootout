@@ -3,9 +3,11 @@ import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
+import "@babylonjs/core/Meshes/Builders/planeBuilder";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import type { Scene } from "@babylonjs/core/scene";
 import { activeWeapon, isSwapping, type LoadoutState } from "../sim/loadout";
 import type { PlayerState } from "../sim/types";
@@ -87,6 +89,18 @@ export class ViewmodelRig {
   private readonly holder: TransformNode;
   private readonly flash: Mesh;
   private flashLife = 0;
+  /**
+   * The ammunition count, projected off the side of the weapon.
+   *
+   * A small emissive plane with the count drawn on it, sitting high on the
+   * left of the receiver and turned toward the eye, where it can be read from
+   * the hip and past the rear sight when aiming. It is the reason the count
+   * is not on the screen: the number lives on the thing it counts.
+   */
+  private readonly hologram: Mesh;
+  private readonly hologramTexture: DynamicTexture;
+  private hologramText = "";
+  private hologramTime = 0;
   private current: WeaponId | null = null;
 
   private restFov = VIEWMODEL_FOV_DEGREES;
@@ -143,6 +157,49 @@ export class ViewmodelRig {
     this.flash.isPickable = false;
     this.flash.layerMask = VIEWMODEL_LAYER;
     this.flash.setEnabled(false);
+
+    this.hologramTexture = new DynamicTexture("tex_ammo_holo", { width: 256, height: 128 }, scene, true);
+    this.hologramTexture.hasAlpha = true;
+    const holoMaterial = new StandardMaterial("mat_ammo_holo", scene);
+    holoMaterial.diffuseTexture = this.hologramTexture;
+    holoMaterial.opacityTexture = this.hologramTexture;
+    holoMaterial.emissiveColor = new Color3(1, 1, 1);
+    holoMaterial.disableLighting = true;
+    holoMaterial.backFaceCulling = false;
+    this.hologram = MeshBuilder.CreatePlane("ammo_holo", { width: 0.09, height: 0.045 }, scene);
+    this.hologram.material = holoMaterial;
+    this.hologram.isPickable = false;
+    this.hologram.layerMask = VIEWMODEL_LAYER;
+    // Drawn after the weapon so it reads over the receiver, never through it.
+    this.hologram.renderingGroupId = 1;
+    this.hologram.setEnabled(false);
+  }
+
+  /** Redraw the count when it changes; the texture is the expensive part. */
+  private paintHologram(magazine: number, reserve: number): void {
+    const text = `${magazine}|${reserve}`;
+    if (text === this.hologramText) return;
+    this.hologramText = text;
+    const context = this.hologramTexture.getContext() as unknown as CanvasRenderingContext2D;
+    context.clearRect(0, 0, 256, 128);
+    const ink = magazine === 0 ? "#ff8a66" : "#9fe8ff";
+    // A faint plate and a rule, so it reads as a projection rather than as
+    // numbers floating in the air.
+    context.fillStyle = "rgba(20, 60, 80, 0.35)";
+    context.fillRect(4, 4, 248, 120);
+    context.fillStyle = ink;
+    context.globalAlpha = 0.5;
+    context.fillRect(12, 92, 232, 2);
+    for (let y = 8; y < 120; y += 6) context.fillRect(12, y, 232, 1);
+    context.globalAlpha = 1;
+    context.font = "bold 72px ui-monospace, Menlo, Consolas, monospace";
+    context.textBaseline = "alphabetic";
+    context.textAlign = "left";
+    context.fillText(String(magazine), 14, 82);
+    context.font = "32px ui-monospace, Menlo, Consolas, monospace";
+    context.textAlign = "right";
+    context.fillText(String(reserve), 244, 122);
+    this.hologramTexture.update();
   }
 
   /** Set the weapon camera's vertical field of view, in degrees. */
@@ -255,6 +312,8 @@ export class ViewmodelRig {
     const weapon = activeWeapon(loadout);
     this.showWeapon(weapon.definition.id);
     this.updateBolt(deltaSeconds);
+    this.paintHologram(weapon.magazine, weapon.reserve);
+    this.updateHologram(deltaSeconds, clamp(loadout.adsProgress, 0, 1));
 
     this.updateSway(player, deltaSeconds);
     this.recoilAmount = this.recoilAmount * Math.pow(RECOIL.recovery, deltaSeconds);
@@ -282,6 +341,29 @@ export class ViewmodelRig {
     if (!this.current) return;
     const model = this.models[this.current];
     model.bolt.position.z = -Math.sin(this.boltPhase * Math.PI) * model.spec.boltTravel;
+  }
+
+  /**
+   * Keep the projection on the weapon and facing the eye.
+   *
+   * It is turned to face the camera every frame rather than billboarded,
+   * because it is a child of the weapon and billboards work in world space.
+   * A little flicker in its brightness is what says hologram.
+   */
+  private updateHologram(deltaSeconds: number, ads: number): void {
+    if (!this.current) return;
+    this.hologramTime += deltaSeconds;
+    const model = this.models[this.current];
+    const line = model.spec.sightLine;
+    this.hologram.parent = model.root;
+    this.hologram.position.set(-0.075, line.height - 0.006, line.rearZ + 0.05);
+    this.hologram.rotation.set(0.1, 0.45, 0);
+    // Aiming magnifies the weapon camera, and the count with it; pull it in
+    // so it stays a readout beside the sight rather than a sign over it.
+    this.hologram.scaling.setAll(1 - 0.3 * ads);
+    this.hologram.setEnabled(true);
+    const material = this.hologram.material as StandardMaterial;
+    material.alpha = 0.82 + Math.sin(this.hologramTime * 23) * 0.06 + Math.sin(this.hologramTime * 3.1) * 0.06;
   }
 
   private showWeapon(id: WeaponId): void {

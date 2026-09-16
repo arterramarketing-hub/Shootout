@@ -58,6 +58,13 @@ export class InputManager {
 
   registerButton(action: ButtonAction, element: HTMLElement): void {
     this.buttons.register({ action, element });
+    // A thumb on fire drags the aim, through the same pipeline as the look
+    // surface so one sensitivity setting covers both.
+    this.buttons.onDrag = (dragged, deltaX, deltaY) => {
+      if (dragged !== "fire" || this.pointerLocked) return;
+      this.pendingYaw += deltaX;
+      this.pendingPitch += deltaY;
+    };
   }
 
   /** Aim down sights on a tap that latches, rather than for as long as held. */

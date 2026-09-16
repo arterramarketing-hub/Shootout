@@ -16,6 +16,15 @@ export type ButtonAction =
   | "mantle";
 
 export class ButtonBank {
+  /**
+   * Called as a finger held on a button moves, with the movement in pixels.
+   *
+   * This is what lets the fire button aim: a thumb that is already down on
+   * fire drags the view like the look surface would, so a burst can be
+   * walked onto a target without lifting to the other side of the screen.
+   */
+  onDrag: ((action: ButtonAction, deltaX: number, deltaY: number) => void) | null = null;
+  private readonly lastPointerAt = new Map<number, { x: number; y: number }>();
   private readonly held = new Set<ButtonAction>();
   private readonly latched = new Set<ButtonAction>();
   private readonly toggles = new Set<ButtonAction>();
@@ -37,6 +46,7 @@ export class ButtonBank {
         // Capture is an enhancement; the press is tracked by pointer id anyway.
       }
       this.pointerToAction.set(event.pointerId, button.action);
+      this.lastPointerAt.set(event.pointerId, { x: event.clientX, y: event.clientY });
       this.pressedEdge.add(button.action);
       if (this.toggles.has(button.action)) {
         if (this.latched.has(button.action)) this.latched.delete(button.action);
@@ -45,6 +55,17 @@ export class ButtonBank {
         this.held.add(button.action);
       }
       this.paint(button.action);
+    });
+
+    button.element.addEventListener("pointermove", (event) => {
+      const last = this.lastPointerAt.get(event.pointerId);
+      if (!last || this.pointerToAction.get(event.pointerId) !== button.action) return;
+      event.preventDefault();
+      const deltaX = event.clientX - last.x;
+      const deltaY = event.clientY - last.y;
+      last.x = event.clientX;
+      last.y = event.clientY;
+      if (deltaX !== 0 || deltaY !== 0) this.onDrag?.(button.action, deltaX, deltaY);
     });
 
     const release = (event: PointerEvent) => this.releasePointer(event.pointerId);
@@ -78,6 +99,7 @@ export class ButtonBank {
   }
 
   private releasePointer(pointerId: number): void {
+    this.lastPointerAt.delete(pointerId);
     const action = this.pointerToAction.get(pointerId);
     if (action === undefined) return;
     this.pointerToAction.delete(pointerId);

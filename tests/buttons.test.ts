@@ -14,7 +14,7 @@ interface StubButton {
   element: HTMLElement;
   classes: Set<string>;
   attributes: Map<string, string>;
-  fire: (type: string, pointerId: number) => void;
+  fire: (type: string, pointerId: number, at?: { x: number; y: number }) => void;
   /** Make capture throw, the way a browser does for a forgotten pointer. */
   breakCapture: () => void;
 }
@@ -53,9 +53,11 @@ const stubButton = (): StubButton => {
     breakCapture: () => {
       captureThrows = true;
     },
-    fire: (type, pointerId) => {
+    fire: (type, pointerId, at = { x: 0, y: 0 }) => {
       const event = {
         pointerId,
+        clientX: at.x,
+        clientY: at.y,
         preventDefault: () => undefined,
         stopPropagation: () => undefined,
       } as unknown as PointerEvent;
@@ -296,5 +298,44 @@ describe("ButtonBank accessibility", () => {
 
     bank.setToggle("aim", false);
     expect(button.attributes.has("aria-pressed")).toBe(false);
+  });
+});
+
+describe("ButtonBank drag", () => {
+  /*
+   * A thumb already down on fire drags the aim. This is how a burst gets
+   * walked onto a target on a phone: the other thumb is on the stick, and
+   * lifting the firing thumb to the look surface means not firing.
+   */
+  it("reports the movement of a finger held on a button", () => {
+    const { bank, button } = bankWith("fire");
+    const drags: [ButtonAction, number, number][] = [];
+    bank.onDrag = (action, dx, dy) => drags.push([action, dx, dy]);
+
+    button.fire("pointerdown", 1, { x: 100, y: 100 });
+    button.fire("pointermove", 1, { x: 112, y: 95 });
+    button.fire("pointermove", 1, { x: 120, y: 95 });
+    expect(drags).toEqual([
+      ["fire", 12, -5],
+      ["fire", 8, 0],
+    ]);
+  });
+
+  it("ignores a move from a finger that is not down on the button", () => {
+    const { bank, button } = bankWith("fire");
+    const drags: unknown[] = [];
+    bank.onDrag = (...args) => drags.push(args);
+    button.fire("pointermove", 7, { x: 50, y: 50 });
+    expect(drags).toEqual([]);
+  });
+
+  it("stops reporting once the finger lifts", () => {
+    const { bank, button } = bankWith("fire");
+    const drags: unknown[] = [];
+    bank.onDrag = (...args) => drags.push(args);
+    button.fire("pointerdown", 1, { x: 0, y: 0 });
+    button.fire("pointerup", 1, { x: 30, y: 0 });
+    button.fire("pointermove", 1, { x: 60, y: 0 });
+    expect(drags).toEqual([]);
   });
 });
