@@ -210,6 +210,7 @@ export class NetClient {
       aim: frame.aim,
       reload: frame.reloadPressed,
       swap: frame.swapPressed,
+      dodge: frame.dodgePressed,
     });
     // Resend a short tail, so one dropped packet costs nothing.
     if (this.outbox.length > 6) this.outbox.shift();

@@ -300,8 +300,8 @@ test("swapping cycles through the loadout", async ({ page }) => {
   const seen: string[] = [(await readState(page)).weapon.id];
   for (let i = 0; i < 3; i += 1) {
     const before = seen[seen.length - 1];
-    await button(page, "btn-swap", true);
-    await button(page, "btn-swap", false);
+    await button(page, "weapon-banner", true);
+    await button(page, "weapon-banner", false);
     await page.waitForFunction(
       (previous) => window.__shootout.weapon.id !== previous,
       before,

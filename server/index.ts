@@ -807,6 +807,7 @@ server.on("connection", (socket) => {
             aim: Boolean(command.aim),
             reloadPressed: Boolean(command.reload),
             swapPressed: Boolean(command.swap),
+            dodgePressed: Boolean(command.dodge),
           },
         });
       }

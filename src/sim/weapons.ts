@@ -90,6 +90,8 @@ export interface WeaponDefinition {
   name: string;
   /** Shown under the ammo counter. */
   className: string;
+  /** What it fires, as the banner shows it. */
+  calibre: string;
   mode: FireMode;
   damage: number;
   headshotMultiplier: number;
@@ -122,6 +124,7 @@ const ridgeline: WeaponDefinition = {
   id: "ar",
   name: "Ridgeline",
   className: "Assault Rifle",
+  calibre: "5.56",
   mode: "auto",
   damage: 34,
   headshotMultiplier: 3.0,
@@ -174,6 +177,7 @@ const wasp: WeaponDefinition = {
   id: "smg",
   name: "Wasp",
   className: "Submachine Gun",
+  calibre: "9MM",
   mode: "auto",
   damage: 35,
   headshotMultiplier: 3.0,
@@ -221,6 +225,7 @@ const breaker: WeaponDefinition = {
   id: "shotgun",
   name: "Breaker 12",
   className: "Pump Shotgun",
+  calibre: "12GA",
   mode: "pump",
   damage: 14,
   headshotMultiplier: 1.5,
@@ -262,6 +267,7 @@ const sidearm: WeaponDefinition = {
   id: "pistol",
   name: "P9",
   className: "Sidearm",
+  calibre: "9MM",
   mode: "semi",
   damage: 34,
   headshotMultiplier: 3.0,

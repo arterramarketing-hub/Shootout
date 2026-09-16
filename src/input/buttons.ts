@@ -10,6 +10,7 @@ export type ButtonAction =
   | "reload"
   | "crouch"
   | "swap"
+  | "dodge"
   | "leanLeft"
   | "leanRight"
   | "mantle";

@@ -16,6 +16,9 @@ export const createPlayer = (spawn: Vec3, yaw = 0): PlayerState => ({
   landingOffset: 0,
   halfHeight: STANCE.standHeight / 2,
   radius: STANCE.radius,
+  dodgeTimer: 0,
+  dodgeCooldown: 0,
+  dodgeDirection: vec3(),
 });
 
 /** Camera height above the collider centre for the current stance. */
@@ -96,7 +99,15 @@ export const stepPlayer = (
     ? MOVEMENT.sprintOutTime
     : Math.max(0, state.sprintOutTimer - dt);
 
-  applyHorizontalMovement(state, input, dt, sprinting);
+  updateDodge(state, input, dt);
+  if (state.dodgeTimer > 0) {
+    // The dodge owns the ground velocity while it lasts; the stick gets it
+    // back the moment it ends, with the momentum still on it.
+    state.velocity.x = state.dodgeDirection.x * MOVEMENT.dodgeSpeed;
+    state.velocity.z = state.dodgeDirection.z * MOVEMENT.dodgeSpeed;
+  } else {
+    applyHorizontalMovement(state, input, dt, sprinting);
+  }
 
   state.velocity.y += MOVEMENT.gravity * dt;
 
@@ -121,6 +132,31 @@ export const stepPlayer = (
   state.landingOffset = damp(state.landingOffset, 0, CAMERA.landingRecovery, dt);
 
   return state;
+};
+
+/**
+ * Start a dodge on the press, and run the clocks.
+ *
+ * Grounded only: a dodge in the air would be a second jump. The direction is
+ * the stick's, in the world, or straight back from where the player is
+ * looking when the stick is centred, since backing off a corner is the dodge
+ * most players want and the one hardest to make on a thumbstick in a hurry.
+ */
+const updateDodge = (state: PlayerState, input: InputFrame, dt: number): void => {
+  state.dodgeTimer = Math.max(0, state.dodgeTimer - dt);
+  state.dodgeCooldown = Math.max(0, state.dodgeCooldown - dt);
+  if (!input.dodgePressed || state.dodgeCooldown > 0 || !state.grounded) return;
+
+  const stick = stickToWorld(input.moveX, input.moveY, state.yaw);
+  const magnitude = Math.hypot(stick.x, stick.z);
+  if (magnitude > 0.25) {
+    state.dodgeDirection = vec3(stick.x / magnitude, 0, stick.z / magnitude);
+  } else {
+    const back = stickToWorld(0, -1, state.yaw);
+    state.dodgeDirection = vec3(back.x, 0, back.z);
+  }
+  state.dodgeTimer = MOVEMENT.dodgeTime;
+  state.dodgeCooldown = MOVEMENT.dodgeCooldown;
 };
 
 const updateStance = (

@@ -18,6 +18,7 @@ export interface InputFrame {
   /** Edge-triggered actions, consumed once by the simulation. */
   reloadPressed: boolean;
   swapPressed: boolean;
+  dodgePressed: boolean;
 }
 
 export const emptyInput = (): InputFrame => ({
@@ -33,6 +34,7 @@ export const emptyInput = (): InputFrame => ({
   aim: false,
   reloadPressed: false,
   swapPressed: false,
+  dodgePressed: false,
 });
 
 export interface PlayerState {
@@ -56,6 +58,12 @@ export interface PlayerState {
   /** Collider half-height for the current stance. */
   halfHeight: number;
   radius: number;
+  /** Seconds left in the current dodge; zero when not dodging. */
+  dodgeTimer: number;
+  /** Seconds until the next dodge is allowed. */
+  dodgeCooldown: number;
+  /** Direction of the dodge in progress, on the ground plane, unit length. */
+  dodgeDirection: Vec3;
 }
 
 /**

@@ -23,6 +23,16 @@ export const MOVEMENT = {
   sprintMaxAngle: 0.9,
   /** Delay after sprinting before aiming or firing is allowed. */
   sprintOutTime: 0.25,
+  /**
+   * The dodge: a short burst of speed in the direction the stick is held, or
+   * straight back when it is not, that breaks a line of fire without giving
+   * the player a way to travel faster than sprinting over any distance. It
+   * covers a little under three metres, which is one piece of cover to the
+   * next in these maps, and then it is spent for a while.
+   */
+  dodgeSpeed: 11.5,
+  dodgeTime: 0.24,
+  dodgeCooldown: 1.4,
   /** A slope steeper than this is a wall, not a ramp. */
   maxSlopeAngle: 0.85,
   /**

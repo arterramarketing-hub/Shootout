@@ -176,6 +176,7 @@ export class InputManager {
     frame.fire = this.buttons.isDown("fire") || this.mouseButtons.has(0);
     frame.aim = this.buttons.isDown("aim") || this.mouseButtons.has(2);
     frame.reloadPressed = this.buttons.consumePress("reload") || this.consumeKey("KeyR");
+    frame.dodgePressed = this.buttons.consumePress("dodge") || this.consumeKey("Space");
     frame.swapPressed =
       this.buttons.consumePress("swap") ||
       this.consumeKey("Tab") ||

@@ -3,6 +3,9 @@
   --hud-dim: rgba(232, 238, 245, 0.55);
   --bg: #0d0f12;
   --accent: #7ee0a8;
+  /* The controls and readouts are set in a serif, small and spaced. */
+  --ui-serif: Georgia, "Times New Roman", "Noto Serif", serif;
+  --ui-serif-ink: rgba(240, 226, 200, 0.88);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -137,12 +140,13 @@ html, body {
 
 .joystick-base {
   position: absolute;
-  width: 128px;
-  height: 128px;
-  margin: -64px 0 0 -64px;
-  border: 1.5px solid rgba(232, 238, 245, 0.3);
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px;
+  border: 1px solid rgba(255, 236, 205, 0.16);
   border-radius: 50%;
-  background: rgba(232, 238, 245, 0.05);
+  background: radial-gradient(circle at 50% 40%, rgba(58, 48, 38, 0.6), rgba(26, 21, 16, 0.7));
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
   opacity: 0;
   transition: opacity 120ms ease-out;
   pointer-events: none;
@@ -150,11 +154,12 @@ html, body {
 .joystick-knob {
   position: absolute;
   left: 50%; top: 50%;
-  width: 54px; height: 54px;
-  margin: -27px 0 0 -27px;
+  width: 34px; height: 34px;
+  margin: -17px 0 0 -17px;
   border-radius: 50%;
-  background: rgba(232, 238, 245, 0.22);
-  border: 1.5px solid rgba(232, 238, 245, 0.5);
+  border: 2px solid rgba(240, 226, 200, 0.8);
+  box-shadow: inset 0 0 0 5px rgba(26, 21, 16, 0.9), inset 0 0 0 7px rgba(240, 226, 200, 0.65);
+  background: transparent;
   transform: translate(-50%, -50%);
 }
 
@@ -184,78 +189,86 @@ html, body {
   bottom: calc(var(--b) * var(--ctl) * 1px + var(--safe-b) - (var(--d) * var(--ctl) * 1px) / 2);
   width: calc(var(--d) * var(--ctl) * 1px);
   height: calc(var(--d) * var(--ctl) * 1px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(1px * var(--ctl));
+  padding: 0;
   border-radius: 50%;
-  border: 1.5px solid rgba(232, 238, 245, 0.32);
-  background: rgba(18, 22, 26, 0.5);
-  color: var(--hud);
-  font: inherit;
-  font-size: calc(11px * var(--ctl));
-  letter-spacing: 0.06em;
+  border: 1px solid rgba(255, 236, 205, 0.16);
+  background: radial-gradient(circle at 50% 40%, rgba(58, 48, 38, 0.86), rgba(26, 21, 16, 0.9));
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 236, 205, 0.08);
+  color: var(--ui-serif-ink);
+  font-family: var(--ui-serif);
+  font-size: calc(9px * var(--ctl));
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
   touch-action: none;
   pointer-events: auto;
-  backdrop-filter: blur(2px);
+}
+.pad-button .glyph {
+  font-style: normal;
+  font-size: calc(20px * var(--ctl));
+  line-height: 1;
+  color: rgba(240, 226, 200, 0.85);
+}
+.pad-button .pad-label { opacity: 0.8; }
+/* The ring on the fire button, drawn rather than typed so it is round. */
+.glyph-ring {
+  display: block;
+  width: calc(26px * var(--ctl));
+  height: calc(26px * var(--ctl));
+  border-radius: 50%;
+  border: 2px solid rgba(240, 226, 200, 0.85);
+  box-shadow: inset 0 0 0 calc(4px * var(--ctl)) rgba(26, 21, 16, 0.9), inset 0 0 0 calc(6px * var(--ctl)) rgba(240, 226, 200, 0.7);
 }
 
 /* Nearest the thumb's rest position, and the largest target on the screen. */
-.pad-fire {
-  --r: 72; --b: 72; --d: 100;
-  font-size: calc(12px * var(--ctl));
-  letter-spacing: 0.12em;
-  border-color: rgba(126, 224, 168, 0.55);
-  background: rgba(126, 224, 168, 0.1);
-}
-/* One step out along the arc: directly above fire, and beside it. */
-.pad-aim { --r: 80; --b: 176; --d: 80; border-color: rgba(232, 238, 245, 0.45); }
-.pad-reload { --r: 176; --b: 80; --d: 72; }
-/* Furthest out, because swapping weapon is the rarest thing a thumb does. */
-.pad-swap { --r: 180; --b: 180; --d: 64; font-size: calc(10px * var(--ctl)); }
-
-/*
- * A second fire button for the left thumb, mirrored onto the left edge.
- *
- * It deliberately does not sit in the bottom-left corner. The movement stick
- * spawns wherever the left thumb lands, so a button in the thumb's resting
- * place swallows the touch that was meant to start walking — which is exactly
- * what the old corner placement did.
- */
-.pad-fire-left {
-  right: auto;
-  left: calc(72px * var(--ctl) + var(--safe-l) - (80px * var(--ctl)) / 2);
-  bottom: calc(176px * var(--ctl) + var(--safe-b) - (80px * var(--ctl)) / 2);
-  width: calc(80px * var(--ctl));
-  height: calc(80px * var(--ctl));
-  opacity: 0.5;
-}
+.pad-fire { --r: 96; --b: 112; --d: 78; }
+/* Up and inward from fire. */
+.pad-aim { --r: 178; --b: 178; --d: 64; }
+/* At the top of the arc. */
+.pad-dodge { --r: 106; --b: 210; --d: 64; }
+/* Beside fire, faded: the one you reach for least in a fight. */
+.pad-reload { --r: 178; --b: 100; --d: 64; opacity: 0.62; }
 
 .pad-button.is-active {
-  background: rgba(126, 224, 168, 0.24);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: radial-gradient(circle at 50% 40%, rgba(120, 96, 62, 0.92), rgba(58, 44, 28, 0.94));
+  border-color: rgba(255, 220, 160, 0.55);
+  color: #fff1d6;
 }
-.pad-fire.is-active { background: rgba(126, 224, 168, 0.34); }
+.pad-button.is-active .glyph { color: #fff1d6; }
 /*
  * A latched control has to be distinguishable from a held one at a glance:
  * the player needs to know the sights will stay up when the thumb leaves.
  */
 .pad-button.is-latched {
-  border-width: 2.5px;
-  box-shadow: 0 0 0 2px rgba(126, 224, 168, 0.25);
+  border-width: 2px;
+  border-color: rgba(255, 220, 160, 0.75);
+  box-shadow: 0 0 0 2px rgba(255, 220, 160, 0.22), 0 2px 10px rgba(0, 0, 0, 0.45);
 }
 
-.chip {
+/* The two tiles in the top corner: pause, and the debug readout. */
+.tile {
   position: absolute;
   top: calc(10px + var(--safe-t));
   right: calc(12px + var(--safe-r));
-  padding: 6px 10px;
-  font: inherit;
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  color: var(--hud-dim);
-  background: rgba(18, 22, 26, 0.5);
-  border: 1px solid rgba(232, 238, 245, 0.2);
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-family: var(--ui-serif);
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  color: rgba(240, 226, 200, 0.85);
+  background: linear-gradient(180deg, rgba(62, 50, 38, 0.88), rgba(34, 27, 20, 0.92));
+  border: 1px solid rgba(255, 236, 205, 0.16);
   border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
   touch-action: none;
+  pointer-events: auto;
 }
+#btn-debug { right: calc(60px + var(--safe-r)); font-size: 10px; }
 
 .screen {
   position: absolute;
@@ -548,32 +561,49 @@ html, body {
  * entirely, and the offset tracks the control scale so it stays clear when the
  * arc grows.
  */
-.ammo {
+.banner {
   position: absolute;
-  right: calc(232px * var(--ctl) + var(--safe-r));
-  bottom: calc(22px + var(--safe-b));
-  text-align: right;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+  left: 50%;
+  bottom: calc(18px + var(--safe-b));
+  transform: translateX(-50%) scale(var(--hud-scale));
+  transform-origin: center bottom;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 220px;
+  padding: 8px 18px 8px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 236, 205, 0.16);
+  background: linear-gradient(180deg, rgba(48, 38, 28, 0.86), rgba(22, 17, 12, 0.92));
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 236, 205, 0.06);
+  color: var(--ui-serif-ink);
+  font-family: var(--ui-serif);
+  text-align: left;
+  touch-action: none;
+  pointer-events: auto;
 }
+.banner-weapon { display: flex; flex-direction: column; gap: 2px; min-width: 76px; }
+.weapon-name { font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; }
+.weapon-class { font-size: 10px; letter-spacing: 0.18em; color: rgba(240, 226, 200, 0.5); }
 .ammo-counts {
   display: flex;
   align-items: baseline;
-  justify-content: flex-end;
-  gap: 4px;
+  gap: 6px;
+  margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
-.ammo-current { font-size: 30px; font-weight: 600; line-height: 1; }
-.ammo-current.is-empty { color: #ff7a5c; }
-.ammo-slash { font-size: 15px; color: var(--hud-dim); }
-.ammo-reserve { font-size: 15px; color: var(--hud-dim); }
-.weapon-line { margin-top: 3px; display: flex; gap: 8px; justify-content: flex-end; }
-.weapon-name { font-size: 11px; letter-spacing: 0.12em; }
-.weapon-class { font-size: 10px; letter-spacing: 0.08em; color: var(--hud-dim); }
+.ammo-current { font-size: 28px; line-height: 1; }
+.ammo-current.is-empty { color: #ff8a6a; }
+.ammo-slash { font-size: 15px; color: rgba(240, 226, 200, 0.5); }
+.ammo-reserve { font-size: 15px; color: rgba(240, 226, 200, 0.6); }
 .reload-hint {
-  margin-top: 5px;
+  position: absolute;
+  left: 0; right: 0;
+  top: -18px;
+  text-align: center;
   font-size: 10px;
-  letter-spacing: 0.22em;
-  color: #ff7a5c;
+  letter-spacing: 0.28em;
+  color: #ff8a6a;
   opacity: 0;
   transition: opacity 120ms linear;
 }
@@ -752,7 +782,6 @@ html, body {
 .netbar { transform: scale(var(--hud-scale)); transform-origin: left top; }
 .feed { transform: scale(var(--hud-scale)); transform-origin: left center; }
 .vitals { transform: scale(var(--hud-scale)); transform-origin: left bottom; }
-.ammo { transform: scale(var(--hud-scale)); transform-origin: right bottom; }
 .killfeed { transform: scale(var(--hud-scale)); transform-origin: right top; }
 .matchbar {
   transform: translateX(-50%) scale(var(--hud-scale));
@@ -915,7 +944,7 @@ html, body {
  * menu. On a phone there is no key to press, and a board you cannot open is a
  * board that does not exist.
  */
-.chip-board { right: calc(78px + var(--safe-r)); }
+.tile-board { right: calc(12px + var(--safe-r)); }
 
 .live-board {
   position: absolute;

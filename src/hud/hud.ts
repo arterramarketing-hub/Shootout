@@ -357,7 +357,7 @@ export class Hud {
     if (weapon.definition.name !== this.lastWeapon) {
       this.lastWeapon = weapon.definition.name;
       this.elements.weaponName.textContent = weapon.definition.name;
-      this.elements.weaponClass.textContent = weapon.definition.className;
+      this.elements.weaponClass.textContent = weapon.definition.calibre;
     }
   }
 

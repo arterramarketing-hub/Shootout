@@ -47,6 +47,7 @@ export interface InputCommand {
   aim: boolean;
   reload: boolean;
   swap: boolean;
+  dodge: boolean;
 }
 
 export interface InputMessage {

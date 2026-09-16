@@ -76,34 +76,43 @@
           </div>
         </div>
 
-        <div class="ammo">
-          <div class="ammo-counts">
+        <!--
+          The weapon banner. Name and calibre on the left, the count on the
+          right, and — for now, while the loadout is being tested — a tap on
+          it swaps weapons, in place of a button on the arc.
+        -->
+        <button class="banner" id="weapon-banner" type="button" aria-label="Swap weapon">
+          <span class="banner-weapon">
+            <span id="weapon-name" class="weapon-name">Ridgeline</span>
+            <span id="weapon-class" class="weapon-class">5.56</span>
+          </span>
+          <span class="ammo-counts">
             <span id="ammo-current" class="ammo-current">30</span>
             <span class="ammo-slash">/</span>
             <span id="ammo-reserve" class="ammo-reserve">150</span>
-          </div>
-          <div class="weapon-line">
-            <span id="weapon-name" class="weapon-name">Ridgeline</span>
-            <span id="weapon-class" class="weapon-class">Assault Rifle</span>
-          </div>
-          <div id="reload-hint" class="reload-hint">RELOAD</div>
-        </div>
+          </span>
+          <span id="reload-hint" class="reload-hint">RELOAD</span>
+        </button>
       </div>
 
       <div id="joystick-base" class="joystick-base" aria-hidden="true">
         <div id="joystick-knob" class="joystick-knob"></div>
       </div>
 
+      <!--
+        The right-thumb cluster: fire nearest the thumb's rest and largest,
+        aim above and inward, dodge at the top, reload tucked in beside aim.
+        Each is a dark disc with a glyph and a small label under it.
+      -->
       <div class="controls" id="controls">
-        <button class="pad-button pad-fire" id="btn-fire" type="button" aria-label="Fire">FIRE</button>
-        <button class="pad-button pad-aim" id="btn-aim" type="button" aria-label="Aim down sights">ADS</button>
-        <button class="pad-button pad-reload" id="btn-reload" type="button" aria-label="Reload">RELOAD</button>
-        <button class="pad-button pad-swap" id="btn-swap" type="button" aria-label="Swap weapon">SWAP</button>
-        <button class="pad-button pad-fire pad-fire-left" id="btn-fire-left" type="button" aria-label="Fire">FIRE</button>
+        <button class="pad-button pad-fire" id="btn-fire" type="button" aria-label="Fire"><i class="glyph glyph-ring"></i></button>
+        <button class="pad-button pad-aim" id="btn-aim" type="button" aria-label="Aim down sights"><i class="glyph">&#8982;</i><span class="pad-label">Aim</span></button>
+        <button class="pad-button pad-dodge" id="btn-dodge" type="button" aria-label="Dodge"><i class="glyph">&#991;</i><span class="pad-label">Dodge</span></button>
+        <button class="pad-button pad-reload" id="btn-reload" type="button" aria-label="Reload"><i class="glyph">&#8635;</i><span class="pad-label">Reload</span></button>
       </div>
 
-      <button class="chip" id="btn-debug" type="button">DEBUG</button>
-      <button class="chip chip-board" id="btn-board" type="button" aria-label="Scoreboard">BOARD</button>
+      <button class="tile" id="btn-debug" type="button" aria-label="Debug readout">DBG</button>
+      <button class="tile tile-board" id="btn-board" type="button" aria-label="Pause and scoreboard">II</button>
 
       <!--
         The live board. A separate screen from the end-of-round one: this

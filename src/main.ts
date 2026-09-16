@@ -193,10 +193,12 @@ const boot = (): void => {
   input.look.yaw = spawn.yaw;
   input.attachJoystick(byId("joystick-base"), byId("joystick-knob"));
   input.registerButton("fire", byId("btn-fire"));
-  input.registerButton("fire", byId("btn-fire-left"));
   input.registerButton("aim", byId("btn-aim"));
   input.registerButton("reload", byId("btn-reload"));
-  input.registerButton("swap", byId("btn-swap"));
+  input.registerButton("dodge", byId("btn-dodge"));
+  // Swapping is a tap on the banner for now, while the loadout is being
+  // tested; it will not stay a thing a fight is fought with.
+  input.registerButton("swap", byId("weapon-banner"));
   input.start();
 
   const hud = new Hud({
