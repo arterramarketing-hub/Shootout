@@ -1,6 +1,8 @@
 import "@babylonjs/core/Meshes/Builders/boxBuilder";
 import "@babylonjs/core/Meshes/Builders/planeBuilder";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
+import { ColorCurves } from "@babylonjs/core/Materials/colorCurves";
+import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
@@ -58,6 +60,7 @@ export const createScene = (
   }
 
   const key = buildLighting(scene, map);
+  gradeImage(scene, map);
   const staticMeshes = buildMap(scene, map, quality.tier === "high" ? 4 : 1);
   if (style.sky) buildClouds(scene, map);
 
@@ -137,6 +140,38 @@ const paintCloud = (context: CanvasRenderingContext2D, random: () => number): vo
     context.fillStyle = puff;
     context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
   }
+};
+
+/**
+ * The grade: what makes a scene read as one world rather than a set of
+ * materials that happen to share a room.
+ *
+ * Tone mapping so the sun can be bright without the brick going to a flat
+ * orange, a touch more contrast, a little less saturation across the board,
+ * and a soft vignette. All of it runs in the material shaders rather than as
+ * a post-process, so it costs nothing on a phone. Interiors get the same
+ * treatment: consistency is the point.
+ */
+const gradeImage = (scene: Scene, map: MapDefinition): void => {
+  const grade = scene.imageProcessingConfiguration;
+  // No tone mapping: these materials are not high-dynamic-range inputs, and
+  // a filmic curve only pulls a sunlit street down into murk to make room
+  // for highlights it will never be given.
+  grade.toneMappingEnabled = false;
+  grade.exposure = map.style.sky ? 1.08 : 1.0;
+  grade.contrast = 1.06;
+  grade.vignetteEnabled = true;
+  grade.vignetteWeight = 0.7;
+  grade.vignetteStretch = 0.5;
+  grade.vignetteColor = new Color4(0.08, 0.06, 0.05, 0);
+  grade.vignetteBlendMode = ImageProcessingConfiguration.VIGNETTEMODE_MULTIPLY;
+  const curves = new ColorCurves();
+  curves.globalSaturation = -12;
+  curves.shadowsSaturation = -10;
+  curves.highlightsHue = 40;
+  curves.highlightsSaturation = 6;
+  grade.colorCurvesEnabled = true;
+  grade.colorCurves = curves;
 };
 
 /**

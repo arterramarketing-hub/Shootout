@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { boulevardMap } from "../src/maps/boulevard";
 import { BrushWorld } from "../src/sim/brushWorld";
-import { STANCE } from "../src/sim/config";
+import { STANCE, tickInterval } from "../src/sim/config";
+import { createPlayer, stepPlayer } from "../src/sim/player";
+import { emptyInput } from "../src/sim/types";
 import { findPathBetween, nearestNode } from "../src/sim/nav";
 import { bakeNavGrid } from "../src/sim/navBake";
 import { vec3 } from "../src/sim/vec3";
@@ -98,9 +100,12 @@ describe("the ways up", () => {
     for (const slab of slabs) expect(Math.abs(slab.pitch!)).toBeLessThan(Math.acos(0.84));
   });
 
-  it("leave headroom under every beam they pass", () => {
-    // Walk the real capsule up each fallen slab; a beam across the way stops
-    // it dead, and the nav bake would quietly agree by leaving a gap.
+  it("are climbed by the player, all the way up", () => {
+    /*
+     * Walked by the game's own player step — gravity, acceleration and all —
+     * not by shoving the collider. The bugs that matter live in the
+     * collision response, and a hand-driven capsule never meets them.
+     */
     const climbs: [number, number, number, number, number][] = [
       [-17, -13.5, -17, -3.5, 0], // west wing, ground to first
       [-11, 21.5, -11, 12.5, 4.3], // west wing, first to the landing
@@ -109,21 +114,19 @@ describe("the ways up", () => {
       [11, -21.5, 11, -12.5, 4.3], // east bar, first to the landing
     ];
     for (const [x1, z1, x2, z2, floor] of climbs) {
+      const yaw = Math.atan2(x2 - x1, z2 - z1);
       const body = world.createController(STANCE.radius, STANCE.standHeight / 2);
-      body.setPosition(vec3(x1, floor + STANCE.standHeight / 2 + 0.05, z1));
-      for (let i = 0; i < 6; i += 1) body.move(vec3(0, -0.15, 0));
-      // Walk the way the controller does: a step forward and gravity's share
-      // of a frame. Being pushed back out of a slope costs about a quarter of
-      // each step, so the walk asks for nearly twice the distance and the
-      // check is that it arrives, not how fast.
-      const steps = 260;
-      for (let i = 0; i < steps; i += 1) body.move(vec3((x2 - x1) / 140, -0.02, (z2 - z1) / 140));
-      const end = body.getPosition();
-      // Arrived at the top, or walked on past it across the floor above.
+      const player = createPlayer(vec3(x1, floor + STANCE.standHeight / 2 + 0.05, z1), yaw);
+      body.setPosition(player.position);
+      for (let i = 0; i < 10; i += 1) stepPlayer(player, { ...emptyInput(), yaw }, tickInterval, body);
+      for (let i = 0; i < Math.round(4 / tickInterval); i += 1) {
+        stepPlayer(player, { ...emptyInput(), moveY: 1, yaw }, tickInterval, body);
+      }
+      const end = player.position;
       const wanted = Math.hypot(x2 - x1, z2 - z1);
       const gone = ((end.x - x1) * (x2 - x1) + (end.z - z1) * (z2 - z1)) / wanted;
-      expect(gone, `stuck at (${end.x.toFixed(1)}, ${end.z.toFixed(1)}) climbing from (${x1}, ${z1})`).toBeGreaterThan(wanted - 1.5);
-      expect(end.y - floor).toBeGreaterThan(3.9);
+      expect(gone, `stuck at (${end.x.toFixed(1)}, ${end.z.toFixed(1)}) climbing from (${x1}, ${z1})`).toBeGreaterThan(wanted - 1);
+      expect(end.y - floor).toBeGreaterThan(4.3 + STANCE.standHeight / 2 - 0.3);
     }
   });
 });

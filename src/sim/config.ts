@@ -36,6 +36,12 @@ export const MOVEMENT = {
   /** A slope steeper than this is a wall, not a ramp. */
   maxSlopeAngle: 0.85,
   /**
+   * The tallest ledge a player walks straight up: a kerb, a slab edge, the
+   * lip of a fallen floor. Below the spandrels, which are cover to crouch
+   * behind and not a stair.
+   */
+  stepHeight: 0.5,
+  /**
    * Downward speed held while grounded. The swept collider comes to rest a
    * hair above the floor, so without this the next step's fall is unobstructed
    * and the player reads as airborne while standing still.

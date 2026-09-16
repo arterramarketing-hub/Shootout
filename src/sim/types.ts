@@ -77,6 +77,12 @@ export interface CollisionWorld {
   move(displacement: Vec3): Vec3;
   /** Current collider centre. */
   getPosition(): Vec3;
+  /**
+   * The normal of the ground the collider last stood on during a move, or
+   * null when it was not on ground. Lets movement follow a slope instead of
+   * being pushed back off it.
+   */
+  groundNormal?(): Vec3 | null;
   /** Teleport, ignoring collision. Used for spawning. */
   setPosition(position: Vec3): void;
   /** Whether the collider has headroom to return to full height. */

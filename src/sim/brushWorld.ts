@@ -42,6 +42,7 @@ export const BRUSH_WORLD = {
 export class CapsuleController implements CollisionWorld {
   private position: Vec3 = vec3();
   private groundedFlag = false;
+  private groundNormalValue: Vec3 | null = null;
 
   constructor(
     private readonly world: BrushWorld,
@@ -69,6 +70,10 @@ export class CapsuleController implements CollisionWorld {
     return this.groundedFlag;
   }
 
+  groundNormal(): Vec3 | null {
+    return this.groundNormalValue;
+  }
+
   move(displacement: Vec3): Vec3 {
     const before = { ...this.position };
     const length = Math.hypot(displacement.x, displacement.y, displacement.z);
@@ -77,6 +82,7 @@ export class CapsuleController implements CollisionWorld {
     const inverse = 1 / steps;
 
     this.groundedFlag = false;
+    this.groundNormalValue = null;
     for (let step = 0; step < steps; step += 1) {
       this.position.x += displacement.x * inverse;
       this.position.y += displacement.y * inverse;
@@ -131,7 +137,10 @@ export class CapsuleController implements CollisionWorld {
         this.position.x += deepest.normal.x * push;
         this.position.y += deepest.normal.y * push;
         this.position.z += deepest.normal.z * push;
-        if (deepest.normal.y >= BRUSH_WORLD.groundNormalY) this.groundedFlag = true;
+        if (deepest.normal.y >= BRUSH_WORLD.groundNormalY) {
+          this.groundedFlag = true;
+          this.groundNormalValue = deepest.normal;
+        }
         moved = true;
       }
 

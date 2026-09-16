@@ -57,13 +57,13 @@ const TINT = {
   /** The painted spandrels down the east wing, the one splash of colour. */
   paint: undefined,
   /** Dark steel: the bridge girders, sash remnants, the car. */
-  steel: "#4b4d52",
+  steel: "#4d4b48",
   /** Weathered timber and the courtyard's rust-streaked concrete. */
   courtyard: "#c9b9a4",
   /** The tower's older, darker brick. */
   tower: "#8d5d4f",
-  car: "#6f5a7a",
-  barrel: "#d9772a",
+  car: "#5c5060",
+  barrel: "#b56a3c",
 } as const;
 
 const brushes: BoxBrush[] = [];
@@ -388,7 +388,7 @@ const wheel = (x: number, z: number, yaw: number, dx: number, dz: number, flat =
 
 /** A car that has been here longer than anyone can remember. */
 const car = (x: number, z: number, yaw: number): void => {
-  const body = "#5e4d69";
+  const body = "#5a4f5c";
   const glass = "#1e2226";
   const p = (kind: BoxBrush["kind"], dx: number, y: number, dz: number, w: number, h: number, d: number, extra: Partial<BoxBrush> = {}) =>
     vehiclePart(x, z, yaw, kind, dx, y, dz, w, h, d, extra);
@@ -755,29 +755,37 @@ const targets: TargetPlacement[] = [
  * street.
  */
 const style: MapStyle = {
-  concrete: "#a9a59b",
-  panel: "#9b978f",
-  crate: "#8c7250",
-  metal: "#6c6f73",
-  grate: "#7d8083",
-  hazard: "#d0782c",
-  hazardStripe: "#2c2c2c",
-  brick: "#7e4a3f",
-  frame: "#a09a8f",
-  cladding: "#969ca1",
-  spandrel: "#b4482a",
-  asphalt: "#5c5d5a",
-  rubble: "#9a9385",
-  foliage: "#5a8a3c",
-  graffiti: "#a19d95",
-  fog: "#bccbdf",
-  sky: "#4a92e4",
-  skyLight: "#a6c4ec",
-  groundLight: "#8b7b63",
-  keyLight: "#fff0d2",
-  fillIntensity: 0.78,
-  keyIntensity: 1.05,
-  ambient: "#767c86",
+  /*
+   * One palette, sun-bleached. Every colour here is a warm grey with a
+   * little of something in it — brick a dusty brown-red, paint a rust that
+   * has lost its orange, foliage an olive rather than a green — so that
+   * nothing on the map is more saturated than the sky, and the sky is pale.
+   * The hard warm key and a neutral fill do the rest: surfaces are told
+   * apart by light and shade, not by hue.
+   */
+  concrete: "#a59f93",
+  panel: "#9a948a",
+  crate: "#8a7458",
+  metal: "#6b6a66",
+  grate: "#77766f",
+  hazard: "#b7784a",
+  hazardStripe: "#3a3733",
+  brick: "#78514a",
+  frame: "#a49e93",
+  cladding: "#9b9d9c",
+  spandrel: "#a2543a",
+  asphalt: "#5d5b56",
+  rubble: "#9e988c",
+  foliage: "#647a44",
+  graffiti: "#a09b92",
+  fog: "#cdd3d6",
+  sky: "#8fb5d9",
+  skyLight: "#c9d3dc",
+  groundLight: "#9a8a74",
+  keyLight: "#ffe6c4",
+  fillIntensity: 0.85,
+  keyIntensity: 1.15,
+  ambient: "#9a9793",
   keyDirection: { x: 0.55, y: -0.72, z: 0.3 },
   stripLight: "#ffe9c4",
 };

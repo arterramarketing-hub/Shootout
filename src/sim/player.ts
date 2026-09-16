@@ -117,7 +117,15 @@ export const stepPlayer = (
     state.velocity.y * dt,
     state.velocity.z * dt,
   );
-  const actual = world.move(requested);
+  // On a slope, walk along it rather than into it. Pushing a capsule
+  // horizontally into a ramp gets it shoved back out along the ramp's normal,
+  // which reads as an invisible wall at the foot of every ramp in the game.
+  const ground = wasGrounded ? (world.groundNormal?.() ?? null) : null;
+  if (ground && ground.y > 0.01 && ground.y < 0.9999) {
+    const along = -(requested.x * ground.x + requested.z * ground.z) / ground.y;
+    if (along > 0) requested.y += along;
+  }
+  const actual = moveWithStep(requested, world, wasGrounded);
 
   resolveCollisionResponse(state, requested, actual, dt, wasGrounded);
 
@@ -217,6 +225,77 @@ const applyHorizontalMovement = (
   state.velocity.z = moveToward(state.velocity.z, wishZ, rate * dt);
 };
 
+/**
+ * Move, and if a ledge stopped the move, try stepping over it.
+ *
+ * A capsule pushed into a kerb is pushed straight back; nothing about the
+ * push knows the kerb is fifteen centimetres high. So when a grounded move is
+ * cut short, try it again lifted by the step height, then settle back down,
+ * and keep whichever got further. A standing player is also never dragged
+ * sideways by the ground alone: with nothing asked for horizontally, the
+ * capsule is put back where it was, which is what stops it creeping down a
+ * ramp it is only standing on.
+ */
+const moveWithStep = (
+  requested: Vec3,
+  world: CollisionWorld,
+  wasGrounded: boolean,
+): Vec3 => {
+  const before = world.getPosition();
+  const actual = world.move(requested);
+  const wanted = Math.hypot(requested.x, requested.z);
+
+  if (wanted < 1e-6) {
+    if (wasGrounded) {
+      const now = world.getPosition();
+      world.setPosition(vec3(before.x, now.y, before.z));
+      return vec3(0, now.y - before.y, 0);
+    }
+    return actual;
+  }
+  if (!wasGrounded) return actual;
+
+  const got = (requested.x * actual.x + requested.z * actual.z) / wanted;
+  // Cut short, or riding up the edge of something without standing on it:
+  // a round bottom on the corner of a ledge slides most of the way along and
+  // a little way up, and never gets on top.
+  const nudgedUp = actual.y > requested.y + 0.005 && !(world.groundNormal?.() ?? null);
+  if (got >= wanted * 0.9 && !nudgedUp) return actual;
+
+  // Blocked. Try the same move from a step higher, then settle back onto
+  // whatever is there. The settle keeps the ground it found and nothing
+  // else: a round bottom coming down on the edge of a kerb is shoved
+  // sideways off it, and taking that shove would put the player back where
+  // they started every tick and call the kerb a wall.
+  const stalled = world.getPosition();
+  world.setPosition(before);
+  const lift = world.move(vec3(0, MOVEMENT.stepHeight, 0));
+  const across = world.move(vec3(requested.x, 0, requested.z));
+  const crossed = world.getPosition();
+  const gotStepped = (requested.x * across.x + requested.z * across.z) / wanted;
+  if (gotStepped <= got + 1e-4) {
+    // No further from up here either: it is a wall.
+    world.setPosition(stalled);
+    return actual;
+  }
+
+  world.move(vec3(0, -lift.y - 0.02, 0));
+  const settled = world.getPosition();
+  const landed = (world.groundNormal?.() ?? null) !== null && settled.y > before.y + 0.02;
+  if (landed && settled.y - before.y <= MOVEMENT.stepHeight + 0.01) {
+    world.setPosition(vec3(crossed.x, settled.y, crossed.z));
+    return vec3(crossed.x - before.x, settled.y - before.y, crossed.z - before.z);
+  }
+  /*
+   * Over the edge but not yet over the top: a round bottom this far onto a
+   * ledge comes down on its corner and is shoved off. So stay up, and keep
+   * going. Gravity brings the capsule down over the next few steps, by which
+   * time it is far enough on to land on the ledge rather than its edge.
+   */
+  world.setPosition(crossed);
+  return vec3(crossed.x - before.x, crossed.y - before.y, crossed.z - before.z);
+};
+
 const resolveCollisionResponse = (
   state: PlayerState,
   requested: Vec3,
@@ -243,10 +322,13 @@ const resolveCollisionResponse = (
     if (blockedAbove) state.velocity.y = 0;
   }
 
-  // A wall stops horizontal momentum rather than letting it build up against it.
+  // A wall stops horizontal momentum rather than letting it build up against
+  // it. A wall, not a ramp: sliding along a slope always costs a little of
+  // the asked-for distance, and treating that as a wall halves the speed a
+  // player climbs at. Only a real shortfall counts.
   if (dt > 0) {
-    const blockedX = Math.abs(actual.x) < Math.abs(requested.x) - 1e-5;
-    const blockedZ = Math.abs(actual.z) < Math.abs(requested.z) - 1e-5;
+    const blockedX = Math.abs(actual.x) < Math.abs(requested.x) * 0.6 - 1e-5;
+    const blockedZ = Math.abs(actual.z) < Math.abs(requested.z) * 0.6 - 1e-5;
     if (blockedX) state.velocity.x = actual.x / dt;
     if (blockedZ) state.velocity.z = actual.z / dt;
   }
