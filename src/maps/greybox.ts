@@ -1,4 +1,5 @@
 import type { BoxBrush, MapDefinition, MapStyle, SpawnPoint, TargetPlacement } from "./types";
+import { mergeBrushes } from "./merge";
 
 const WALL_HEIGHT = 4.2;
 const WALL_THICKNESS = 0.4;
@@ -319,7 +320,7 @@ export const greyboxMap: MapDefinition = {
   style: warehouseStyle,
   textureSeed: 1337,
   size: 40,
-  brushes,
+  brushes: mergeBrushes(brushes),
   spawns,
   targets,
 };

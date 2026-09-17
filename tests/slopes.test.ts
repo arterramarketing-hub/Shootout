@@ -63,6 +63,39 @@ describe("ramps", () => {
     expect(end.z).toBeGreaterThan(6);
   });
 
+  it("are climbed without leaving the ground or hopping", () => {
+    /*
+     * The first push into the foot of a ramp is cut short by the slope, and
+     * the step-over used to take that for a kerb: half a metre straight up,
+     * a fall back onto the ramp, and again eight ticks later, all the way up.
+     */
+    const { player, walk } = walker([FLOOR, ramp(23, 10)], { x: 0, z: -1 });
+    let previous = player.position.y;
+    for (let i = 0; i < 150; i += 1) {
+      walk(tickInterval);
+      expect(player.grounded).toBe(true);
+      expect(player.position.y - previous).toBeLessThan(0.05);
+      expect(player.position.y - previous).toBeGreaterThan(-0.01);
+      previous = player.position.y;
+    }
+    expect(player.position.y).toBeGreaterThan(3);
+  });
+
+  it("are walked down at a run without skipping off them", () => {
+    const top = Math.tan((23 * Math.PI) / 180) * 10;
+    const landing: BoxBrush = { kind: "floor", x: 0, y: top - 0.15, z: 14, width: 6, height: 0.3, depth: 8 };
+    const { player, walk } = walker([FLOOR, ramp(23, 10), landing], { x: 0, z: 13, y: top }, Math.PI);
+    let previous = player.position.y;
+    for (let i = 0; i < 200; i += 1) {
+      walk(tickInterval);
+      expect(player.grounded).toBe(true);
+      expect(player.position.y - previous).toBeLessThan(0.005);
+      expect(player.position.y - previous).toBeGreaterThan(-0.06);
+      previous = player.position.y;
+    }
+    expect(player.position.y).toBeLessThan(1.5);
+  });
+
   it("do not let a standing player creep down them", () => {
     /*
      * Gravity presses the capsule into the slope, the slope pushes it back

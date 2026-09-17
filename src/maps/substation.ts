@@ -1,4 +1,5 @@
 import type { BoxBrush, MapDefinition, MapStyle, SpawnPoint, TargetPlacement } from "./types";
+import { mergeBrushes } from "./merge";
 
 /**
  * Substation: an enclosed switchgear hall at night.
@@ -265,7 +266,7 @@ export const substationMap: MapDefinition = {
   style: substationStyle,
   textureSeed: 20260912,
   size: 40,
-  brushes,
+  brushes: mergeBrushes(brushes),
   spawns,
   targets,
 };

@@ -123,11 +123,17 @@ export const stepPlayer = (
   const ground = wasGrounded ? (world.groundNormal?.() ?? null) : null;
   if (ground && ground.y > 0.01 && ground.y < 0.9999) {
     const along = -(requested.x * ground.x + requested.z * ground.z) / ground.y;
-    if (along > 0) requested.y += along;
+    // Up or down: a player walking down a steep slab at a run outpaces the
+    // ground stick and skips off it otherwise. The stick itself is not
+    // folded in: four centimetres a tick pressed into a slope is pushed back
+    // out along its normal, and a quarter of the climbing speed goes with
+    // it. A couple of millimetres is enough to keep the contact registered.
+    requested.y = along - SLOPE_STICK;
   }
   const actual = moveWithStep(requested, world, wasGrounded);
+  snapToGround(requested, actual, world, wasGrounded);
 
-  resolveCollisionResponse(state, requested, actual, dt, wasGrounded);
+  resolveCollisionResponse(state, requested, actual, dt, wasGrounded, world);
 
   const resolved = world.getPosition();
   state.position.x = resolved.x;
@@ -225,6 +231,46 @@ const applyHorizontalMovement = (
   state.velocity.z = moveToward(state.velocity.z, wishZ, rate * dt);
 };
 
+/** How far into a slope a grounded move presses, in metres, to stay in contact. */
+const SLOPE_STICK = 0.004;
+/** How far below a grounded player the ground may have dropped away, in metres, and still be theirs. */
+const GROUND_SNAP = 0.25;
+
+/**
+ * Keep a walking player on ground that falls away under them.
+ *
+ * Over the crest of a ramp, the last contact on the flat says the ground is
+ * level, so the move goes level, and the slope is a centimetre below the
+ * capsule by the end of it. Left there, the player is airborne for a tick
+ * and lands: no sprint, no bob, and a stutter every time. Walking off a real
+ * drop is different, and further than the snap reaches.
+ */
+const snapToGround = (
+  requested: Vec3,
+  actual: Vec3,
+  world: CollisionWorld,
+  wasGrounded: boolean,
+): void => {
+  if (!wasGrounded || requested.y > 0) return;
+  if ((world.groundNormal?.() ?? null) !== null) return;
+  const here = world.getPosition();
+  // In short sweeps, not one drop: a capsule dropped a quarter of a metre
+  // onto a slope is pushed back out along its normal, and the sideways part
+  // of that is a lurch. A few centimetres at a time barely registers.
+  const sweeps = 5;
+  for (let sweep = 0; sweep < sweeps; sweep += 1) {
+    world.move(vec3(0, -GROUND_SNAP / sweeps, 0));
+    if ((world.groundNormal?.() ?? null) !== null) {
+      const landed = world.getPosition();
+      actual.x += landed.x - here.x;
+      actual.y += landed.y - here.y;
+      actual.z += landed.z - here.z;
+      return;
+    }
+  }
+  world.setPosition(here);
+};
+
 /**
  * Move, and if a ledge stopped the move, try stepping over it.
  *
@@ -256,10 +302,17 @@ const moveWithStep = (
   if (!wasGrounded) return actual;
 
   const got = (requested.x * actual.x + requested.z * actual.z) / wanted;
+  const standingOn = world.groundNormal?.() ?? null;
+  // A slope cuts a move short too: the first push into the foot of a ramp
+  // is shoved back out along its normal before the slope-following above
+  // has a normal to follow. That is not a ledge. Stepping over it lifts the
+  // player half a metre into the air above a surface they could simply walk
+  // up, and the fall back onto it is the jitter every ramp used to have.
+  if (standingOn && standingOn.y < 0.9999 && actual.y >= requested.y - 1e-6) return actual;
   // Cut short, or riding up the edge of something without standing on it:
   // a round bottom on the corner of a ledge slides most of the way along and
   // a little way up, and never gets on top.
-  const nudgedUp = actual.y > requested.y + 0.005 && !(world.groundNormal?.() ?? null);
+  const nudgedUp = actual.y > requested.y + 0.005 && !standingOn;
   if (got >= wanted * 0.9 && !nudgedUp) return actual;
 
   // Blocked. Try the same move from a step higher, then settle back onto
@@ -270,6 +323,12 @@ const moveWithStep = (
   const stalled = world.getPosition();
   world.setPosition(before);
   const lift = world.move(vec3(0, MOVEMENT.stepHeight, 0));
+  if (lift.y < MOVEMENT.stepHeight * 0.5) {
+    // Something overhead: under the raised end of a fallen slab, there is no
+    // stepping up, and trying pushes the player about under the ceiling.
+    world.setPosition(stalled);
+    return actual;
+  }
   const across = world.move(vec3(requested.x, 0, requested.z));
   const crossed = world.getPosition();
   const gotStepped = (requested.x * across.x + requested.z * across.z) / wanted;
@@ -302,11 +361,16 @@ const resolveCollisionResponse = (
   actual: Vec3,
   dt: number,
   wasGrounded: boolean,
+  world: CollisionWorld,
 ): void => {
   const blockedBelow = requested.y < 0 && actual.y > requested.y + 1e-4;
   const blockedAbove = requested.y > 0 && actual.y < requested.y - 1e-4;
+  // Climbing a slope is a move that asks to go up and does, so nothing is
+  // blocked below; the ground is still under the player. What decides it is
+  // whether the move ended in contact with a floor, and the collider knows.
+  const onGround = blockedBelow || (wasGrounded && (world.groundNormal?.() ?? null) !== null);
 
-  if (blockedBelow) {
+  if (onGround) {
     if (!wasGrounded && state.velocity.y < -4) {
       // Scale the landing dip by impact speed, capped so a long fall is not absurd.
       const impact = clamp(-state.velocity.y / 12, 0, 1);

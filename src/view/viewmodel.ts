@@ -15,7 +15,7 @@ import type { WeaponId } from "../sim/weapons";
 import { clamp, damp } from "../sim/vec3";
 import { createWeaponModels, type FinishPainter, type WeaponModel } from "./weaponModels";
 import { RECOIL, recoilPose } from "./recoilPose";
-import { POSE, headroomDegrees, holdPosition } from "./weaponGeometry";
+import { POSE, headroomDegrees, holdPosition, COUNTER_SIZE } from "./weaponGeometry";
 import type { Finish } from "../sim/cosmetics";
 
 /** Meshes on this layer render only through the viewmodel camera. */
@@ -158,47 +158,74 @@ export class ViewmodelRig {
     this.flash.layerMask = VIEWMODEL_LAYER;
     this.flash.setEnabled(false);
 
-    this.hologramTexture = new DynamicTexture("tex_ammo_holo", { width: 256, height: 128 }, scene, true);
+    // The round counter: a small display on the back of the weapon, drawn
+    // as part of it, so the receiver hides it the way it would hide any
+    // other fitting when the weapon is swung across the view.
+    this.hologramTexture = new DynamicTexture("tex_ammo_counter", { width: 256, height: 128 }, scene, true);
     this.hologramTexture.hasAlpha = true;
-    const holoMaterial = new StandardMaterial("mat_ammo_holo", scene);
+    const holoMaterial = new StandardMaterial("mat_ammo_counter", scene);
     holoMaterial.diffuseTexture = this.hologramTexture;
     holoMaterial.opacityTexture = this.hologramTexture;
     holoMaterial.emissiveColor = new Color3(1, 1, 1);
     holoMaterial.disableLighting = true;
     holoMaterial.backFaceCulling = false;
-    this.hologram = MeshBuilder.CreatePlane("ammo_holo", { width: 0.09, height: 0.045 }, scene);
+    this.hologram = MeshBuilder.CreatePlane("ammo_counter", COUNTER_SIZE, scene);
     this.hologram.material = holoMaterial;
     this.hologram.isPickable = false;
     this.hologram.layerMask = VIEWMODEL_LAYER;
-    // Drawn after the weapon so it reads over the receiver, never through it.
-    this.hologram.renderingGroupId = 1;
     this.hologram.setEnabled(false);
   }
 
   /** Redraw the count when it changes; the texture is the expensive part. */
-  private paintHologram(magazine: number, reserve: number): void {
-    const text = `${magazine}|${reserve}`;
+  /**
+   * Paint the counter: the rounds in the weapon large, the reserve small,
+   * and a bar for the magazine that still reads when the digits are a few
+   * pixels tall. Cyan while there is plenty, amber for the last quarter,
+   * and orange on empty, so the colour alone says reload.
+   */
+  private paintHologram(magazine: number, reserve: number, capacity: number): void {
+    const text = `${magazine}|${reserve}|${capacity}`;
     if (text === this.hologramText) return;
     this.hologramText = text;
     const context = this.hologramTexture.getContext() as unknown as CanvasRenderingContext2D;
-    context.clearRect(0, 0, 256, 128);
-    const ink = magazine === 0 ? "#ff8a66" : "#9fe8ff";
-    // A faint plate and a rule, so it reads as a projection rather than as
-    // numbers floating in the air.
-    context.fillStyle = "rgba(20, 60, 80, 0.35)";
-    context.fillRect(4, 4, 248, 120);
+    const width = 256;
+    const height = 128;
+    context.clearRect(0, 0, width, height);
+    const low = magazine > 0 && magazine <= Math.max(1, Math.floor(capacity * 0.25));
+    const ink = magazine === 0 ? "#ff7a4a" : low ? "#ffc25c" : "#9ceeff";
+    // The screen: a dark plate with a lit border, the way a small readout
+    // sits in its bezel.
+    roundedRect(context, 2, 2, width - 4, height - 4, 12);
+    context.fillStyle = "#070b0c";
+    context.fill();
+    context.lineWidth = 3;
+    context.strokeStyle = "rgba(150, 175, 185, 0.45)";
+    context.stroke();
+    context.save();
+    roundedRect(context, 6, 6, width - 12, height - 12, 9);
+    context.clip();
     context.fillStyle = ink;
-    context.globalAlpha = 0.5;
-    context.fillRect(12, 92, 232, 2);
-    for (let y = 8; y < 120; y += 6) context.fillRect(12, y, 232, 1);
+    context.globalAlpha = 0.08;
+    for (let y = 8; y < height; y += 4) context.fillRect(0, y, width, 1);
     context.globalAlpha = 1;
-    context.font = "bold 72px ui-monospace, Menlo, Consolas, monospace";
+    context.shadowColor = ink;
+    context.shadowBlur = 10;
+    context.font = "bold 84px ui-monospace, Menlo, Consolas, monospace";
     context.textBaseline = "alphabetic";
     context.textAlign = "left";
-    context.fillText(String(magazine), 14, 82);
-    context.font = "32px ui-monospace, Menlo, Consolas, monospace";
+    context.fillText(String(magazine).padStart(2, "0"), 16, 86);
+    context.font = "bold 38px ui-monospace, Menlo, Consolas, monospace";
     context.textAlign = "right";
-    context.fillText(String(reserve), 244, 122);
+    context.globalAlpha = 0.85;
+    context.fillText(String(Math.min(reserve, 999)), width - 16, 86);
+    context.shadowBlur = 0;
+    // The magazine bar.
+    context.globalAlpha = 0.25;
+    context.fillRect(16, 100, width - 32, 8);
+    context.globalAlpha = 1;
+    const fill = capacity > 0 ? clamp(magazine / capacity, 0, 1) : 0;
+    context.fillRect(16, 100, Math.round((width - 32) * fill), 8);
+    context.restore();
     this.hologramTexture.update();
   }
 
@@ -312,8 +339,8 @@ export class ViewmodelRig {
     const weapon = activeWeapon(loadout);
     this.showWeapon(weapon.definition.id);
     this.updateBolt(deltaSeconds);
-    this.paintHologram(weapon.magazine, weapon.reserve);
-    this.updateHologram(deltaSeconds, clamp(loadout.adsProgress, 0, 1));
+    this.paintHologram(weapon.magazine, weapon.reserve, weapon.definition.magazineSize);
+    this.updateHologram(deltaSeconds);
 
     this.updateSway(player, deltaSeconds);
     this.recoilAmount = this.recoilAmount * Math.pow(RECOIL.recovery, deltaSeconds);
@@ -350,20 +377,19 @@ export class ViewmodelRig {
    * because it is a child of the weapon and billboards work in world space.
    * A little flicker in its brightness is what says hologram.
    */
-  private updateHologram(deltaSeconds: number, ads: number): void {
+  private updateHologram(deltaSeconds: number): void {
     if (!this.current) return;
     this.hologramTime += deltaSeconds;
     const model = this.models[this.current];
-    const line = model.spec.sightLine;
-    this.hologram.parent = model.root;
-    this.hologram.position.set(-0.075, line.height - 0.006, line.rearZ + 0.05);
-    this.hologram.rotation.set(0.1, 0.45, 0);
-    // Aiming magnifies the weapon camera, and the count with it; pull it in
-    // so it stays a readout beside the sight rather than a sign over it.
-    this.hologram.scaling.setAll(1 - 0.3 * ads);
+    const mount = model.spec.counter;
+    this.hologram.parent = mount.group === "bolt" ? model.bolt : model.root;
+    this.hologram.position.set(mount.x, mount.y, mount.z);
     this.hologram.setEnabled(true);
+    // A faint waver in its glow is all that is left of the hologram: the
+    // readout is a fitting on the weapon now, and it stays put and opaque.
     const material = this.hologram.material as StandardMaterial;
-    material.alpha = 0.82 + Math.sin(this.hologramTime * 23) * 0.06 + Math.sin(this.hologramTime * 3.1) * 0.06;
+    const glow = 0.94 + Math.sin(this.hologramTime * 23) * 0.03 + Math.sin(this.hologramTime * 3.1) * 0.03;
+    material.emissiveColor.set(glow, glow, glow);
   }
 
   private showWeapon(id: WeaponId): void {
@@ -485,3 +511,24 @@ export class ViewmodelRig {
     model.root.rotation.z = damp(model.root.rotation.z, this.rotation.z, smoothing, deltaSeconds);
   }
 }
+
+const roundedRect = (
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+): void => {
+  context.beginPath();
+  context.moveTo(x + radius, y);
+  context.lineTo(x + width - radius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + radius);
+  context.lineTo(x + width, y + height - radius);
+  context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  context.lineTo(x + radius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - radius);
+  context.lineTo(x, y + radius);
+  context.quadraticCurveTo(x, y, x + radius, y);
+  context.closePath();
+};

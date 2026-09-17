@@ -130,3 +130,44 @@ describe("the ways up", () => {
     }
   });
 });
+
+describe("surfaces", () => {
+  /*
+   * Two faces in one plane are drawn in an order the depth buffer cannot
+   * settle, and the surface flickers as the camera moves. The frame is
+   * drawn block by block and the bridge meets the buildings at floor level,
+   * so the map is checked for the two ways that goes wrong: a brush drawn
+   * twice, and two floors sharing a top surface.
+   */
+  const upright = map.brushes.filter((brush) => !brush.yaw && !brush.pitch);
+  const overlap = (a0: number, a1: number, b0: number, b1: number) => Math.min(a1, b1) - Math.max(a0, b0);
+
+  it("draws no brush twice", () => {
+    const seen = new Set<string>();
+    for (const brush of map.brushes) {
+      const key = JSON.stringify([brush.kind, brush.x, brush.y, brush.z, brush.width, brush.height, brush.depth, brush.yaw ?? 0, brush.pitch ?? 0]);
+      expect(seen.has(key), `brush drawn twice: ${key}`).toBe(false);
+      seen.add(key);
+    }
+  });
+
+  it("gives no two floors the same top surface", () => {
+    // Beams cross inside columns and share tops there, hidden; only the
+    // surfaces people walk on and look down at are checked.
+    const walkable = new Set(["floor", "rubble", "asphalt", "catwalk"]);
+    const floors = upright.filter((brush) => walkable.has(brush.kind) && brush.y + brush.height / 2 > 0.05);
+    for (let i = 0; i < floors.length; i += 1) {
+      for (let j = i + 1; j < floors.length; j += 1) {
+        const a = floors[i];
+        const b = floors[j];
+        if (Math.abs(a.y + a.height / 2 - (b.y + b.height / 2)) > 0.002) continue;
+        const across = overlap(a.x - a.width / 2, a.x + a.width / 2, b.x - b.width / 2, b.x + b.width / 2);
+        const along = overlap(a.z - a.depth / 2, a.z + a.depth / 2, b.z - b.depth / 2, b.z + b.depth / 2);
+        if (across <= 0.01 || along <= 0.01) continue;
+        expect.fail(
+          `${a.kind} at (${a.x}, ${a.z}) and ${b.kind} at (${b.x}, ${b.z}) share a top at y=${(a.y + a.height / 2).toFixed(2)} over ${(across * along).toFixed(2)} m²`,
+        );
+      }
+    }
+  });
+});

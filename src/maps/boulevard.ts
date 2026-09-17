@@ -1,4 +1,5 @@
 import { createRandom } from "../sim/random";
+import { mergeBrushes } from "./merge";
 import type { BoxBrush, MapDefinition, MapStyle, SpawnPoint, TargetPlacement } from "./types";
 
 /**
@@ -111,11 +112,17 @@ interface Block {
   roof: number | null;
 }
 
-/** Columns at every grid intersection, full height. */
+/**
+ * Columns at every grid intersection, full height.
+ *
+ * They stop inside the roof slab rather than at its top: a column carried
+ * through to the same height shares the roof's top surface, and shared
+ * surfaces flicker.
+ */
 const columns = (block: Block, top: number): void => {
   for (let x = block.x1; x <= block.x2 + 1e-6; x += BAY) {
     for (let z = block.z1; z <= block.z2 + 1e-6; z += BAY) {
-      span("frame", x - COLUMN / 2, x + COLUMN / 2, L0, top, z - COLUMN / 2, z + COLUMN / 2);
+      span("frame", x - COLUMN / 2, x + COLUMN / 2, L0, top - SLAB / 2, z - COLUMN / 2, z + COLUMN / 2);
     }
   }
 };
@@ -401,7 +408,7 @@ const car = (x: number, z: number, yaw: number): void => {
   p("accent", -0.1, 1.15, 0, 1.95, 0.42, 1.68, { tint: glass, solid: false });
   p("accent", -0.1, 1.4, 0, 2.05, 0.08, 1.74, { tint: body });
   for (const [dx, dz] of [[0.85, 0.8], [0.85, -0.8], [-1.05, 0.8], [-1.05, -0.8]]) {
-    p("accent", dx, 1.15, dz, 0.08, 0.44, 0.08, { tint: body });
+    p("accent", dx, 1.15, dz, 0.1, 0.44, 0.1, { tint: body });
   }
   // Bumpers, lights, and the grille.
   p("accent", 2.32, 0.42, 0, 0.16, 0.18, 1.9, { tint: "#8c8a86" });
@@ -476,7 +483,7 @@ span("floor", ROAD.east, ROAD.east + KERB, -GROUND, 0.15, -24, 24);
 // was closed rather than a place that stops.
 for (const z of [-23.6, 23.6]) {
   span("catwalk", ROAD.west - KERB, ROAD.east + KERB, 0, 2.6, z - 0.06, z + 0.06, { tint: "#5c6166" });
-  span("accent", ROAD.west - KERB, ROAD.east + KERB, 2.5, 2.7, z - 0.1, z + 0.1, { tint: TINT.steel });
+  span("accent", ROAD.west - KERB - 0.05, ROAD.east + KERB + 0.05, 2.5, 2.7, z - 0.1, z + 0.1, { tint: TINT.steel });
   rubblePile(-3, z + Math.sign(-z) * 1.5, 4, 1.1);
   rubblePile(4, z + Math.sign(-z) * 1.8, 4, 0.9);
 }
@@ -511,8 +518,8 @@ fallenSlab(-14 + 0.3, west.x2 - 0.3, 22, 12, L1, L2); // up from L1 at z=22 to L
 slab(west.x1, west.x2, west.z1, west.z2, ROOF, "frame");
 span("frame", west.x1, west.x2, ROOF, ROOF + 0.7, west.z1, west.z1 + 0.3);
 span("frame", west.x1, west.x2, ROOF, ROOF + 0.7, west.z2 - 0.3, west.z2);
-span("frame", west.x1, west.x1 + 0.3, ROOF, ROOF + 0.7, west.z1, west.z2);
-span("frame", west.x2 - 0.3, west.x2, ROOF, ROOF + 0.7, west.z1, west.z2);
+span("frame", west.x1, west.x1 + 0.3, ROOF, ROOF + 0.7, west.z1 + 0.3, west.z2 - 0.3);
+span("frame", west.x2 - 0.3, west.x2, ROOF, ROOF + 0.7, west.z1 + 0.3, west.z2 - 0.3);
 
 // Facades. The street side is the face people look at, so it gets the range:
 // openings, a few bars of sash, one painted bay. The ground floor has two
@@ -554,7 +561,7 @@ for (const level of [L0, L1, L2, ROOF]) {
   }
 }
 // A painted panel on it, the way the real ones carry one.
-span("spandrel", TOWER.x2 + 0.02, TOWER.x2 + 0.05, L1 + 0.2, L1 + 2.6, TOWER.z1 + 0.8, TOWER.z2 - 0.8, { solid: false });
+span("spandrel", TOWER.x2 + 0.02, TOWER.x2 + 0.05, L1 + 0.2, L1 + 2.6, -9.7, -7.3, { solid: false });
 
 /* ------------------------------------------------------------------ *
  * The bridge.
@@ -563,10 +570,13 @@ span("spandrel", TOWER.x2 + 0.02, TOWER.x2 + 0.05, L1 + 0.2, L1 + 2.6, TOWER.z1 
 {
   const x1 = ROAD.west - KERB - 0.3;
   const x2 = ROAD.east + KERB + 0.3;
-  slab(x1, x2, BRIDGE.south, BRIDGE.north, BRIDGE.floor, "floor", "#cdc6b8");
+  // The deck and its girders stop at the building faces, where the floors
+  // and beams inside take over: laid on top of them, the two floors share a
+  // surface and flicker against each other.
+  slab(ROAD.west, ROAD.east, BRIDGE.south, BRIDGE.north, BRIDGE.floor, "floor", "#cdc6b8");
   // Three girders carry it, black steel, seen from the street below.
   for (const z of [BRIDGE.south + 0.8, 0, BRIDGE.north - 0.8]) {
-    span("accent", x1, x2, BRIDGE.floor - SLAB - 0.7, BRIDGE.floor - SLAB, z - 0.22, z + 0.22, { tint: TINT.steel });
+    span("accent", ROAD.west + BEAM.width / 2, ROAD.east - BEAM.width / 2, BRIDGE.floor - SLAB - 0.7, BRIDGE.floor - SLAB, z - 0.22, z + 0.22, { tint: TINT.steel });
   }
   // Corrugated walls both sides, with two window slots knocked through each,
   // and the roof.
@@ -580,10 +590,12 @@ span("spandrel", TOWER.x2 + 0.02, TOWER.x2 + 0.05, L1 + 0.2, L1 + 2.6, TOWER.z1 
     // sheeting.
     for (const [a, b] of [[x1, -6.5], [-2.5, 2.5], [6.5, x2]]) span("cladding", a, b, sill, head, z1, z2);
     for (const [a, b] of [[-6.5, -2.5], [2.5, 6.5]]) {
-      span("accent", a - 0.08, b + 0.08, sill - 0.08, sill, z1 - 0.02, z2 + 0.02, { tint: TINT.steel });
-      span("accent", a - 0.08, b + 0.08, head, head + 0.08, z1 - 0.02, z2 + 0.02, { tint: TINT.steel });
-      span("accent", a - 0.08, a, sill, head, z1 - 0.02, z2 + 0.02, { tint: TINT.steel });
-      span("accent", b, b + 0.08, sill, head, z1 - 0.02, z2 + 0.02, { tint: TINT.steel });
+      // Each member laps two centimetres over the sheeting's edge, so the
+      // edge is inside the steel rather than sharing a face with it.
+      span("accent", a - 0.08, b + 0.08, sill - 0.08, sill + 0.02, z1 - 0.02, z2 + 0.02, { tint: TINT.steel });
+      span("accent", a - 0.08, b + 0.08, head - 0.02, head + 0.08, z1 - 0.02, z2 + 0.02, { tint: TINT.steel });
+      span("accent", a - 0.08, a + 0.02, sill + 0.02, head - 0.02, z1 - 0.02, z2 + 0.02, { tint: TINT.steel });
+      span("accent", b - 0.02, b + 0.08, sill + 0.02, head - 0.02, z1 - 0.02, z2 + 0.02, { tint: TINT.steel });
     }
   }
   span("cladding", x1, x2, BRIDGE.roof, BRIDGE.roof + 0.3, BRIDGE.south, BRIDGE.north);
@@ -797,7 +809,7 @@ export const boulevardMap: MapDefinition = {
   style,
   textureSeed: 0x51ab,
   size: 64,
-  brushes,
+  brushes: mergeBrushes(brushes),
   nav: {
     halfExtent: 32,
     ceilingY: ROOF - SLAB - 0.2,
