@@ -212,9 +212,10 @@ html, body {
 .pad-fire .icon { width: 40%; height: 40%; }
 
 /*
- * The arc: fire nearest the thumb's rest and largest, aim above and inward,
- * dodge at the top, reload tucked beside aim and dimmed — the one a thumb
- * reaches for least in a fight.
+ * The arc: fire nearest the thumb's rest and largest, aim straight above it
+ * on the outside edge where the thumb rolls up to it, dodge inward of that,
+ * reload tucked beside fire and dimmed — the one a thumb reaches for least
+ * in a fight.
  */
 .pad-fire {
   --r: 96; --b: 112; --d: 92;
@@ -223,8 +224,8 @@ html, body {
   border-color: rgba(126, 224, 168, 0.55);
   background: rgba(126, 224, 168, 0.1);
 }
-.pad-aim { --r: 182; --b: 182; --d: 72; border-color: rgba(232, 238, 245, 0.45); }
-.pad-dodge { --r: 106; --b: 214; --d: 72; }
+.pad-aim { --r: 106; --b: 214; --d: 72; border-color: rgba(232, 238, 245, 0.45); }
+.pad-dodge { --r: 182; --b: 182; --d: 72; }
 .pad-reload { --r: 182; --b: 100; --d: 66; font-size: calc(10px * var(--ctl)); opacity: 0.7; }
 
 /*

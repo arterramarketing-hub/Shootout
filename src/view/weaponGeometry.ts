@@ -154,9 +154,12 @@ const rail = (fromZ: number, toZ: number, y: number, width = 0.030): Part[] => {
   const pitch = 0.0142;
   const count = Math.max(1, Math.floor((toZ - fromZ) / pitch));
   const parts: Part[] = [
+    // The base ends where the teeth begin. Overlapping them by even a
+    // couple of millimetres puts its sides in the same plane as theirs,
+    // and the whole rail edge shimmers.
     box({
       x: 0,
-      y: y - 0.005,
+      y: y - 0.007,
       z: (fromZ + toZ) / 2,
       width,
       height: 0.008,
@@ -620,9 +623,9 @@ const ridgeline = (): ModelSpec => {
     box({
       x: -0.026,
       y: 0.057,
-      z: 0.097,
+      z: 0.099,
       width: 0.014,
-      height: 0.012,
+      height: 0.014,
       depth: 0.018,
       tone: "highlight",
       group: "bolt",
@@ -639,7 +642,9 @@ const ridgeline = (): ModelSpec => {
     }),
 
     // Lower receiver, magwell and controls.
-    box({ x: 0, y: -0.004, z: 0.195, width: 0.048, height: 0.050, depth: 0.21, tone: "body" }),
+    // Its rear stands a few millimetres proud of the upper's; two faces in
+    // one plane, right where the eye rests, is what the receiver used to be.
+    box({ x: 0, y: -0.004, z: 0.1925, width: 0.048, height: 0.050, depth: 0.215, tone: "body" }),
     box({ x: 0, y: -0.031, z: 0.205, width: 0.042, height: 0.016, depth: 0.086, tone: "body" }),
     ...magazine(-0.036, 0.205, 3, 0.048, 0.024, 0.072, 0.13),
     ...trigger(-0.030, 0.140, 0.024),
@@ -694,8 +699,8 @@ const ridgeline = (): ModelSpec => {
       facets: 8,
       tone: "body",
     },
-    ...rail(0.405, 0.550, 0.062, 0.026),
-    ...slots(0.410, 0.550, 0.030, 0.024, 4),
+    ...rail(0.405, 0.547, 0.062, 0.026),
+    ...slots(0.410, 0.550, 0.030, 0.0245, 4),
     {
       shape: "ring",
       axis: "z",
@@ -817,7 +822,7 @@ const wasp = (): ModelSpec => {
       tone: "metal",
       group: "bolt",
     }),
-    ...serrations(0.024, 0.030, 0.100, 0.150, 4, 0.024),
+    ...serrations(0.025, 0.030, 0.100, 0.150, 4, 0.024),
 
     // Magazine ahead of the grip, in the housing that doubles as a foregrip.
     box({ x: 0, y: -0.010, z: 0.140, width: 0.044, height: 0.044, depth: 0.16, tone: "body" }),
@@ -864,7 +869,7 @@ const wasp = (): ModelSpec => {
       facets: 10,
       tone: "body",
     },
-    ...slots(0.300, 0.400, 0.028, 0.021, 3),
+    ...slots(0.300, 0.400, 0.028, 0.0215, 3),
     {
       shape: "ring",
       axis: "z",
@@ -1055,25 +1060,27 @@ const sidearm = (): ModelSpec => {
       tone: "metal",
       group: "bolt",
     }),
+    // A millimetre short of the slide at both ends, so its faces are not
+    // the slide's faces.
     box({
       x: 0,
       y: 0.040,
       z: 0.115,
       width: 0.024,
       height: 0.008,
-      depth: 0.205,
+      depth: 0.203,
       tone: "metal",
       group: "bolt",
     }),
     ...serrations(0.017, 0.026, 0.030, 0.075, 5, 0.022, "bolt"),
     ...serrations(0.017, 0.026, 0.150, 0.190, 4, 0.022, "bolt"),
     box({
-      x: 0.015,
+      x: 0.0145,
       y: 0.030,
       z: 0.150,
-      width: 0.008,
+      width: 0.007,
       height: 0.018,
-      depth: 0.055,
+      depth: 0.050,
       tone: "shadow",
       group: "bolt",
     }),

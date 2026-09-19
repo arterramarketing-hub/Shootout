@@ -8,6 +8,7 @@ import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
+import { Constants } from "@babylonjs/core/Engines/constants";
 import type { Scene } from "@babylonjs/core/scene";
 import { activeWeapon, isSwapping, type LoadoutState } from "../sim/loadout";
 import type { PlayerState } from "../sim/types";
@@ -158,9 +159,9 @@ export class ViewmodelRig {
     this.flash.layerMask = VIEWMODEL_LAYER;
     this.flash.setEnabled(false);
 
-    // The round counter: a small display on the back of the weapon, drawn
-    // as part of it, so the receiver hides it the way it would hide any
-    // other fitting when the weapon is swung across the view.
+    // The round counter: a small hologram thrown up off a fitting on the
+    // back of the weapon. It adds light rather than covering anything, so
+    // the receiver shows through it and it never reads as a screen.
     this.hologramTexture = new DynamicTexture("tex_ammo_counter", { width: 256, height: 128 }, scene, true);
     this.hologramTexture.hasAlpha = true;
     const holoMaterial = new StandardMaterial("mat_ammo_counter", scene);
@@ -169,6 +170,8 @@ export class ViewmodelRig {
     holoMaterial.emissiveColor = new Color3(1, 1, 1);
     holoMaterial.disableLighting = true;
     holoMaterial.backFaceCulling = false;
+    holoMaterial.alphaMode = Constants.ALPHA_ADD;
+    holoMaterial.separateCullingPass = false;
     this.hologram = MeshBuilder.CreatePlane("ammo_counter", COUNTER_SIZE, scene);
     this.hologram.material = holoMaterial;
     this.hologram.isPickable = false;
@@ -176,12 +179,12 @@ export class ViewmodelRig {
     this.hologram.setEnabled(false);
   }
 
-  /** Redraw the count when it changes; the texture is the expensive part. */
   /**
-   * Paint the counter: the rounds in the weapon large, the reserve small,
+   * Paint the hologram: the rounds in the weapon large, the reserve small,
    * and a bar for the magazine that still reads when the digits are a few
    * pixels tall. Cyan while there is plenty, amber for the last quarter,
-   * and orange on empty, so the colour alone says reload.
+   * and orange on empty, so the colour alone says reload. The texture is
+   * the expensive part, so it is only redrawn when the count changes.
    */
   private paintHologram(magazine: number, reserve: number, capacity: number): void {
     const text = `${magazine}|${reserve}|${capacity}`;
@@ -193,38 +196,33 @@ export class ViewmodelRig {
     context.clearRect(0, 0, width, height);
     const low = magazine > 0 && magazine <= Math.max(1, Math.floor(capacity * 0.25));
     const ink = magazine === 0 ? "#ff7a4a" : low ? "#ffc25c" : "#9ceeff";
-    // The screen: a dark plate with a lit border, the way a small readout
-    // sits in its bezel.
-    roundedRect(context, 2, 2, width - 4, height - 4, 12);
-    context.fillStyle = "#070b0c";
-    context.fill();
-    context.lineWidth = 3;
-    context.strokeStyle = "rgba(150, 175, 185, 0.45)";
-    context.stroke();
+    // No plate: the light is the whole thing. A faint field of scanlines
+    // gives the projection an edge, and the glow around the digits does the
+    // rest. The material adds all of this to whatever is behind it.
     context.save();
-    roundedRect(context, 6, 6, width - 12, height - 12, 9);
+    roundedRect(context, 4, 4, width - 8, height - 8, 14);
     context.clip();
     context.fillStyle = ink;
-    context.globalAlpha = 0.08;
-    for (let y = 8; y < height; y += 4) context.fillRect(0, y, width, 1);
-    context.globalAlpha = 1;
+    context.globalAlpha = 0.07;
+    for (let y = 6; y < height; y += 4) context.fillRect(0, y, width, 1);
+    context.globalAlpha = 0.9;
     context.shadowColor = ink;
-    context.shadowBlur = 10;
+    context.shadowBlur = 14;
     context.font = "bold 84px ui-monospace, Menlo, Consolas, monospace";
     context.textBaseline = "alphabetic";
     context.textAlign = "left";
     context.fillText(String(magazine).padStart(2, "0"), 16, 86);
     context.font = "bold 38px ui-monospace, Menlo, Consolas, monospace";
     context.textAlign = "right";
-    context.globalAlpha = 0.85;
+    context.globalAlpha = 0.7;
     context.fillText(String(Math.min(reserve, 999)), width - 16, 86);
     context.shadowBlur = 0;
     // The magazine bar.
-    context.globalAlpha = 0.25;
-    context.fillRect(16, 100, width - 32, 8);
-    context.globalAlpha = 1;
+    context.globalAlpha = 0.18;
+    context.fillRect(16, 100, width - 32, 6);
+    context.globalAlpha = 0.8;
     const fill = capacity > 0 ? clamp(magazine / capacity, 0, 1) : 0;
-    context.fillRect(16, 100, Math.round((width - 32) * fill), 8);
+    context.fillRect(16, 100, Math.round((width - 32) * fill), 6);
     context.restore();
     this.hologramTexture.update();
   }
@@ -339,15 +337,15 @@ export class ViewmodelRig {
     const weapon = activeWeapon(loadout);
     this.showWeapon(weapon.definition.id);
     this.updateBolt(deltaSeconds);
+    const ads = clamp(loadout.adsProgress, 0, 1);
     this.paintHologram(weapon.magazine, weapon.reserve, weapon.definition.magazineSize);
-    this.updateHologram(deltaSeconds);
+    this.updateHologram(deltaSeconds, ads);
 
     this.updateSway(player, deltaSeconds);
     this.recoilAmount = this.recoilAmount * Math.pow(RECOIL.recovery, deltaSeconds);
     this.recoilRoll = this.recoilRoll * Math.pow(RECOIL.recovery, deltaSeconds);
 
     const model = this.models[weapon.definition.id];
-    const ads = clamp(loadout.adsProgress, 0, 1);
     const sprinting = player.sprinting ? 1 : 0;
     const reloading = weapon.reloading ? 1 : 0;
     const swapping = isSwapping(loadout) ? 1 : 0;
@@ -373,23 +371,24 @@ export class ViewmodelRig {
   /**
    * Keep the projection on the weapon and facing the eye.
    *
-   * It is turned to face the camera every frame rather than billboarded,
-   * because it is a child of the weapon and billboards work in world space.
-   * A little flicker in its brightness is what says hologram.
+   * It rides the fitting it is projected from, so it follows the weapon
+   * through every sway and cycle. A little waver in its brightness is what
+   * says hologram. Down the sights it is gone: the player has their answer
+   * in the crosshair then, and a light beside the rear sight is a light in
+   * the eye.
    */
-  private updateHologram(deltaSeconds: number): void {
+  private updateHologram(deltaSeconds: number, ads: number): void {
     if (!this.current) return;
     this.hologramTime += deltaSeconds;
     const model = this.models[this.current];
     const mount = model.spec.counter;
     this.hologram.parent = mount.group === "bolt" ? model.bolt : model.root;
     this.hologram.position.set(mount.x, mount.y, mount.z);
-    this.hologram.setEnabled(true);
-    // A faint waver in its glow is all that is left of the hologram: the
-    // readout is a fitting on the weapon now, and it stays put and opaque.
+    const presence = clamp(1 - ads * 1.6, 0, 1);
+    this.hologram.setEnabled(presence > 0.01);
     const material = this.hologram.material as StandardMaterial;
-    const glow = 0.94 + Math.sin(this.hologramTime * 23) * 0.03 + Math.sin(this.hologramTime * 3.1) * 0.03;
-    material.emissiveColor.set(glow, glow, glow);
+    const waver = 1 + Math.sin(this.hologramTime * 23) * 0.08 + Math.sin(this.hologramTime * 3.1) * 0.06;
+    material.alpha = HOLOGRAM_STRENGTH * presence * waver;
   }
 
   private showWeapon(id: WeaponId): void {
@@ -511,6 +510,9 @@ export class ViewmodelRig {
     model.root.rotation.z = damp(model.root.rotation.z, this.rotation.z, smoothing, deltaSeconds);
   }
 }
+
+/** How bright the count is at the hip: light added to the weapon, well short of solid. */
+const HOLOGRAM_STRENGTH = 0.62;
 
 const roundedRect = (
   context: CanvasRenderingContext2D,
