@@ -38,7 +38,9 @@ import {
 import { BrushWorld } from "./sim/brushWorld";
 import { resolveShot, type ShotResolution } from "./sim/combat";
 import { bakeNavGrid } from "./sim/navBake";
-import { STANCE } from "./sim/config";
+import { nearestNode } from "./sim/nav";
+import { pickSpawn } from "./sim/spawn";
+import { CAMERA, STANCE } from "./sim/config";
 import {
   applyDamage,
   createHealth,
@@ -193,6 +195,16 @@ const boot = (): void => {
   const playerLoadout = createLoadout(carried());
   const random = createRandom(0x51f2a3);
   let previousPosition = copy(player.position);
+  /*
+   * Footsteps are paced by ground covered rather than by a timer, so they
+   * keep step with the camera's own bob however fast the player is moving.
+   * The camera dips once per footfall and sways once per stride, which puts
+   * a step every half cycle of the bob.
+   */
+  const STEP_DISTANCE = 1 / (2 * CAMERA.bobFrequency);
+  let walkedSinceStep = 0;
+  let lastBobDistance = player.bobDistance;
+  let lastLandingOffset = player.landingOffset;
   let debugInvulnerable = false;
   let playerRespawnTimer = 0;
 
@@ -301,26 +313,31 @@ const boot = (): void => {
     saveSettings(next);
   };
 
-  /** Spawn for a team, chosen to be as far as possible from living enemies. */
-  const chooseSpawn = (team: Team): { position: Vec3; yaw: number } => {
+  /**
+   * Is there walkable ground here? Used to keep a sidestep out of a wall.
+   *
+   * The navigation grid already knows every surface a body can stand on, so
+   * it answers this without a second set of rules to keep in step.
+   */
+  const isOpenGround = (x: number, z: number): boolean =>
+    nearestNode(nav.grid, vec3(x, 0.05, z), 1) !== null;
+
+  /**
+   * Spawn for a team: never on top of anybody, then as far from living
+   * enemies as the map allows.
+   */
+  const chooseSpawn = (team: Team, selfId: string): { position: Vec3; yaw: number } => {
     const options = activeMap.spawns.filter((point) => point.team === team);
-    const enemies = combatants.filter((entry) => entry.alive && entry.team !== team);
-    let best = options[0];
-    let bestScore = -Infinity;
-    for (const option of options) {
-      let nearest = Infinity;
-      for (const enemy of enemies) {
-        nearest = Math.min(
-          nearest,
-          Math.hypot(enemy.centre.x - option.x, enemy.centre.z - option.z),
-        );
-      }
-      if (nearest > bestScore) {
-        bestScore = nearest;
-        best = option;
-      }
-    }
-    return { position: vec3(best.x, 0.05, best.z), yaw: best.yaw };
+    const others = combatants.filter((entry) => entry.alive && entry.id !== selfId);
+    const choice = pickSpawn(
+      options,
+      others.map((entry) => ({ x: entry.centre.x, z: entry.centre.z })),
+      others
+        .filter((entry) => entry.team !== team)
+        .map((entry) => ({ x: entry.centre.x, z: entry.centre.z })),
+      isOpenGround,
+    );
+    return { position: vec3(choice.x, 0.05, choice.z), yaw: choice.yaw };
   };
 
   const nameFor = (index: number): string =>
@@ -333,12 +350,22 @@ const boot = (): void => {
     const difficulty = DIFFICULTIES[settings.difficulty];
     const perTeam = settings.teamSize;
     let index = 0;
+    // Where everyone already stands, so the next one along does not arrive
+    // inside them. The player is not on the field yet and takes their own
+    // spawn from the same rule once the roster is built.
+    const placed: { team: Team; x: number; z: number }[] = [];
     // The player takes one slot on blue, so blue fields one fewer bot.
     for (const team of ["a", "b"] as const) {
       const count = team === "a" ? Math.max(0, perTeam - 1) : perTeam;
       for (let i = 0; i < count; i += 1) {
         const teamSpawns = activeMap.spawns.filter((entry) => entry.team === team);
-        const point = teamSpawns[i % teamSpawns.length];
+        const point = pickSpawn(
+          teamSpawns,
+          placed,
+          placed.filter((entry) => entry.team !== team),
+          isOpenGround,
+        );
+        placed.push({ team, x: point.x, z: point.z });
         // Bots carry a rifle and a sidearm; the player gets the full rack.
         const bot = createBot(
           `bot_${index}`,
@@ -585,8 +612,39 @@ const boot = (): void => {
     applyShotDamage(shot.resolution, shot.botId, shot.origin);
   };
 
+  /**
+   * Footsteps and landings, from what the player's own body just did.
+   *
+   * `bobDistance` only advances while the player is on the ground, so a jump
+   * makes no sound until the boots are back on it. The landing dip is set by
+   * the controller at the moment of impact and scaled by how hard it was, so
+   * it is also the right loudness for the thump.
+   */
+  const updateFootsteps = (): void => {
+    const walked = Math.max(0, player.bobDistance - lastBobDistance);
+    lastBobDistance = player.bobDistance;
+
+    if (player.landingOffset > lastLandingOffset + 0.004) {
+      audio.land(player.landingOffset / CAMERA.landingDip);
+      // A landing is its own sound; do not also put a step under it.
+      walkedSinceStep = 0;
+    }
+    lastLandingOffset = player.landingOffset;
+
+    if (playerHealth.dead || !player.grounded) {
+      walkedSinceStep = 0;
+      return;
+    }
+    walkedSinceStep += walked;
+    if (walkedSinceStep < STEP_DISTANCE) return;
+    walkedSinceStep %= STEP_DISTANCE;
+    // A crouched player is placing their feet; a sprinting one is not.
+    const weight = player.sprinting ? 1.35 : 1 - player.crouchAmount * 0.6;
+    audio.footstep(weight);
+  };
+
   const respawnPlayer = (): void => {
-    const point = chooseSpawn("a");
+    const point = chooseSpawn("a", PLAYER_ID);
     body.setPosition(vec3(point.position.x, player.halfHeight + 0.05, point.position.z));
     player.velocity.x = 0;
     player.velocity.y = 0;
@@ -707,6 +765,7 @@ const boot = (): void => {
     respawnPlayer();
     playerRespawnTimer = 0;
     screens.show("game");
+    audio.setAmbience(activeMap.ambience);
     audio.start();
     input.requestPointerLock();
     void document.documentElement.requestFullscreen?.().catch(() => undefined);
@@ -719,7 +778,11 @@ const boot = (): void => {
   const screens = new Screens(settings, profile, {
     onStart: beginMatch,
     onPlayAgain: beginMatch,
-    onReturnToLobby: () => screens.show("lobby"),
+    onReturnToLobby: () => {
+      // The level's weather belongs to the level, not to the menu over it.
+      audio.stopAmbience();
+      screens.show("lobby");
+    },
     onSettingsChanged: applySettings,
     onFinishChanged: (finishId) => {
       // One finish covers the whole rack, which is the only thing a player
@@ -740,6 +803,7 @@ const boot = (): void => {
       online = true;
       screens.setNetStatus(`connected as ${message.name} on ${message.team === "a" ? "blue" : "rust"}`, "live");
       screens.show("game");
+      audio.setAmbience(activeMap.ambience);
       audio.start();
       input.requestPointerLock();
     },
@@ -748,6 +812,7 @@ const boot = (): void => {
       if (!online) return;
       online = false;
       screens.setNetStatus("disconnected from the server", "error");
+      audio.stopAmbience();
       screens.show("lobby");
     },
     onError: (reason) => {
@@ -857,7 +922,7 @@ const boot = (): void => {
       if (bot.health.dead) {
         bot.respawnTimer = Math.max(0, bot.respawnTimer - dt);
         if (bot.respawnTimer === 0) {
-          const point = chooseSpawn(bot.team);
+          const point = chooseSpawn(bot.team, bot.id);
           respawnBot(bot, point.position, point.yaw);
         }
         continue;
@@ -944,7 +1009,10 @@ const boot = (): void => {
         else stepSimulation(loop.stepSeconds, frame);
       }
     }
-    if (inGame) dropAimLatchIfTaken();
+    if (inGame) {
+      dropAimLatchIfTaken();
+      updateFootsteps();
+    }
     input.endFrame();
 
     const weapon = activeWeapon(playerLoadout);

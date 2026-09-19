@@ -807,6 +807,7 @@ export const boulevardMap: MapDefinition = {
   name: "Boulevard Works",
   tagline: "A ruined plant across a street, a bridge above it, a courtyard in the middle.",
   style,
+  ambience: "ruin",
   textureSeed: 0x51ab,
   size: 64,
   brushes: mergeBrushes(brushes),

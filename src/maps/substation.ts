@@ -264,6 +264,7 @@ export const substationMap: MapDefinition = {
   name: "Substation",
   tagline: "Transformer blocks break every lane. The gantry sees everything.",
   style: substationStyle,
+  ambience: "substation",
   textureSeed: 20260912,
   size: 40,
   brushes: mergeBrushes(brushes),

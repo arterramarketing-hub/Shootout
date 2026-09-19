@@ -32,6 +32,8 @@ import {
   type LoadoutState,
 } from "../src/sim/loadout";
 import { bakeNavGrid } from "../src/sim/navBake";
+import { nearestNode } from "../src/sim/nav";
+import { pickSpawn } from "../src/sim/spawn";
 import { createPlayer, eyeOffset, stepPlayer } from "../src/sim/player";
 import { createRandom } from "../src/sim/random";
 import { emptyInput, type InputFrame, type PlayerState } from "../src/sim/types";
@@ -191,25 +193,28 @@ const displayName = (id: string): { name: string; team: Team } => {
   return bot ? { name: bot.name, team: bot.team } : { name: "Unknown", team: "a" };
 };
 
-/** Spawn point for a team, as far as possible from living enemies. */
+/**
+ * Spawn point for a team: never on top of anybody, then as far from living
+ * enemies as the map allows.
+ *
+ * The same rule the client uses, from the same function, so a player who
+ * joins a server lands where a player in a local match would.
+ */
 const chooseSpawn = (team: Team, self: string): { position: Vec3; yaw: number } => {
   const options = MAP.spawns.filter((point) => point.team === team);
-  const enemies = combatants().filter(
-    (entry) => entry.alive && isEnemy({ id: self, team }, entry),
+  const others = combatants().filter((entry) => entry.alive && entry.id !== self);
+  const choice = pickSpawn(
+    options,
+    others.map((entry) => ({ x: entry.centre.x, z: entry.centre.z })),
+    others
+      .filter((entry) => isEnemy({ id: self, team }, entry))
+      .map((entry) => ({ x: entry.centre.x, z: entry.centre.z })),
+    (x, z) => nearestNode(nav.grid, vec3(x, 0.05, z), 1) !== null,
   );
-  let best = options[0];
-  let bestScore = -Infinity;
-  for (const option of options) {
-    let nearest = Infinity;
-    for (const enemy of enemies) {
-      nearest = Math.min(nearest, Math.hypot(enemy.centre.x - option.x, enemy.centre.z - option.z));
-    }
-    if (nearest > bestScore) {
-      bestScore = nearest;
-      best = option;
-    }
-  }
-  return { position: vec3(best.x, STANCE.standHeight / 2 + 0.05, best.z), yaw: best.yaw };
+  return {
+    position: vec3(choice.x, STANCE.standHeight / 2 + 0.05, choice.z),
+    yaw: choice.yaw,
+  };
 };
 
 // --- Roster -----------------------------------------------------------------

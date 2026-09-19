@@ -318,6 +318,7 @@ export const greyboxMap: MapDefinition = {
   name: "Warehouse",
   tagline: "Open floor, crate cover, a mezzanine that owns the long angles.",
   style: warehouseStyle,
+  ambience: "range",
   textureSeed: 1337,
   size: 40,
   brushes: mergeBrushes(brushes),

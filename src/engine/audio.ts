@@ -1,7 +1,7 @@
 import type { WeaponId } from "../sim/weapons";
 
 /**
- * Weapon audio, synthesised at runtime.
+ * Game audio, synthesised at runtime.
  *
  * Every sound here is generated from noise and oscillators rather than loaded
  * from a file. That keeps the download small, lets each weapon's character be
@@ -9,36 +9,159 @@ import type { WeaponId } from "../sim/weapons";
  * depending on any sample library.
  */
 
-interface ShotVoice {
-  /** Centre of the crack, in hertz. */
-  crackFrequency: number;
-  crackQ: number;
-  crackDecay: number;
-  /** Low-end thump, which is what gives a shot its weight. */
-  bodyFrequency: number;
-  bodyDecay: number;
-  /** Room tail, suggesting the warehouse around the player. */
-  tailDecay: number;
-  tailCutoff: number;
+/** One layer of a shot: filtered noise, shaped by an envelope. */
+interface NoiseLayer {
+  frequency: number;
+  decay: number;
   gain: number;
 }
 
+interface BandLayer extends NoiseLayer {
+  q: number;
+}
+
+interface DelayedLayer extends BandLayer {
+  delay: number;
+}
+
+interface ToneLayer {
+  frequency: number;
+  /** What fraction of the starting pitch it falls to. */
+  drop: number;
+  decay: number;
+  gain: number;
+}
+
+/**
+ * What a weapon sounds like.
+ *
+ * Five layers, because a gunshot is five things happening at once and a
+ * weapon's character is in the balance between them, not in one filter
+ * frequency. The rifle cracks, the submachine gun clatters, the shotgun is
+ * mostly blast and the pistol is mostly snap.
+ */
+interface ShotVoice {
+  gain: number;
+  /** How far each shot's pitch wanders, so a burst is not one sound repeated. */
+  jitter: number;
+  /** The hammer falling: a hard transient at the very front. */
+  snap: NoiseLayer;
+  /** The round going supersonic. */
+  crack: BandLayer;
+  /** The weight underneath it, a sine falling in pitch. */
+  body: ToneLayer;
+  /** The blast out of the muzzle: broadband, low-passed. */
+  blast: NoiseLayer;
+  /** The mechanism working, a moment later. */
+  mech: DelayedLayer;
+  /** The room answering back. */
+  tail: NoiseLayer;
+}
+
 const VOICES: Record<WeaponId, ShotVoice> = {
+  // A rifle: the crack dominates, with real weight under it.
   ar: {
-    crackFrequency: 1750, crackQ: 0.8, crackDecay: 0.115,
-    bodyFrequency: 128, bodyDecay: 0.1, tailDecay: 0.34, tailCutoff: 1500, gain: 0.62,
+    gain: 0.62,
+    jitter: 0.05,
+    snap: { frequency: 3600, decay: 0.012, gain: 0.5 },
+    crack: { frequency: 1850, q: 1.8, decay: 0.09, gain: 0.55 },
+    body: { frequency: 118, drop: 0.42, decay: 0.12, gain: 0.5 },
+    blast: { frequency: 620, decay: 0.09, gain: 0.35 },
+    mech: { frequency: 5400, q: 2.5, delay: 0.05, decay: 0.035, gain: 0.13 },
+    tail: { frequency: 1700, decay: 0.36, gain: 0.14 },
   },
+  // A submachine gun: thin and fast, and the bolt is half the sound.
   smg: {
-    crackFrequency: 2350, crackQ: 0.9, crackDecay: 0.075,
-    bodyFrequency: 165, bodyDecay: 0.06, tailDecay: 0.22, tailCutoff: 1900, gain: 0.5,
+    gain: 0.5,
+    jitter: 0.09,
+    snap: { frequency: 4400, decay: 0.008, gain: 0.42 },
+    crack: { frequency: 2700, q: 2.4, decay: 0.05, gain: 0.42 },
+    body: { frequency: 190, drop: 0.5, decay: 0.055, gain: 0.34 },
+    blast: { frequency: 900, decay: 0.05, gain: 0.2 },
+    mech: { frequency: 6300, q: 2.2, delay: 0.028, decay: 0.03, gain: 0.22 },
+    tail: { frequency: 2200, decay: 0.16, gain: 0.1 },
   },
+  // A shotgun: almost all blast and body, and the pump comes afterwards.
   shotgun: {
-    crackFrequency: 780, crackQ: 0.6, crackDecay: 0.3,
-    bodyFrequency: 72, bodyDecay: 0.24, tailDecay: 0.62, tailCutoff: 900, gain: 0.85,
+    gain: 0.85,
+    jitter: 0.04,
+    snap: { frequency: 1400, decay: 0.02, gain: 0.35 },
+    crack: { frequency: 620, q: 0.55, decay: 0.26, gain: 0.5 },
+    body: { frequency: 58, drop: 0.35, decay: 0.3, gain: 0.8 },
+    blast: { frequency: 1300, decay: 0.22, gain: 0.75 },
+    mech: { frequency: 2600, q: 1.4, delay: 0.16, decay: 0.07, gain: 0.24 },
+    tail: { frequency: 800, decay: 0.72, gain: 0.26 },
   },
+  // A pistol: a snap and a short metallic ring, gone almost at once.
   pistol: {
-    crackFrequency: 1500, crackQ: 0.85, crackDecay: 0.14,
-    bodyFrequency: 142, bodyDecay: 0.11, tailDecay: 0.3, tailCutoff: 1400, gain: 0.56,
+    gain: 0.56,
+    jitter: 0.06,
+    snap: { frequency: 3100, decay: 0.01, gain: 0.5 },
+    crack: { frequency: 1550, q: 1.3, decay: 0.085, gain: 0.5 },
+    body: { frequency: 150, drop: 0.45, decay: 0.1, gain: 0.42 },
+    blast: { frequency: 700, decay: 0.07, gain: 0.28 },
+    mech: { frequency: 4800, q: 2.8, delay: 0.045, decay: 0.03, gain: 0.18 },
+    tail: { frequency: 1500, decay: 0.26, gain: 0.12 },
+  },
+};
+
+/** Which bed of sound a level sits in. */
+export type AmbienceId = "ruin" | "substation" | "range";
+
+/** The one-off sounds an ambience throws in between its beds. */
+type Incidental =
+  | "gunfire"
+  | "groan"
+  | "debris"
+  | "bird"
+  | "horn"
+  | "relay"
+  | "buzz"
+  | "gust"
+  | "drip";
+
+interface AmbienceProfile {
+  /** Wind: filtered noise, the loudest thing in an empty level. */
+  wind: number;
+  windCentre: number;
+  /** The floor of the mix: everything below the wind, felt more than heard. */
+  rumble: number;
+  /** A mains hum, where there is something left running. */
+  hum: number;
+  /** Seconds between one-off sounds, at the least and at the most. */
+  gap: [number, number];
+  events: Incidental[];
+}
+
+const AMBIENCES: Record<AmbienceId, AmbienceProfile> = {
+  // An open plant with the weather coming through it: wind in the frame,
+  // traffic somewhere beyond the wall, birds in the roof, and a fight
+  // happening a few streets away.
+  ruin: {
+    wind: 0.05,
+    windCentre: 520,
+    rumble: 0.035,
+    hum: 0,
+    gap: [4, 13],
+    events: ["gunfire", "groan", "bird", "debris", "horn", "gust", "gust"],
+  },
+  // A switchyard: less weather, more electricity.
+  substation: {
+    wind: 0.028,
+    windCentre: 700,
+    rumble: 0.03,
+    hum: 0.022,
+    gap: [3.5, 10],
+    events: ["relay", "buzz", "groan", "debris", "gunfire", "drip"],
+  },
+  // A range. Quiet enough to hear your own weapon properly.
+  range: {
+    wind: 0.02,
+    windCentre: 900,
+    rumble: 0.018,
+    hum: 0.008,
+    gap: [7, 18],
+    events: ["debris", "drip", "gunfire"],
   },
 };
 
@@ -46,7 +169,15 @@ export class GameAudio {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
+  /** A longer buffer for the beds: a one-second loop is audible as a pulse. */
+  private bedNoise: AudioBuffer | null = null;
   private enabled = true;
+
+  private ambience: AmbienceId | null = null;
+  private ambienceNodes: AudioScheduledSourceNode[] = [];
+  private ambienceGain: GainNode | null = null;
+  private ambienceTimer: number | null = null;
+  private gustGain: GainNode | null = null;
 
   /**
    * Browsers refuse to start audio without a user gesture, so this must be
@@ -55,6 +186,7 @@ export class GameAudio {
   start(): void {
     if (this.context) {
       void this.context.resume();
+      this.startAmbience();
       return;
     }
     const Constructor =
@@ -70,6 +202,8 @@ export class GameAudio {
     this.context = context;
     this.master = master;
     this.noise = createNoiseBuffer(context, 1);
+    this.bedNoise = createNoiseBuffer(context, 4);
+    this.startAmbience();
   }
 
   setEnabled(enabled: boolean): void {
@@ -81,86 +215,406 @@ export class GameAudio {
     return this.enabled;
   }
 
-  /** A shot from this player's own weapon. */
-  shot(id: WeaponId): void {
+  /* ------------------------------------------------------------------ *
+   * The bed of sound a level sits in.
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Choose the level's ambience, and switch to it if something is playing.
+   *
+   * Silence is the loudest thing in an empty level: without a bed under it,
+   * every sound in the game arrives out of nowhere and the place reads as a
+   * diagram rather than somewhere weather gets into.
+   */
+  setAmbience(id: AmbienceId): void {
+    if (this.ambience === id) return;
+    this.ambience = id;
+    if (this.context) {
+      this.stopAmbience();
+      this.startAmbience();
+    }
+  }
+
+  /** Stop the beds and the one-off sounds. Safe to call at any time. */
+  stopAmbience(): void {
+    if (this.ambienceTimer !== null) {
+      window.clearTimeout(this.ambienceTimer);
+      this.ambienceTimer = null;
+    }
+    for (const node of this.ambienceNodes) {
+      try {
+        node.stop();
+      } catch {
+        // Already stopped; nothing to do.
+      }
+      node.disconnect();
+    }
+    this.ambienceNodes = [];
+    this.ambienceGain?.disconnect();
+    this.ambienceGain = null;
+    this.gustGain = null;
+  }
+
+  private startAmbience(): void {
     const context = this.context;
     const master = this.master;
-    const noise = this.noise;
-    if (!context || !master || !noise || !this.enabled) return;
+    const bed = this.bedNoise;
+    if (!context || !master || !bed || !this.ambience || this.ambienceGain) return;
+    const profile = AMBIENCES[this.ambience];
 
-    const voice = VOICES[id];
-    const now = context.currentTime;
+    const output = context.createGain();
+    output.gain.value = 1;
+    output.connect(master);
+    this.ambienceGain = output;
 
-    // The crack: a filtered noise burst with an almost instant attack.
-    const crack = context.createBufferSource();
-    crack.buffer = noise;
-    const crackFilter = context.createBiquadFilter();
-    crackFilter.type = "bandpass";
-    crackFilter.frequency.value = voice.crackFrequency;
-    crackFilter.Q.value = voice.crackQ;
-    const crackGain = context.createGain();
-    envelope(crackGain.gain, now, voice.gain, voice.crackDecay);
-    crack.connect(crackFilter).connect(crackGain).connect(master);
-    crack.start(now);
-    crack.stop(now + voice.crackDecay + 0.05);
-
-    // The body: a low sine dropping in pitch, which reads as the weight
-    // of the round rather than as a separate tone.
-    const body = context.createOscillator();
-    body.type = "sine";
-    body.frequency.setValueAtTime(voice.bodyFrequency, now);
-    body.frequency.exponentialRampToValueAtTime(
-      voice.bodyFrequency * 0.45,
-      now + voice.bodyDecay,
+    // Wind: a band of noise whose level and colour both drift, because a
+    // steady band of noise is heard as a fault in the sound card.
+    const wind = context.createBufferSource();
+    wind.buffer = bed;
+    wind.loop = true;
+    const windFilter = context.createBiquadFilter();
+    windFilter.type = "bandpass";
+    windFilter.frequency.value = profile.windCentre;
+    windFilter.Q.value = 0.55;
+    const windGain = context.createGain();
+    windGain.gain.value = profile.wind;
+    this.gustGain = windGain;
+    wind.connect(windFilter).connect(windGain).connect(output);
+    wind.start();
+    this.ambienceNodes.push(wind);
+    // Two drifts at unrelated rates, so the pattern never comes round.
+    this.ambienceNodes.push(
+      this.drift(windGain.gain, 0.055, profile.wind * 0.55),
+      this.drift(windGain.gain, 0.017, profile.wind * 0.3),
+      this.drift(windFilter.frequency, 0.037, profile.windCentre * 0.35),
     );
-    const bodyGain = context.createGain();
-    envelope(bodyGain.gain, now, voice.gain * 0.85, voice.bodyDecay);
-    body.connect(bodyGain).connect(master);
-    body.start(now);
-    body.stop(now + voice.bodyDecay + 0.05);
 
-    // The tail: the room answering back.
-    const tail = context.createBufferSource();
-    tail.buffer = noise;
-    const tailFilter = context.createBiquadFilter();
-    tailFilter.type = "lowpass";
-    tailFilter.frequency.value = voice.tailCutoff;
-    const tailGain = context.createGain();
-    tailGain.gain.setValueAtTime(0, now);
-    tailGain.gain.linearRampToValueAtTime(voice.gain * 0.2, now + 0.012);
-    tailGain.gain.exponentialRampToValueAtTime(0.0001, now + voice.tailDecay);
-    tail.connect(tailFilter).connect(tailGain).connect(master);
-    tail.start(now);
-    tail.stop(now + voice.tailDecay + 0.05);
+    // Rumble: the city, the weather, the building settling. Below anything
+    // the player has to hear.
+    const rumble = context.createBufferSource();
+    rumble.buffer = bed;
+    rumble.loop = true;
+    const rumbleFilter = context.createBiquadFilter();
+    rumbleFilter.type = "lowpass";
+    rumbleFilter.frequency.value = 140;
+    const rumbleGain = context.createGain();
+    rumbleGain.gain.value = profile.rumble;
+    rumble.connect(rumbleFilter).connect(rumbleGain).connect(output);
+    rumble.start();
+    this.ambienceNodes.push(rumble, this.drift(rumbleGain.gain, 0.023, profile.rumble * 0.45));
+
+    // Mains hum, where anything is still live: two tones a fifth apart, the
+    // second one detuned so they beat against each other.
+    if (profile.hum > 0) {
+      for (const [frequency, share] of [[50, 1], [150, 0.5], [301, 0.22]] as const) {
+        const hum = context.createOscillator();
+        hum.type = frequency > 200 ? "triangle" : "sawtooth";
+        hum.frequency.value = frequency;
+        const humFilter = context.createBiquadFilter();
+        humFilter.type = "lowpass";
+        humFilter.frequency.value = 900;
+        const humGain = context.createGain();
+        humGain.gain.value = profile.hum * share;
+        hum.connect(humFilter).connect(humGain).connect(output);
+        hum.start();
+        this.ambienceNodes.push(hum);
+      }
+    }
+
+    this.scheduleIncidental(profile);
+  }
+
+  /** A slow sine added to a parameter, for drift rather than repetition. */
+  private drift(param: AudioParam, rate: number, depth: number): OscillatorNode {
+    const context = this.context as AudioContext;
+    const lfo = context.createOscillator();
+    lfo.frequency.value = rate;
+    const amount = context.createGain();
+    amount.gain.value = depth;
+    lfo.connect(amount).connect(param);
+    lfo.start();
+    return lfo;
+  }
+
+  private scheduleIncidental(profile: AmbienceProfile): void {
+    const [low, high] = profile.gap;
+    const wait = (low + Math.random() * (high - low)) * 1000;
+    this.ambienceTimer = window.setTimeout(() => {
+      this.ambienceTimer = null;
+      if (this.ambienceGain) {
+        const pick = profile.events[Math.floor(Math.random() * profile.events.length)];
+        if (this.enabled) this.playIncidental(pick);
+        this.scheduleIncidental(profile);
+      }
+    }, wait);
+  }
+
+  private playIncidental(kind: Incidental): void {
+    switch (kind) {
+      case "gunfire":
+        return this.distantGunfire();
+      case "groan":
+        return this.metalGroan();
+      case "debris":
+        return this.debris();
+      case "bird":
+        return this.bird();
+      case "horn":
+        return this.distantHorn();
+      case "relay":
+        return this.relay();
+      case "buzz":
+        return this.electricBuzz();
+      case "gust":
+        return this.gust();
+      case "drip":
+        return this.drip();
+      default:
+        return undefined;
+    }
+  }
+
+  /** A firefight a few streets over: a short burst, dull with distance. */
+  private distantGunfire(): void {
+    const rounds = 2 + Math.floor(Math.random() * 5);
+    const spacing = 0.07 + Math.random() * 0.06;
+    for (let i = 0; i < rounds; i += 1) {
+      const delay = i * spacing + Math.random() * 0.012;
+      this.noiseLayer(
+        { frequency: 520 + Math.random() * 180, decay: 0.1, gain: 0.05 },
+        "lowpass",
+        1,
+        delay,
+      );
+      this.toneLayer({ frequency: 90, drop: 0.5, decay: 0.16, gain: 0.03 }, "sine", delay);
+    }
+    // The street answering it, well after the last round.
+    this.noiseLayer(
+      { frequency: 700, decay: 0.7, gain: 0.02 },
+      "lowpass",
+      1,
+      rounds * spacing,
+    );
+  }
+
+  /** Steel moving against steel somewhere above: long, low, unhurried. */
+  private metalGroan(): void {
+    const base = 70 + Math.random() * 90;
+    this.toneLayer(
+      { frequency: base, drop: 0.55 + Math.random() * 0.3, decay: 1.6, gain: 0.045 },
+      "sawtooth",
+      0,
+      900,
+    );
+    this.toneLayer(
+      { frequency: base * 2.02, drop: 0.6, decay: 1.3, gain: 0.02 },
+      "triangle",
+      0.05,
+      1400,
+    );
+    this.noiseLayer({ frequency: 1100, decay: 0.9, gain: 0.012 }, "bandpass", 3, 0.2);
+  }
+
+  /** Grit letting go of a ledge and finding the floor. */
+  private debris(): void {
+    const pieces = 3 + Math.floor(Math.random() * 6);
+    for (let i = 0; i < pieces; i += 1) {
+      this.noiseLayer(
+        { frequency: 2400 + Math.random() * 2600, decay: 0.03, gain: 0.03 },
+        "bandpass",
+        6,
+        Math.random() * 0.5,
+      );
+    }
+  }
+
+  /** Something nesting in the roof, complaining about the weather. */
+  private bird(): void {
+    const calls = 1 + Math.floor(Math.random() * 3);
+    const base = 900 + Math.random() * 700;
+    for (let i = 0; i < calls; i += 1) {
+      const at = i * (0.14 + Math.random() * 0.12);
+      this.chirp(base, base * 0.55, 0.11, 0.035, "sawtooth", at);
+      this.chirp(base * 1.99, base * 1.1, 0.09, 0.012, "triangle", at);
+    }
+  }
+
+  /** Traffic beyond the wall, which is how a ruin stays inside a city. */
+  private distantHorn(): void {
+    const base = 150 + Math.random() * 90;
+    this.toneLayer({ frequency: base, drop: 0.98, decay: 0.75, gain: 0.03 }, "sawtooth", 0, 600);
+    this.toneLayer(
+      { frequency: base * 1.5, drop: 0.98, decay: 0.7, gain: 0.018 },
+      "sawtooth",
+      0.02,
+      600,
+    );
+  }
+
+  /** A contactor dropping out: a hard clack with a ring after it. */
+  private relay(): void {
+    this.noiseLayer({ frequency: 1800, decay: 0.035, gain: 0.07 }, "bandpass", 1.4, 0);
+    this.noiseLayer({ frequency: 3400, decay: 0.02, gain: 0.04 }, "highpass", 1, 0.006);
+    this.toneLayer({ frequency: 320, drop: 0.7, decay: 0.2, gain: 0.02 }, "triangle", 0.01);
+  }
+
+  /** Current finding a path it should not have: a rasp that cuts out. */
+  private electricBuzz(): void {
+    const length = 0.25 + Math.random() * 0.7;
+    this.toneLayer({ frequency: 100, drop: 1, decay: length, gain: 0.028 }, "sawtooth", 0, 2600);
+    this.noiseLayer({ frequency: 4200, decay: length, gain: 0.02 }, "bandpass", 0.8, 0.01);
+  }
+
+  /** A gust: the wind bed swelling and falling back. */
+  private gust(): void {
+    const gain = this.gustGain;
+    const context = this.context;
+    if (!gain || !context) return;
+    const now = context.currentTime;
+    const peak = gain.gain.value * (2.4 + Math.random() * 1.8);
+    const rise = 0.7 + Math.random() * 1.4;
+    const fall = 1.6 + Math.random() * 2.5;
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.linearRampToValueAtTime(peak, now + rise);
+    gain.gain.linearRampToValueAtTime(Math.max(0.0001, peak / 3), now + rise + fall);
+  }
+
+  /** Water finding its way through a floor it used to run under. */
+  private drip(): void {
+    const drops = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < drops; i += 1) {
+      const at = i * (0.3 + Math.random() * 0.5);
+      this.chirp(1500 + Math.random() * 900, 520, 0.09, 0.03, "sine", at);
+    }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Weapons.
+   * ------------------------------------------------------------------ */
+
+  /**
+   * A shot from this player's own weapon.
+   *
+   * Every layer is detuned a little on each shot. Without that, a burst is
+   * one recording played back thirteen times a second, which is the single
+   * clearest way a game gives away that its guns are synthetic.
+   */
+  shot(id: WeaponId): void {
+    const context = this.context;
+    if (!context || !this.enabled) return;
+    const voice = VOICES[id];
+    const wobble = (): number => 1 + (Math.random() * 2 - 1) * voice.jitter;
+    const level = voice.gain * (0.94 + Math.random() * 0.12);
+
+    this.noiseLayer(
+      {
+        frequency: voice.snap.frequency * wobble(),
+        decay: voice.snap.decay,
+        gain: voice.snap.gain * level,
+      },
+      "highpass",
+      1,
+      0,
+    );
+    this.noiseLayer(
+      {
+        frequency: voice.crack.frequency * wobble(),
+        decay: voice.crack.decay,
+        gain: voice.crack.gain * level,
+      },
+      "bandpass",
+      voice.crack.q,
+      0.001,
+    );
+    this.toneLayer(
+      {
+        frequency: voice.body.frequency * wobble(),
+        drop: voice.body.drop,
+        decay: voice.body.decay,
+        gain: voice.body.gain * level,
+      },
+      "sine",
+      0,
+    );
+    this.noiseLayer(
+      {
+        frequency: voice.blast.frequency * wobble(),
+        decay: voice.blast.decay,
+        gain: voice.blast.gain * level,
+      },
+      "lowpass",
+      1,
+      0,
+    );
+    this.noiseLayer(
+      {
+        frequency: voice.mech.frequency * wobble(),
+        decay: voice.mech.decay,
+        gain: voice.mech.gain * level,
+      },
+      "bandpass",
+      voice.mech.q,
+      voice.mech.delay,
+    );
+    // The room, brought up a moment behind the shot rather than struck with
+    // it, which is what puts walls at a distance.
+    this.noiseLayer(
+      { frequency: voice.tail.frequency, decay: voice.tail.decay, gain: voice.tail.gain * level },
+      "lowpass",
+      1,
+      0.012,
+      0.02,
+    );
   }
 
   /**
    * Someone else's weapon. Quieter and duller with distance, which is what
    * lets a player judge how far away a firefight is.
+   *
+   * Air eats the top of a shot first, so distance is mostly the loss of the
+   * crack: what is left at a hundred metres is the body and the room.
    */
   remoteShot(id: WeaponId, distance: number): void {
     const context = this.context;
-    const master = this.master;
-    const noise = this.noise;
-    if (!context || !master || !noise || !this.enabled) return;
-
+    if (!context || !this.enabled) return;
     const voice = VOICES[id];
-    const now = context.currentTime;
     // Inverse falloff, floored so a distant shot stays just audible.
     const attenuation = Math.max(0.06, 1 / (1 + distance * 0.09));
+    const wobble = 1 + (Math.random() * 2 - 1) * voice.jitter;
+    const level = voice.gain * attenuation;
 
-    const crack = context.createBufferSource();
-    crack.buffer = noise;
-    const filter = context.createBiquadFilter();
-    filter.type = "lowpass";
-    // Air eats the high end first, so distance reads as dullness, not just
-    // quietness.
-    filter.frequency.value = Math.max(420, voice.crackFrequency * attenuation * 1.6);
-    const amp = context.createGain();
-    envelope(amp.gain, now, voice.gain * attenuation * 0.9, voice.crackDecay * 1.6);
-    crack.connect(filter).connect(amp).connect(master);
-    crack.start(now);
-    crack.stop(now + voice.crackDecay * 1.6 + 0.05);
+    this.noiseLayer(
+      {
+        frequency: Math.max(420, voice.crack.frequency * attenuation * 1.6 * wobble),
+        decay: voice.crack.decay * 1.6,
+        gain: voice.crack.gain * level * 0.9,
+      },
+      "lowpass",
+      1,
+      0,
+    );
+    this.toneLayer(
+      {
+        frequency: voice.body.frequency * wobble,
+        drop: voice.body.drop,
+        decay: voice.body.decay * 1.5,
+        // Low end carries, so the thump falls away more slowly than the crack.
+        gain: voice.body.gain * voice.gain * Math.max(0.1, Math.sqrt(attenuation)) * 0.7,
+      },
+      "sine",
+      0,
+    );
+    this.noiseLayer(
+      {
+        frequency: Math.max(300, voice.tail.frequency * attenuation),
+        decay: voice.tail.decay * 1.8,
+        gain: voice.tail.gain * level * 1.4,
+      },
+      "lowpass",
+      1,
+      0.02,
+      0.03,
+    );
   }
 
   /** Mechanical clicks during a reload. */
@@ -177,15 +631,46 @@ export class GameAudio {
   impact(distance: number): void {
     const attenuation = 1 / (1 + distance * 0.12);
     this.tick(3200, 0.035, 0.16 * attenuation, "highpass");
+    // The material it went into, under the spall.
+    this.noiseLayer({ frequency: 480, decay: 0.09, gain: 0.07 * attenuation }, "lowpass", 1, 0.004);
   }
 
   /**
-   * Confirmation that a shot landed.
+   * A boot going down.
    *
-   * A kill gets its own two-tone chime rather than a louder tick. In a
-   * firefight the ticks blur together, and the one thing a player needs to
-   * pick out of that run is the round that ended it.
+   * `weight` runs from a crouched creep to a sprint. The scuff on top is
+   * what stops it sounding like a drum: a step is grit moving, then the
+   * floor taking the load.
    */
+  footstep(weight: number): void {
+    const level = Math.max(0.15, Math.min(1.6, weight));
+    this.noiseLayer(
+      { frequency: 260 + Math.random() * 120, decay: 0.075, gain: 0.075 * level },
+      "lowpass",
+      1,
+      0,
+    );
+    this.noiseLayer(
+      { frequency: 3200 + Math.random() * 1800, decay: 0.035, gain: 0.02 * level },
+      "bandpass",
+      1.6,
+      0.008,
+    );
+  }
+
+  /** Coming down off something. `force` runs from a hop to a long drop. */
+  land(force: number): void {
+    const level = Math.max(0.2, Math.min(1, force));
+    this.toneLayer({ frequency: 90, drop: 0.5, decay: 0.16, gain: 0.22 * level }, "sine", 0);
+    this.noiseLayer({ frequency: 420, decay: 0.12, gain: 0.12 * level }, "lowpass", 1, 0);
+    this.noiseLayer(
+      { frequency: 2600, decay: 0.05, gain: 0.05 * level },
+      "bandpass",
+      1.4,
+      0.012,
+    );
+  }
+
   /**
    * The hit confirmed.
    *
@@ -212,6 +697,15 @@ export class GameAudio {
     this.chirp(1700, 1150, 0.06, 0.3, "triangle");
   }
 
+  /** A plate going over. */
+  targetDrop(): void {
+    this.tick(420, 0.26, 0.34, "lowpass");
+  }
+
+  /* ------------------------------------------------------------------ *
+   * The three ways a sound gets made.
+   * ------------------------------------------------------------------ */
+
   /** A short pitched note sliding from one frequency to another. */
   private chirp(
     from: number,
@@ -236,9 +730,82 @@ export class GameAudio {
     voice.stop(start + decay + 0.05);
   }
 
-  /** A plate going over. */
-  targetDrop(): void {
-    this.tick(420, 0.26, 0.34, "lowpass");
+  /**
+   * A burst of filtered noise.
+   *
+   * `attack` is how long the level takes to arrive: zero for anything struck,
+   * longer for a room answering back, which never starts at its loudest.
+   */
+  private noiseLayer(
+    layer: NoiseLayer,
+    type: BiquadFilterType,
+    q: number,
+    delay: number,
+    attack = 0,
+  ): void {
+    const context = this.context;
+    const master = this.master;
+    const noise = this.noise;
+    if (!context || !master || !noise || !this.enabled) return;
+    if (layer.gain <= 0.0002) return;
+
+    const start = context.currentTime + delay;
+    const source = context.createBufferSource();
+    source.buffer = noise;
+    // Start somewhere random in the buffer, so repeated shots are not the
+    // same slice of noise over and over.
+    const offset = Math.random() * Math.max(0, noise.duration - layer.decay - 0.1);
+    const filter = context.createBiquadFilter();
+    filter.type = type;
+    filter.frequency.value = layer.frequency;
+    filter.Q.value = q;
+    const amp = context.createGain();
+    if (attack > 0) {
+      amp.gain.setValueAtTime(0.0001, start);
+      amp.gain.linearRampToValueAtTime(layer.gain, start + attack);
+      amp.gain.exponentialRampToValueAtTime(0.0001, start + attack + layer.decay);
+    } else {
+      envelope(amp.gain, start, layer.gain, layer.decay);
+    }
+    source.connect(filter).connect(amp).connect(master);
+    source.start(start, offset);
+    source.stop(start + attack + layer.decay + 0.05);
+  }
+
+  /** A pitched layer falling away, which is where a sound's weight lives. */
+  private toneLayer(
+    layer: ToneLayer,
+    type: OscillatorType,
+    delay: number,
+    lowpass?: number,
+  ): void {
+    const context = this.context;
+    const master = this.master;
+    if (!context || !master || !this.enabled) return;
+    if (layer.gain <= 0.0002) return;
+
+    const start = context.currentTime + delay;
+    const voice = context.createOscillator();
+    voice.type = type;
+    voice.frequency.setValueAtTime(layer.frequency, start);
+    if (layer.drop !== 1) {
+      voice.frequency.exponentialRampToValueAtTime(
+        Math.max(20, layer.frequency * layer.drop),
+        start + layer.decay,
+      );
+    }
+    const amp = context.createGain();
+    envelope(amp.gain, start, layer.gain, layer.decay);
+    if (lowpass) {
+      const filter = context.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = lowpass;
+      voice.connect(filter).connect(amp).connect(master);
+    } else {
+      voice.connect(amp).connect(master);
+    }
+    voice.start(start);
+    voice.stop(start + layer.decay + 0.05);
   }
 
   private tick(
@@ -247,23 +814,7 @@ export class GameAudio {
     gain: number,
     filterType: BiquadFilterType,
   ): void {
-    const context = this.context;
-    const master = this.master;
-    const noise = this.noise;
-    if (!context || !master || !noise || !this.enabled) return;
-
-    const now = context.currentTime;
-    const source = context.createBufferSource();
-    source.buffer = noise;
-    const filter = context.createBiquadFilter();
-    filter.type = filterType;
-    filter.frequency.value = frequency;
-    filter.Q.value = 1.1;
-    const amp = context.createGain();
-    envelope(amp.gain, now, gain, decay);
-    source.connect(filter).connect(amp).connect(master);
-    source.start(now);
-    source.stop(now + decay + 0.05);
+    this.noiseLayer({ frequency, decay, gain }, filterType, 1.1, 0);
   }
 }
 

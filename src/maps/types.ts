@@ -113,12 +113,23 @@ export interface MapStyle {
   stripLight: string;
 }
 
+/**
+ * The bed of sound a level sits in.
+ *
+ * A property of the place rather than of the renderer, which is why it lives
+ * here beside the palette: a ruin has weather in it, a switchyard has
+ * electricity, a range has neither.
+ */
+export type AmbienceId = "ruin" | "substation" | "range";
+
 export interface MapDefinition {
   id: string;
   name: string;
   /** One-line description, shown in the lobby. */
   tagline: string;
   style: MapStyle;
+  /** What this place sounds like when nothing is happening. */
+  ambience: AmbienceId;
   /** Seed for this map's generated textures. */
   textureSeed: number;
   /** Playable bounds, used for the minimap and out-of-bounds checks. */
