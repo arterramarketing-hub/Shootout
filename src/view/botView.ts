@@ -115,6 +115,10 @@ const legParts = (side: -1 | 1): Part[] => [
   box({ x: side * 0.0, y: -0.4, z: 0.1, width: 0.15, height: 0.14, depth: 0.05, tone: "gear" }),
 ];
 
+/** How long a figure takes to go down, and how long it lies there. */
+const FALL_SECONDS = 0.5;
+const FALLEN_SECONDS = 3.2;
+
 export interface BotBinding {
   id: string;
   team: Team;
@@ -129,6 +133,11 @@ export interface BotBinding {
   stride: number;
   /** Current leg swing, eased so a stop does not freeze mid-step. */
   swing: number;
+  /** Whether the figure is down, and for how long. */
+  dead: boolean;
+  deathTime: number;
+  /** Which way it fell: to its left or its right. */
+  fallSide: number;
 }
 
 export class BotField {
@@ -193,6 +202,9 @@ export class BotField {
       team,
       root,
       renderYaw: yaw,
+      dead: false,
+      deathTime: 0,
+      fallSide: 1,
       meshes,
       legs: [legLeft, legRight],
       lastPosition: { ...position },
@@ -228,10 +240,18 @@ export class BotField {
     deltaSeconds: number,
   ): void {
     const binding = this.byId.get(id) ?? this.add(id, team, position, yaw);
-    binding.root.setEnabled(!dead);
     if (dead) {
+      this.fall(binding, deltaSeconds);
       binding.lastPosition = { ...position };
       return;
+    }
+    if (binding.dead) {
+      // Back on their feet, somewhere else: stand the figure up before it
+      // is seen again.
+      binding.dead = false;
+      binding.root.rotation.x = 0;
+      binding.root.rotation.z = 0;
+      binding.root.setEnabled(true);
     }
     binding.root.position.set(position.x, position.y, position.z);
     binding.renderYaw = dampAngle(binding.renderYaw, yaw, deltaSeconds);
@@ -248,6 +268,34 @@ export class BotField {
     const angle = Math.sin(binding.stride) * 0.6 * binding.swing;
     binding.legs[0].rotation.x = angle;
     binding.legs[1].rotation.x = -angle;
+  }
+
+  /**
+   * Put a figure down where it died.
+   *
+   * It tips over about its feet to one side, quickly and with a little
+   * twist, the way a body goes when the legs stop holding it up, then lies
+   * there long enough to be seen before it is taken away. The side is fixed
+   * per figure so a kill replayed on another screen falls the same way.
+   */
+  private fall(binding: BotBinding, deltaSeconds: number): void {
+    if (!binding.dead) {
+      binding.dead = true;
+      binding.deathTime = 0;
+      binding.fallSide = binding.id.charCodeAt(binding.id.length - 1) % 2 === 0 ? 1 : -1;
+      binding.legs[0].rotation.x = 0.2;
+      binding.legs[1].rotation.x = -0.3;
+    }
+    binding.deathTime += deltaSeconds;
+    if (binding.deathTime >= FALLEN_SECONDS) {
+      binding.root.setEnabled(false);
+      return;
+    }
+    const t = Math.min(1, binding.deathTime / FALL_SECONDS);
+    // Fast out, easing into the ground: most of the fall happens early.
+    const eased = 1 - (1 - t) * (1 - t) * (1 - t);
+    binding.root.rotation.z = binding.fallSide * eased * (Math.PI / 2);
+    binding.root.rotation.x = eased * 0.25;
   }
 
   /** Remove every figure whose id is not in the given set. */

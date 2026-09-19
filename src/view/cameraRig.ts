@@ -21,6 +21,8 @@ export class CameraRig {
   private bobOffset = 0;
   private bobRoll = 0;
   private currentFov: number = CAMERA.defaultFovDegrees;
+  /** How hard the view is shaking right now, from a shot; decays fast. */
+  private shake = 0;
 
   constructor(
     scene: Scene,
@@ -78,6 +80,18 @@ export class CameraRig {
     );
   }
 
+  /**
+   * Shake the view. Called once per shot.
+   *
+   * The weapon's recoil pitches the aim; this is the rest of it, the jolt
+   * through the shoulder that the sights do not follow. It is small, random
+   * from frame to frame, and gone in a tenth of a second, which is what
+   * keeps it a jolt rather than a wobble.
+   */
+  addShake(strength: number): void {
+    this.shake = Math.min(1, this.shake + strength);
+  }
+
   update(
     previousPosition: Vec3,
     current: PlayerState,
@@ -95,7 +109,18 @@ export class CameraRig {
     const eye = eyeOffset(current) + this.bobOffset - current.landingOffset;
     const lean = this.leanOffset(current);
 
-    this.camera.position.set(x + lean.x, y + eye, z + lean.z);
+    this.shake *= Math.exp(-deltaSeconds * SHAKE.decay);
+    if (this.shake < 0.005) this.shake = 0;
+    const jolt = this.shake;
+    const shakePitch = (Math.random() * 2 - 1) * SHAKE.pitch * jolt;
+    const shakeYaw = (Math.random() * 2 - 1) * SHAKE.yaw * jolt;
+    const shakeRoll = (Math.random() * 2 - 1) * SHAKE.roll * jolt;
+
+    this.camera.position.set(
+      x + lean.x,
+      y + eye + (Math.random() * 2 - 1) * SHAKE.lift * jolt,
+      z + lean.z,
+    );
     // Rotation is taken from the current state directly, never interpolated:
     // smoothing the aim would read as input lag.
     // Recoil is added here rather than folded into the player's aim, so that
@@ -103,9 +128,9 @@ export class CameraRig {
     // Babylon's rotation.x pitches the camera downward as it grows, while the
     // simulation measures pitch above the horizon, so the sign flips here.
     this.camera.rotation.set(
-      -(current.pitch + recoilPitch),
-      current.yaw + recoilYaw,
-      current.leanAmount * STANCE.leanRollRadians + this.bobRoll,
+      -(current.pitch + recoilPitch) + shakePitch,
+      current.yaw + recoilYaw + shakeYaw,
+      current.leanAmount * STANCE.leanRollRadians + this.bobRoll + shakeRoll,
     );
   }
 
@@ -134,3 +159,12 @@ export class CameraRig {
     this.bobRoll += (targetRoll - this.bobRoll) * blend;
   }
 }
+
+/** The shake of a shot, in radians and metres at full strength, and how fast it dies away. */
+const SHAKE = {
+  pitch: 0.0055,
+  yaw: 0.004,
+  roll: 0.007,
+  lift: 0.004,
+  decay: 16,
+};

@@ -564,6 +564,7 @@ const boot = (): void => {
 
     audio.shot(shot.weapon.id);
     viewmodel.addRecoil(0.55 + shot.weapon.recoil.pattern[0][0] * 0.35, random.next());
+    rig.addShake(0.45 + shot.weapon.recoil.pattern[0][0] * 0.3);
     viewmodel.fireFlash(0.7 + random.next() * 0.6);
     const muzzle = viewmodel.muzzleOnScreen(rig.camera, TRACER_START);
     const tracerOrigin = muzzle ? vec3(muzzle.x, muzzle.y, muzzle.z) : origin;
@@ -804,6 +805,7 @@ const boot = (): void => {
     // Local feedback only: the muzzle flash, the kick, the sound and a tracer.
     audio.shot(shot.weapon.id);
     viewmodel.addRecoil(0.55 + shot.weapon.recoil.pattern[0][0] * 0.35, random.next());
+    rig.addShake(0.45 + shot.weapon.recoil.pattern[0][0] * 0.3);
     viewmodel.fireFlash(0.7 + random.next() * 0.6);
     const muzzle = viewmodel.muzzleOnScreen(rig.camera, TRACER_START);
     const origin = muzzle ? vec3(muzzle.x, muzzle.y, muzzle.z) : eyePosition();

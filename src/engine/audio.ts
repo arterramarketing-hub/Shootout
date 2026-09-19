@@ -186,13 +186,54 @@ export class GameAudio {
    * firefight the ticks blur together, and the one thing a player needs to
    * pick out of that run is the round that ended it.
    */
+  /**
+   * The hit confirmed.
+   *
+   * Three sounds a player learns to tell apart without looking: a hit is a
+   * short falling chirp with a click on the front; a headshot the same,
+   * higher and doubled; a kill has weight under it, a thump and a rising
+   * chime, so a kill in the middle of a burst is felt as well as seen.
+   */
   hitMarker(headshot: boolean, killed = false): void {
-    if (!killed) {
-      this.tick(headshot ? 2100 : 1400, 0.05, 0.3, "bandpass");
+    if (killed) {
+      this.tick(900, 0.05, 0.3, "bandpass");
+      this.chirp(180, 70, 0.16, 0.5, "sine");
+      this.chirp(1400, 2400, 0.12, 0.28, "triangle", 0.04);
+      this.chirp(2100, 2600, 0.16, 0.16, "sine", 0.1);
       return;
     }
-    this.tick(1650, 0.06, 0.34, "bandpass");
-    window.setTimeout(() => this.tick(2450, 0.1, 0.3, "bandpass"), 55);
+    if (headshot) {
+      this.tick(2400, 0.03, 0.22, "bandpass");
+      this.chirp(2600, 1900, 0.05, 0.3, "triangle");
+      this.chirp(2900, 2300, 0.06, 0.24, "triangle", 0.05);
+      return;
+    }
+    this.tick(1500, 0.03, 0.22, "bandpass");
+    this.chirp(1700, 1150, 0.06, 0.3, "triangle");
+  }
+
+  /** A short pitched note sliding from one frequency to another. */
+  private chirp(
+    from: number,
+    to: number,
+    decay: number,
+    gain: number,
+    type: OscillatorType,
+    delay = 0,
+  ): void {
+    const context = this.context;
+    const master = this.master;
+    if (!context || !master || !this.enabled) return;
+    const start = context.currentTime + delay;
+    const voice = context.createOscillator();
+    voice.type = type;
+    voice.frequency.setValueAtTime(from, start);
+    voice.frequency.exponentialRampToValueAtTime(to, start + decay);
+    const amp = context.createGain();
+    envelope(amp.gain, start, gain, decay);
+    voice.connect(amp).connect(master);
+    voice.start(start);
+    voice.stop(start + decay + 0.05);
   }
 
   /** A plate going over. */

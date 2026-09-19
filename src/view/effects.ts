@@ -11,12 +11,30 @@ import type { Vec3 } from "../sim/vec3";
 
 const TRACER_POOL = 24;
 const IMPACT_POOL = 32;
-const TRACER_LIFE = 0.055;
 const IMPACT_LIFE = 2.4;
+/**
+ * How fast a tracer travels, in metres a second, and how long its streak is.
+ *
+ * A line drawn from the muzzle to the impact in one go converges on the aim
+ * point at once, and reads as fired from the crosshair. A streak that leaves
+ * the muzzle and crosses the ground in a few frames reads as fired from the
+ * gun, which is where the player is looking for it.
+ */
+const TRACER_SPEED = 150;
+const TRACER_STREAK = 2.4;
 
 interface Pooled {
   mesh: Mesh;
   life: number;
+}
+
+interface Tracer {
+  mesh: Mesh;
+  from: Vector3;
+  direction: Vector3;
+  length: number;
+  /** How far the head of the streak has travelled; negative when idle. */
+  head: number;
 }
 
 /**
@@ -27,7 +45,7 @@ interface Pooled {
  * behind would show up as a hitch in the middle of a fight.
  */
 export class ShotEffects {
-  private readonly tracers: Pooled[] = [];
+  private readonly tracers: Tracer[] = [];
   private readonly impacts: Pooled[] = [];
   private tracerCursor = 0;
   private impactCursor = 0;
@@ -49,7 +67,7 @@ export class ShotEffects {
       mesh.isPickable = false;
       mesh.setEnabled(false);
       mesh.rotationQuaternion = Quaternion.Identity();
-      this.tracers.push({ mesh, life: 0 });
+      this.tracers.push({ mesh, from: new Vector3(), direction: new Vector3(), length: 0, head: -1 });
     }
 
     for (let i = 0; i < IMPACT_POOL; i += 1) {
@@ -78,13 +96,30 @@ export class ShotEffects {
     const length = delta.length();
     if (length < 1e-4) return;
 
-    entry.mesh.position.copyFrom(this.from.add(delta.scale(0.5)));
-    entry.mesh.scaling.set(0.012, 0.012, length);
+    entry.from.copyFrom(this.from);
+    entry.direction.copyFrom(delta.scale(1 / length));
+    entry.length = length;
+    entry.head = 0;
     // Point the stretched box down the path of the round.
-    const direction = delta.scale(1 / length);
-    entry.mesh.rotationQuaternion = Quaternion.FromLookDirectionLH(direction, Vector3.Up());
-    entry.mesh.setEnabled(true);
-    entry.life = TRACER_LIFE;
+    entry.mesh.rotationQuaternion = Quaternion.FromLookDirectionLH(entry.direction, Vector3.Up());
+    this.placeTracer(entry);
+  }
+
+  /** Lay the streak along the part of the path its head has reached. */
+  private placeTracer(entry: Tracer): void {
+    const tip = Math.min(entry.length, entry.head);
+    const tail = Math.max(0, entry.head - TRACER_STREAK);
+    const span = tip - tail;
+    // Nothing to show yet on the frame it is fired; it is there next frame.
+    entry.mesh.setEnabled(span > 1e-4);
+    if (span <= 1e-4) return;
+    const middle = tail + span / 2;
+    entry.mesh.position.set(
+      entry.from.x + entry.direction.x * middle,
+      entry.from.y + entry.direction.y * middle,
+      entry.from.z + entry.direction.z * middle,
+    );
+    entry.mesh.scaling.set(0.014, 0.014, span);
   }
 
   private addImpact(point: Vec3, normal: Vec3): void {
@@ -111,9 +146,14 @@ export class ShotEffects {
 
   update(deltaSeconds: number): void {
     for (const entry of this.tracers) {
-      if (entry.life <= 0) continue;
-      entry.life -= deltaSeconds;
-      if (entry.life <= 0) entry.mesh.setEnabled(false);
+      if (entry.head < 0) continue;
+      entry.head += TRACER_SPEED * deltaSeconds;
+      if (entry.head - TRACER_STREAK >= entry.length) {
+        entry.head = -1;
+        entry.mesh.setEnabled(false);
+        continue;
+      }
+      this.placeTracer(entry);
     }
     for (const entry of this.impacts) {
       if (entry.life <= 0) continue;

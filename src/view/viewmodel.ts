@@ -339,7 +339,7 @@ export class ViewmodelRig {
     this.updateBolt(deltaSeconds);
     const ads = clamp(loadout.adsProgress, 0, 1);
     this.paintHologram(weapon.magazine, weapon.reserve, weapon.definition.magazineSize);
-    this.updateHologram(deltaSeconds, ads);
+    this.updateHologram(deltaSeconds);
 
     this.updateSway(player, deltaSeconds);
     this.recoilAmount = this.recoilAmount * Math.pow(RECOIL.recovery, deltaSeconds);
@@ -371,24 +371,22 @@ export class ViewmodelRig {
   /**
    * Keep the projection on the weapon and facing the eye.
    *
-   * It rides the fitting it is projected from, so it follows the weapon
+   * It rides the face it is projected from, so it follows the weapon
    * through every sway and cycle. A little waver in its brightness is what
-   * says hologram. Down the sights it is gone: the player has their answer
-   * in the crosshair then, and a light beside the rear sight is a light in
-   * the eye.
+   * says hologram. It stays up down the sights, under the rear aperture,
+   * where a glance takes it in without leaving the target.
    */
-  private updateHologram(deltaSeconds: number, ads: number): void {
+  private updateHologram(deltaSeconds: number): void {
     if (!this.current) return;
     this.hologramTime += deltaSeconds;
     const model = this.models[this.current];
     const mount = model.spec.counter;
     this.hologram.parent = mount.group === "bolt" ? model.bolt : model.root;
     this.hologram.position.set(mount.x, mount.y, mount.z);
-    const presence = clamp(1 - ads * 1.6, 0, 1);
-    this.hologram.setEnabled(presence > 0.01);
+    this.hologram.setEnabled(true);
     const material = this.hologram.material as StandardMaterial;
     const waver = 1 + Math.sin(this.hologramTime * 23) * 0.08 + Math.sin(this.hologramTime * 3.1) * 0.06;
-    material.alpha = HOLOGRAM_STRENGTH * presence * waver;
+    material.alpha = HOLOGRAM_STRENGTH * waver;
   }
 
   private showWeapon(id: WeaponId): void {

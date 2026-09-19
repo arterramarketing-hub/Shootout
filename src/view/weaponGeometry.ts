@@ -550,9 +550,10 @@ const ridgeline = (): ModelSpec => {
   const parts: Part[] = [
     // Upper receiver, flat-topped, with the rail the sights ride on.
     box({ x: 0, y: 0.034, z: 0.245, width: 0.058, height: 0.056, depth: 0.31, tone: "body" }),
-    // The round counter's housing, on the back edge of the receiver's top,
-    // under the rear sight.
-    box({ x: 0, y: 0.070, z: 0.093, width: 0.034, height: 0.018, depth: 0.008, tone: "shadow" }),
+    // A raised rear deck, the full width of the receiver and in its tone, so
+    // it is part of the receiver rather than a fitting on it. The rear sight
+    // rises out of it; the round count is projected off its back face.
+    box({ x: 0, y: 0.0705, z: 0.106, width: 0.058, height: 0.017, depth: 0.034, tone: "body" }),
     // Receiver extension, running back past the eye where the stock would be.
     // Without it the weapon presents a flat wall to the shooter down the
     // sights, and the whole lower half of the screen becomes a grey slab.
@@ -773,7 +774,7 @@ const ridgeline = (): ModelSpec => {
     sightLine,
     sight: { x: 0, y: sightLine.height, z: sightLine.rearZ },
     muzzle: { y: bore, z: 0.665 },
-    counter: { x: 0, y: 0.070, z: 0.0884 },
+    counter: { x: 0, y: 0.0705, z: 0.0884 },
     boltTravel: 0.016,
   };
 };
@@ -785,8 +786,9 @@ const wasp = (): ModelSpec => {
     // A compact stamped receiver, squarer and shorter than the rifle's.
     box({ x: 0, y: 0.028, z: 0.180, width: 0.052, height: 0.052, depth: 0.25, tone: "body" }),
     box({ x: 0, y: 0.028, z: 0.020, width: 0.036, height: 0.040, depth: 0.080, tone: "metal" }),
-    // The round counter's housing, just behind the rail.
-    box({ x: 0, y: 0.061, z: 0.062, width: 0.032, height: 0.017, depth: 0.008, tone: "shadow" }),
+    // The rear deck the sight rises from, continuing the receiver's rear
+    // face upward; the round count is projected off it.
+    box({ x: 0, y: 0.0615, z: 0.075, width: 0.052, height: 0.015, depth: 0.040, tone: "body" }),
     {
       shape: "cylinder",
       axis: "x",
@@ -915,7 +917,7 @@ const wasp = (): ModelSpec => {
     sightLine,
     sight: { x: 0, y: sightLine.height, z: sightLine.rearZ },
     muzzle: { y: bore, z: 0.468 },
-    counter: { x: 0, y: 0.061, z: 0.0574 },
+    counter: { x: 0, y: 0.0615, z: 0.0545 },
     boltTravel: 0.014,
   };
 };
@@ -926,8 +928,9 @@ const breacher = (): ModelSpec => {
   const parts: Part[] = [
     // Receiver, milled flat on top, with a big ghost ring behind it.
     box({ x: 0, y: 0.026, z: 0.170, width: 0.054, height: 0.058, depth: 0.25, tone: "body" }),
-    // The round counter's housing, on the tang behind the rail.
-    box({ x: 0, y: 0.063, z: 0.052, width: 0.034, height: 0.018, depth: 0.008, tone: "shadow" }),
+    // The rear deck over the tang, continuing the receiver's rear face
+    // upward under the ghost ring; the round count is projected off it.
+    box({ x: 0, y: 0.063, z: 0.066, width: 0.054, height: 0.016, depth: 0.042, tone: "body" }),
     // Receiver tang and the stub of a stock, rounded off rather than left as
     // a flat wall for the shooter to look at down the sights.
     box({ x: 0, y: 0.014, z: 0.012, width: 0.034, height: 0.042, depth: 0.078, tone: "body" }),
@@ -1040,7 +1043,7 @@ const breacher = (): ModelSpec => {
     sightLine,
     sight: { x: 0, y: sightLine.height, z: sightLine.rearZ },
     muzzle: { y: bore, z: 0.634 },
-    counter: { x: 0, y: 0.063, z: 0.0474 },
+    counter: { x: 0, y: 0.063, z: 0.0445 },
     boltTravel: 0.030,
   };
 };
