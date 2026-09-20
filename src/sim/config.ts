@@ -4,16 +4,32 @@
  */
 
 export const MOVEMENT = {
-  /** Sustained forward speed with the stick at full deflection. */
-  walkSpeed: 4.0,
-  sprintSpeed: 6.5,
-  crouchSpeed: 1.9,
+  /**
+   * Sustained forward speed with the stick at full deflection.
+   *
+   * These are quick for a shooter, deliberately. A phone gives the player a
+   * thumb on a glass circle instead of a stick, so every correction costs
+   * more than it does on a pad and a pace that reads as businesslike on a
+   * console reads as wading here. The other half of it is the maps: a
+   * crossing at Boulevard Works is sixty metres of open street, and at four
+   * metres a second that is fifteen seconds of being shot at on the way.
+   */
+  walkSpeed: 4.8,
+  sprintSpeed: 7.4,
+  crouchSpeed: 2.4,
   /** Strafing and backpedalling are slower than advancing. */
-  strafeMultiplier: 0.85,
-  backMultiplier: 0.75,
-  /** Ground acceleration and braking, in metres per second squared. */
-  acceleration: 55,
-  deceleration: 70,
+  strafeMultiplier: 0.9,
+  backMultiplier: 0.78,
+  /**
+   * Ground acceleration and braking, in metres per second squared.
+   *
+   * High enough that the top speed is reached inside a tenth of a second.
+   * Most of what reads as a slow character is not the speed it settles at,
+   * it is the time spent getting there, which is the part the player feels
+   * on every single tap of the stick.
+   */
+  acceleration: 72,
+  deceleration: 88,
   /** Airborne control is deliberately poor: no bunny hopping. */
   airAcceleration: 6,
   gravity: -22,
@@ -30,7 +46,7 @@ export const MOVEMENT = {
    * covers a little under three metres, which is one piece of cover to the
    * next in these maps, and then it is spent for a while.
    */
-  dodgeSpeed: 11.5,
+  dodgeSpeed: 12.6,
   dodgeTime: 0.24,
   dodgeCooldown: 1.4,
   /** A slope steeper than this is a wall, not a ramp. */
@@ -74,7 +90,17 @@ export const CAMERA = {
   farClip: 220,
   /** Head bob: amplitude in metres, cycles per metre travelled. */
   bobAmplitude: 0.035,
-  bobFrequency: 0.55,
+  /**
+   * Cycles per metre walked, which is also what paces the footsteps: one
+   * step every half cycle.
+   *
+   * At a little under two and a half metres to the cycle, a walk is about
+   * two and a half steps a second and a sprint a little under four, which is
+   * roughly what a person does. Pacing it any tighter turns a sprint into a
+   * drum roll -- the old figure gave five and a half steps a second, which
+   * is nobody running anywhere.
+   */
+  bobFrequency: 0.41,
   bobRollAmplitude: 0.012,
   /** Landing dip, in metres, and how fast it recovers. */
   landingDip: 0.09,

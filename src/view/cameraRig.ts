@@ -23,6 +23,10 @@ export class CameraRig {
   private currentFov: number = CAMERA.defaultFovDegrees;
   /** How hard the view is shaking right now, from a shot; decays fast. */
   private shake = 0;
+  /** How far through going down the player is: 0 on their feet, 1 flat. */
+  private fall = 0;
+  /** Which way they went. Fixed for a death so the fall is not a wobble. */
+  private fallSide = 1;
 
   constructor(
     scene: Scene,
@@ -92,6 +96,31 @@ export class CameraRig {
     this.shake = Math.min(1, this.shake + strength);
   }
 
+  /**
+   * Going down, and getting back up.
+   *
+   * In first person a death is the camera's to play, because the camera is
+   * the whole of the character: what the player has to be told is that they
+   * are no longer standing, and the only way to say it is to stop standing.
+   * So the view drops to the ground, rolls onto its side, and tips back as
+   * the head meets the floor.
+   *
+   * The side is drawn once and held for the whole fall. Rolling it per frame
+   * would be a shudder; a body goes down one way.
+   */
+  setDown(down: boolean, deltaSeconds: number): void {
+    if (down && this.fall === 0) {
+      this.fallSide = Math.random() < 0.5 ? -1 : 1;
+    }
+    const rate = down ? deltaSeconds / DEATH.fallSeconds : -deltaSeconds / DEATH.riseSeconds;
+    this.fall = Math.min(1, Math.max(0, this.fall + rate));
+  }
+
+  /** How far down the view is, for anything that has to follow it. */
+  get downAmount(): number {
+    return this.fall;
+  }
+
   update(
     previousPosition: Vec3,
     current: PlayerState,
@@ -111,15 +140,23 @@ export class CameraRig {
 
     this.shake *= Math.exp(-deltaSeconds * SHAKE.decay);
     if (this.shake < 0.005) this.shake = 0;
-    const jolt = this.shake;
+    // A body on the floor is not flinching from its own gun.
+    const jolt = this.shake * (1 - this.fall);
     const shakePitch = (Math.random() * 2 - 1) * SHAKE.pitch * jolt;
     const shakeYaw = (Math.random() * 2 - 1) * SHAKE.yaw * jolt;
     const shakeRoll = (Math.random() * 2 - 1) * SHAKE.roll * jolt;
 
+    // Going down: most of the drop happens at once and the last of it
+    // settles, which is what a body does, and the roll carries a little
+    // past flat before it comes back.
+    const drop = 1 - (1 - this.fall) ** 3;
+    const settle = Math.sin(this.fall * Math.PI * 2.4) * (1 - this.fall) * DEATH.settle;
+    const aside = { x: Math.sin(current.yaw + Math.PI / 2), z: Math.cos(current.yaw + Math.PI / 2) };
+
     this.camera.position.set(
-      x + lean.x,
-      y + eye + (Math.random() * 2 - 1) * SHAKE.lift * jolt,
-      z + lean.z,
+      x + lean.x + aside.x * this.fallSide * DEATH.slide * drop,
+      y + eye + (DEATH.groundEye - eye) * drop + (Math.random() * 2 - 1) * SHAKE.lift * jolt,
+      z + lean.z + aside.z * this.fallSide * DEATH.slide * drop,
     );
     // Rotation is taken from the current state directly, never interpolated:
     // smoothing the aim would read as input lag.
@@ -128,9 +165,12 @@ export class CameraRig {
     // Babylon's rotation.x pitches the camera downward as it grows, while the
     // simulation measures pitch above the horizon, so the sign flips here.
     this.camera.rotation.set(
-      -(current.pitch + recoilPitch) + shakePitch,
+      -(current.pitch + recoilPitch) * (1 - drop) + DEATH.pitch * drop + shakePitch,
       current.yaw + recoilYaw + shakeYaw,
-      current.leanAmount * STANCE.leanRollRadians + this.bobRoll + shakeRoll,
+      current.leanAmount * STANCE.leanRollRadians +
+        this.bobRoll +
+        shakeRoll +
+        this.fallSide * (DEATH.roll * drop + settle),
     );
   }
 
@@ -143,7 +183,7 @@ export class CameraRig {
   }
 
   private updateBob(state: PlayerState, deltaSeconds: number): void {
-    if (!state.grounded) {
+    if (!state.grounded || this.fall > 0) {
       this.bobOffset += (0 - this.bobOffset) * Math.min(1, deltaSeconds * 8);
       this.bobRoll += (0 - this.bobRoll) * Math.min(1, deltaSeconds * 8);
       return;
@@ -159,6 +199,26 @@ export class CameraRig {
     this.bobRoll += (targetRoll - this.bobRoll) * blend;
   }
 }
+
+/**
+ * Going down.
+ *
+ * `groundEye` is where the camera ends up relative to the middle of the
+ * collider, which is a head's width off the floor. The rest is the shape of
+ * the fall: a roll of about sixty degrees onto the shoulder, a tip back as
+ * the head lands, a little slide in the direction of the fall, and a wobble
+ * that dies with it.
+ */
+const DEATH = {
+  fallSeconds: 0.62,
+  riseSeconds: 0.22,
+  /** Camera height once down, measured from the collider's middle. */
+  groundEye: -0.62,
+  roll: 1.05,
+  pitch: 0.24,
+  slide: 0.34,
+  settle: 0.09,
+};
 
 /** The shake of a shot, in radians and metres at full strength, and how fast it dies away. */
 const SHAKE = {

@@ -5,13 +5,7 @@ import {
   type GameSettings,
 } from "../engine/settings";
 import { MAPS } from "../maps";
-import {
-  DEFAULT_FINISH,
-  FINISHES,
-  finishRequirement,
-  isFinishUnlocked,
-  type Finish,
-} from "../sim/cosmetics";
+
 import type { MatchState } from "../sim/match";
 import {
   MAX_LEVEL,
@@ -63,8 +57,6 @@ export interface ScreenCallbacks {
   onPlayAgain: () => void;
   onReturnToLobby: () => void;
   onSettingsChanged: (settings: GameSettings) => void;
-  /** A finish was equipped. The caller persists it and repaints the weapon. */
-  onFinishChanged: (finishId: string) => void;
 }
 
 /**
@@ -106,14 +98,19 @@ export class Screens {
     });
 
     // The map buttons are generated, so adding a level to the registry puts it
-    // in the lobby without touching the markup.
+    // in the lobby without touching the markup -- and while there is only one
+    // level, a row offering a choice of one is hidden rather than shown.
     const mapPicker = byId("pick-map");
-    for (const [id, map] of Object.entries(MAPS)) {
+    const levels = Object.entries(MAPS);
+    for (const [id, map] of levels) {
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.value = id;
       button.textContent = map.name;
       mapPicker.appendChild(button);
+    }
+    if (levels.length < 2) {
+      mapPicker.closest(".lobby-row")?.classList.add("is-hidden");
     }
     this.selectMap = segmented("pick-map", (value) => {
       this.settings.mapId = value;
@@ -149,7 +146,7 @@ export class Screens {
     this.renderCareer();
   }
 
-  /** Redraw the level, progress bar and finish choices from the profile. */
+  /** Redraw the level and the progress bar from the profile. */
   renderCareer(profile: ProgressionState = this.profile): void {
     this.profile = profile;
 
@@ -157,67 +154,22 @@ export class Screens {
     byId<HTMLElement>("career-fill").style.transform =
       `scaleX(${levelProgress(profile).toFixed(3)})`;
 
-    // Weapons first, then finishes, so the line keeps saying something once
-    // the rack is complete rather than going blank for twenty levels.
+    // What the next level hands over is a weapon or it is nothing: the rack
+    // is the whole of what levelling gives now that the finishes are not
+    // something the player picks between.
     const upcomingWeapon = nextUnlock(profile);
-    const upcomingFinish = FINISHES.filter(
-      (finish) => finish.source.kind === "level" && finish.source.level > profile.level,
-    ).sort(
-      (a, b) =>
-        (a.source as { level: number }).level - (b.source as { level: number }).level,
-    )[0];
-
     byId("career-next").textContent =
       profile.level >= MAX_LEVEL
         ? "Top level"
         : upcomingWeapon
           ? `${WEAPONS[upcomingWeapon.weapon].name} at level ${upcomingWeapon.level}`
-          : upcomingFinish
-            ? `${upcomingFinish.name} at level ${(upcomingFinish.source as { level: number }).level}`
-            : "";
+          : "";
 
     const ratio = profile.deaths === 0 ? profile.kills : profile.kills / profile.deaths;
     byId("career-stats").textContent =
       `${profile.matches} rounds · ${profile.kills} kills · ${profile.headshots} headshots · ` +
       `${ratio.toFixed(2)} ratio`;
 
-    this.renderFinishes();
-  }
-
-  private renderFinishes(): void {
-    const container = byId("pick-finish");
-    container.replaceChildren();
-    const equipped = this.equippedFinish().id;
-
-    for (const finish of FINISHES) {
-      const unlocked = isFinishUnlocked(finish, this.profile);
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.value = finish.id;
-      button.disabled = !unlocked;
-      button.classList.toggle("is-selected", unlocked && finish.id === equipped);
-      button.setAttribute("aria-pressed", String(finish.id === equipped));
-      // A locked finish says what unlocks it, rather than just refusing.
-      button.textContent = finish.name;
-      if (!unlocked) {
-        const lock = document.createElement("span");
-        lock.className = "lock";
-        lock.textContent = ` · ${finishRequirement(finish)}`;
-        button.appendChild(lock);
-      }
-      button.addEventListener("click", () => {
-        if (!unlocked) return;
-        this.callbacks.onFinishChanged(finish.id);
-        this.renderFinishes();
-      });
-      container.appendChild(button);
-    }
-  }
-
-  private equippedFinish(): Finish {
-    const id = this.profile.equipped.ar;
-    const found = FINISHES.find((finish) => finish.id === id);
-    return found && isFinishUnlocked(found, this.profile) ? found : DEFAULT_FINISH;
   }
 
   get activeScreen(): ScreenName {
@@ -388,9 +340,5 @@ const nextUnlockedAt = (level: number): string | null => {
   const weapon = (Object.entries(WEAPON_UNLOCKS) as [WeaponId, number][]).find(
     ([, at]) => at === level,
   );
-  if (weapon) return WEAPONS[weapon[0]].name.toUpperCase();
-  const finish = FINISHES.find(
-    (entry) => entry.source.kind === "level" && entry.source.level === level,
-  );
-  return finish ? finish.name.toUpperCase() : null;
+  return weapon ? WEAPONS[weapon[0]].name.toUpperCase() : null;
 };

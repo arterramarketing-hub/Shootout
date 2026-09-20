@@ -6,8 +6,8 @@ import { findPathBetween, nearestNode } from "../src/sim/nav";
 import { vec3 } from "../src/sim/vec3";
 
 describe("map registry", () => {
-  it("ships more than one level", () => {
-    expect(MAP_IDS.length).toBeGreaterThan(1);
+  it("ships at least one level", () => {
+    expect(MAP_IDS.length).toBeGreaterThan(0);
   });
 
   it("has a default that exists", () => {

@@ -323,6 +323,7 @@ html, body {
   text-transform: uppercase;
 }
 
+.lobby-row.is-hidden { display: none; }
 .lobby-row {
   display: flex;
   align-items: center;
@@ -908,15 +909,9 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
-.segmented-wrap { flex-wrap: wrap; justify-content: flex-end; }
 .segmented button[disabled] {
   opacity: 0.4;
   cursor: not-allowed;
-}
-.segmented button .lock {
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  opacity: 0.8;
 }
 
 .rewards {

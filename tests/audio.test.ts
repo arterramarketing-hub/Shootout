@@ -256,6 +256,44 @@ describe("weapon voices", () => {
   });
 });
 
+describe("footsteps", () => {
+  /*
+   * One burst of filtered noise is a click, not a foot. What makes a step
+   * read as a step is that it is several things at slightly different times:
+   * a heel, the floor under it, the mass behind it, grit, and the ball of
+   * the foot a moment later.
+   */
+  it("is built from more than one layer", () => {
+    const audio = new GameAudio();
+    audio.start();
+    expect(capture(() => audio.footstep(1)).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("puts weight under a boot going down and none under a creep", () => {
+    const audio = new GameAudio();
+    audio.start();
+    const hasBody = (weight: number) =>
+      capture(() => audio.footstep(weight)).some(
+        (node) => node.kind === "oscillator" && (node.frequency ?? 0) < 130,
+      );
+    expect(hasBody(1.35)).toBe(true);
+    expect(hasBody(0.2)).toBe(false);
+  });
+
+  it("never plays the same step twice", () => {
+    const audio = new GameAudio();
+    audio.start();
+    const signature = () =>
+      capture(() => audio.footstep(1))
+        .map((node) => Math.round(node.frequency ?? 0))
+        .join(",");
+    const steps = new Set([signature(), signature(), signature(), signature()]);
+    // Four steps in a row that are all different is what stops a walk in a
+    // straight line sounding like a metronome.
+    expect(steps.size).toBe(4);
+  });
+});
+
 describe("ambience", () => {
   it("lays down beds that loop", () => {
     const audio = new GameAudio();

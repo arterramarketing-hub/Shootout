@@ -799,13 +799,6 @@ const boot = (): void => {
       screens.show("lobby");
     },
     onSettingsChanged: applySettings,
-    onFinishChanged: (finishId) => {
-      // One finish covers the whole rack, which is the only thing a player
-      // has asked for so far and keeps the lobby to a single row.
-      for (const id of DEFAULT_LOADOUT) profile.equipped[id] = finishId;
-      saveProfile(profile);
-      viewmodel.setFinish(finishById(finishId));
-    },
   });
   viewmodel.setFinish(finishById(profile.equipped.ar));
   applySettings(settings);
@@ -1035,6 +1028,9 @@ const boot = (): void => {
       settings.fovDegrees +
       (weapon.definition.adsFovDegrees - settings.fovDegrees) * playerLoadout.adsProgress;
     rig.blendFieldOfView(targetFov, delta);
+    // Going down, or getting back up. The camera plays it and the weapon
+    // follows the camera, so it has to be set before either is placed.
+    rig.setDown(playerHealth.dead, delta);
     rig.update(
       previousPosition,
       player,
@@ -1043,7 +1039,14 @@ const boot = (): void => {
       playerLoadout.recoilPitch,
       playerLoadout.recoilYaw,
     );
-    viewmodel.update(player, playerLoadout, rig.camera, delta, rig.magnification(settings.fovDegrees));
+    viewmodel.update(
+      player,
+      playerLoadout,
+      rig.camera,
+      delta,
+      rig.magnification(settings.fovDegrees),
+      rig.downAmount,
+    );
     const stanceHeight = stanceHalfHeight(player.crouchAmount) * 2;
     shadowPatches.place(
       selfShadow,

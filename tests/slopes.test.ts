@@ -49,10 +49,17 @@ const walker = (brushes: BoxBrush[], start: { x: number; z: number; y?: number }
 };
 
 describe("ramps", () => {
+  /*
+   * Long enough that three seconds of walking is still on it. A ramp the
+   * player runs off the top of measures the fall, not the climb, and the
+   * walking speed is a number that moves.
+   */
+  const LONG_RUN = 16;
+
   it("are climbed at most of walking speed", () => {
-    const { walk } = walker([FLOOR, ramp(23, 10)], { x: 0, z: -1 });
+    const { walk } = walker([FLOOR, ramp(23, LONG_RUN)], { x: 0, z: -1 });
     const end = walk(3);
-    // Ten metres of run at four a second, less the slope.
+    // Ten metres of run at walking pace, less what the slope costs.
     expect(end.z).toBeGreaterThan(8);
     expect(end.y).toBeGreaterThan(3.5);
   });
@@ -69,7 +76,7 @@ describe("ramps", () => {
      * the step-over used to take that for a kerb: half a metre straight up,
      * a fall back onto the ramp, and again eight ticks later, all the way up.
      */
-    const { player, walk } = walker([FLOOR, ramp(23, 10)], { x: 0, z: -1 });
+    const { player, walk } = walker([FLOOR, ramp(23, LONG_RUN)], { x: 0, z: -1 });
     let previous = player.position.y;
     for (let i = 0; i < 150; i += 1) {
       walk(tickInterval);

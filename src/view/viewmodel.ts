@@ -322,6 +322,8 @@ export class ViewmodelRig {
     worldCamera: FreeCamera,
     deltaSeconds: number,
     magnification = 1,
+    /** How far through going down the player is; the weapon goes with them. */
+    down = 0,
   ): void {
     if (magnification !== this.zoom) {
       this.zoom = magnification;
@@ -357,7 +359,7 @@ export class ViewmodelRig {
     const reloading = weapon.reloading ? 1 : 0;
     const swapping = isSwapping(loadout) ? 1 : 0;
 
-    this.applyPose(model, player, ads, sprinting, reloading, swapping, deltaSeconds);
+    this.applyPose(model, player, ads, sprinting, reloading, swapping, deltaSeconds, down);
   }
 
   /**
@@ -446,6 +448,7 @@ export class ViewmodelRig {
     reloading: number,
     swapping: number,
     deltaSeconds: number,
+    down: number,
   ): void {
     // Where the weapon is held comes from the shared geometry, so the pose a
     // test inspects is the pose the player is given.
@@ -502,6 +505,21 @@ export class ViewmodelRig {
     y += kick.up;
     pitch -= kick.pitch;
     roll += this.recoilRoll * kick.rollScale;
+
+    // Going down takes the weapon with it, and takes it over everything
+    // else: a player shot in the middle of a burst does not keep shouldering
+    // the rifle while the view falls to the floor. This one eases toward the
+    // pose rather than adding to it, because by here there is a bob, a sway
+    // and a kick on the rotation and none of them apply to a dropped gun.
+    if (down > 0) {
+      const t = down;
+      x += (POSE.death.x - x) * t;
+      y += (POSE.death.y - y) * t;
+      z += (POSE.death.z - z) * t;
+      roll += (POSE.deathRoll - roll) * t;
+      pitch += (POSE.deathPitch - pitch) * t;
+      yaw += (POSE.deathYaw - yaw) * t;
+    }
 
     // One last smoothing pass so no pose change can pop in a single frame.
     this.position.set(x, y, z);

@@ -749,38 +749,40 @@ const ridgeline = (): ModelSpec => {
       tone: "metal",
     },
 
-    // The charging handle: the pair of wings that stand out either side of
-    // the counter, behind the rear deck.
+    // The charging handle: one bar across the back of the receiver, standing
+    // out below the round counter.
     //
-    // It used to be a slab laid along the top of the receiver, which is
-    // where a real one lives and is also where the receiver's own top face
-    // already was: the two sat half a millimetre apart across sixteen square
+    // It used to be a slab laid along the top of the receiver, which is where
+    // a real one lives and is also where the receiver's own top face already
+    // was: the two sat half a millimetre apart across sixteen square
     // centimetres, directly under the shooter's eye, and traded places every
-    // frame. Two faces that close cannot be told apart by any depth buffer a
-    // phone has. So the handle moved to the one place on the back of this
-    // weapon that nothing else occupies, and each wing runs a centimetre
-    // into the deck rather than stopping against it, which leaves no pair of
-    // surfaces anywhere near each other to argue over.
-    ...[-1, 1].map((side) =>
-      box({
-        x: 0.0205 * side,
-        y: 0.0705,
-        z: 0.0835,
-        width: 0.009,
-        height: 0.010,
-        depth: 0.029,
-        tone: "metal",
-      }),
-    ),
-    // The latch, on the left wing where the hand finds it.
+    // frame. No depth buffer a phone has can tell two faces that close apart.
+    // It then spent a while as a pair of stubs either side of the counter,
+    // which read as two grey squares stuck on the back of the gun and not as
+    // a part of it.
+    //
+    // A single bar, wider than it is tall, is what the shape actually is. It
+    // runs most of a centimetre into the receiver rather than stopping
+    // against it, and sits a good four millimetres clear of the receiver's
+    // top, so there is no pair of surfaces near each other to argue over.
     box({
-      x: -0.0205,
-      y: 0.0705,
-      z: 0.0700,
-      width: 0.014,
-      height: 0.005,
-      depth: 0.014,
+      x: 0,
+      y: 0.055,
+      z: 0.084,
+      width: 0.034,
+      height: 0.007,
+      depth: 0.030,
       tone: "metal",
+    }),
+    // The knurled end of it, where the hand goes.
+    box({
+      x: 0,
+      y: 0.055,
+      z: 0.0715,
+      width: 0.040,
+      height: 0.010,
+      depth: 0.007,
+      tone: "shadow",
     }),
     box({
       x: 0.028,
@@ -1319,6 +1321,16 @@ export const POSE = {
   /** Dropped out of frame while a swap is in progress. */
   swap: { x: 0.105, y: -0.423, z: 0.36 },
   swapPitch: 0.55,
+  /**
+   * Let go of.
+   *
+   * Further out of frame than a swap and turned right over, because it is
+   * not being put away -- the hands that were holding it have stopped.
+   */
+  death: { x: 0.22, y: -0.62, z: 0.30 },
+  deathRoll: -1.25,
+  deathPitch: 0.85,
+  deathYaw: -0.5,
   /** Distance the weapon sits at when aimed. */
   aimZ: AIM_DISTANCE,
 } as const;

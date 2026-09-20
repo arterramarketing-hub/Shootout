@@ -193,6 +193,8 @@ export class GameAudio {
   /** A longer buffer for the beds: a one-second loop is audible as a pulse. */
   private bedNoise: AudioBuffer | null = null;
   private enabled = true;
+  /** Which foot the next step is, so a pair of them are not identical. */
+  private stepFoot = false;
 
   private ambience: AmbienceId | null = null;
   private ambienceNodes: AudioScheduledSourceNode[] = [];
@@ -700,23 +702,85 @@ export class GameAudio {
   /**
    * A boot going down.
    *
-   * `weight` runs from a crouched creep to a sprint. The scuff on top is
-   * what stops it sounding like a drum: a step is grit moving, then the
-   * floor taking the load.
+   * `weight` runs from a crouched creep to a sprint.
+   *
+   * A footstep is not one sound, which is why one burst of filtered noise
+   * never passes for one. It is a heel arriving, the floor under it taking
+   * the load, the grit between the two moving, and then the ball of the foot
+   * coming down a moment later. Four layers, the last of them offset by a
+   * few hundredths of a second, and the ear stops hearing a click and starts
+   * hearing a foot.
+   *
+   * The other half is that no two are the same. Every layer's pitch, level
+   * and timing is rolled, and the feet alternate -- one a little duller and
+   * a little later than the other, as a real pair are. Without that, walking
+   * in a straight line is a metronome, and a metronome is the single fastest
+   * way to make a player notice they are listening to a synthesiser.
    */
   footstep(weight: number): void {
     const level = Math.max(0.15, Math.min(1.6, weight));
+    // How much of this is a boot landing hard and how much is a foot being
+    // placed: a crouched player is nearly all grit, a sprinting one nearly
+    // all impact.
+    const hard = Math.min(1, Math.max(0, (level - 0.3) / 1.1));
+    this.stepFoot = !this.stepFoot;
+    // One foot carries a fraction more of the body than the other, and lands
+    // a hair later. Small enough to be felt rather than heard.
+    const lead = this.stepFoot ? 1 : 0.88;
+    const skew = this.stepFoot ? 0 : 0.006;
+    const vary = (spread: number) => 1 + (Math.random() * 2 - 1) * spread;
+
+    // The heel: the hardest, shortest part of it, and the part that says
+    // what the floor is made of.
     this.noiseLayer(
-      { frequency: 260 + Math.random() * 120, decay: 0.075, gain: 0.075 * level },
+      { frequency: (1050 + Math.random() * 420) * lead, decay: 0.022, gain: 0.05 * level * lead },
+      "bandpass",
+      1.1,
+      skew,
+    );
+    // The floor taking the load underneath.
+    this.noiseLayer(
+      { frequency: 300 + Math.random() * 130, decay: 0.07 * vary(0.2), gain: 0.07 * level },
       "lowpass",
       1,
-      0,
+      skew,
     );
+    // The mass behind it, which only a boot going down properly has.
+    if (hard > 0.05) {
+      this.toneLayer(
+        {
+          frequency: (78 + Math.random() * 22) * lead,
+          drop: 0.62,
+          decay: 0.085 * vary(0.18),
+          gain: 0.075 * hard * level,
+        },
+        "sine",
+        skew,
+        260,
+      );
+    }
+    // Grit under the sole, rolling forward off the heel.
     this.noiseLayer(
-      { frequency: 3200 + Math.random() * 1800, decay: 0.035, gain: 0.02 * level },
+      {
+        frequency: 2600 + Math.random() * 2600,
+        decay: (0.045 + Math.random() * 0.045) * vary(0.2),
+        gain: 0.022 * level * (1.25 - hard * 0.35),
+      },
       "bandpass",
-      1.6,
-      0.008,
+      1.5,
+      skew + 0.006 + Math.random() * 0.01,
+    );
+    // The ball of the foot, a moment after the heel. This is the layer that
+    // makes it a footstep rather than a knock.
+    this.noiseLayer(
+      {
+        frequency: 620 + Math.random() * 280,
+        decay: 0.035 * vary(0.25),
+        gain: 0.026 * level * lead,
+      },
+      "bandpass",
+      0.9,
+      skew + 0.028 + Math.random() * 0.018 * (1 - hard),
     );
   }
 

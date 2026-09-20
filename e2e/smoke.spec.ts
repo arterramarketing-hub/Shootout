@@ -624,7 +624,7 @@ test.describe("online play", () => {
 
 
 test.describe("maps and progression", () => {
-  test("the lobby offers every map with a description", async ({ page }) => {
+  test("the lobby names the level and describes it", async ({ page }) => {
     await page.goto("/");
     await page.waitForFunction(() => window.__shootout?.ready === true, null, {
       timeout: 30_000,
@@ -632,33 +632,19 @@ test.describe("maps and progression", () => {
     const names = await page
       .locator("#pick-map button")
       .evaluateAll((buttons) => buttons.map((button) => button.textContent?.trim() ?? ""));
-    expect(names).toContain("Warehouse");
-    expect(names).toContain("Substation");
+    expect(names).toContain("Boulevard Works");
     await expect(page.locator("#map-tagline")).not.toBeEmpty();
+    // One level, so the row offering a choice of one is not shown.
+    await expect(page.locator("#pick-map").locator("xpath=ancestor::div[contains(@class,'lobby-row')]"))
+      .toBeHidden();
   });
 
-  test("the second map loads and bakes its own navigation", async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem(
-        "shootout.settings.v1",
-        JSON.stringify({ mapId: "substation", online: false, audioEnabled: false }),
-      );
-    });
+  test("the lobby has no finish picker", async ({ page }) => {
     await page.goto("/");
     await page.waitForFunction(() => window.__shootout?.ready === true, null, {
       timeout: 30_000,
     });
-    await page.getByRole("button", { name: "DEPLOY" }).click();
-    await page.waitForTimeout(2500);
-
-    expect(await page.evaluate(() => window.__shootout.map.id)).toBe("substation");
-    const nav = await page.evaluate(() => window.__shootout.nav);
-    expect(nav.nodes).toBeGreaterThan(1500);
-
-    // Bots have to find the floor here too, not the roof.
-    const bots = await page.evaluate(() => window.__shootout.bots);
-    expect(bots.length).toBeGreaterThan(0);
-    for (const bot of bots) expect(bot.position.y).toBeLessThan(5);
+    await expect(page.locator("#pick-finish")).toHaveCount(0);
   });
 
   test("the ruined plant loads, with three floors of navigation", async ({ page }) => {
@@ -703,7 +689,7 @@ test.describe("maps and progression", () => {
     expect(profile.carried).toEqual(["ar", "pistol"]);
   });
 
-  test("a levelled profile unlocks the rest of the rack and its finishes", async ({ page }) => {
+  test("a levelled profile unlocks the rest of the rack", async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.setItem(
         "shootout.profile.v1",
@@ -716,33 +702,6 @@ test.describe("maps and progression", () => {
     });
 
     expect(await page.evaluate(() => window.__shootout.profile.carried)).toHaveLength(4);
-    const open = await page
-      .locator("#pick-finish button:not([disabled])")
-      .count();
-    // Standard plus the three unlocked by level eight.
-    expect(open).toBe(4);
     await expect(page.locator("#career-level")).toHaveText("8");
-  });
-
-  test("equipping a finish sticks across a reload", async ({ page }) => {
-    // Seed once. An unconditional write would run again on reload and wipe
-    // the very choice this test is checking survived.
-    await page.addInitScript(() => {
-      if (!localStorage.getItem("shootout.profile.v1")) {
-        localStorage.setItem("shootout.profile.v1", JSON.stringify({ level: 8 }));
-      }
-    });
-    await page.goto("/");
-    await page.waitForFunction(() => window.__shootout?.ready === true, null, {
-      timeout: 30_000,
-    });
-    await page.locator('#pick-finish button[data-value="slate"]').click();
-    await page.reload();
-    await page.waitForFunction(() => window.__shootout?.ready === true, null, {
-      timeout: 30_000,
-    });
-    await expect(page.locator('#pick-finish button[data-value="slate"]')).toHaveClass(
-      /is-selected/,
-    );
   });
 });
