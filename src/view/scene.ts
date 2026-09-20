@@ -1,9 +1,7 @@
 import "@babylonjs/core/Meshes/Builders/boxBuilder";
 import "@babylonjs/core/Meshes/Builders/planeBuilder";
-import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { ColorCurves } from "@babylonjs/core/Materials/colorCurves";
 import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
-import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascadedShadowGenerator";
@@ -18,6 +16,7 @@ import type { Camera } from "@babylonjs/core/Cameras/camera";
 import type { QualitySettings } from "../engine/quality";
 import type { BoxBrush, MapDefinition, SurfaceKind } from "../maps/types";
 import { TEXEL_METRES, createMaterialLibrary } from "./materials";
+import { buildSky } from "./sky";
 
 export interface BuiltScene {
   scene: Scene;
@@ -61,85 +60,13 @@ export const createScene = (
 
   const key = buildLighting(scene, map);
   gradeImage(scene, map);
-  const staticMeshes = buildMap(scene, map, quality.tier === "high" ? 4 : 1);
-  if (style.sky) buildClouds(scene, map);
+  // Relief costs a second texture and a heavier shader on every surface, so
+  // it rides with the rest of the settings a strong machine gets.
+  const detailed = quality.tier === "high";
+  const staticMeshes = buildMap(scene, map, detailed ? 4 : 1, detailed);
+  buildSky(scene, style, quality, map.textureSeed);
 
   return { scene, staticMeshes, key };
-};
-
-/**
- * Clouds, for a map with a sky.
- *
- * A few dozen soft-edged planes lying flat far above the level, each with
- * its own generated puff, drifting slowly downwind. They are unlit and
- * outside the fog, because a cloud that went grey with distance and dark on
- * its underside would stop reading as a cloud and start reading as a roof.
- */
-const buildClouds = (scene: Scene, map: MapDefinition): void => {
-  const random = cloudRandom(map.textureSeed);
-  const material = new StandardMaterial("mat_cloud", scene);
-  const texture = new DynamicTexture("tex_cloud", { width: 256, height: 256 }, scene, true);
-  paintCloud(texture.getContext() as unknown as CanvasRenderingContext2D, random);
-  texture.update();
-  texture.hasAlpha = true;
-  material.diffuseTexture = texture;
-  material.opacityTexture = texture;
-  material.emissiveColor = new Color3(1, 1, 1);
-  material.disableLighting = true;
-  material.backFaceCulling = false;
-  material.fogEnabled = false;
-  material.freeze();
-
-  const clouds: Mesh[] = [];
-  const reach = map.size * 2.5;
-  for (let i = 0; i < 26; i += 1) {
-    const size = 40 + random() * 70;
-    const cloud = MeshBuilder.CreatePlane(`cloud_${i}`, { width: size, height: size * (0.5 + random() * 0.4) }, scene);
-    cloud.rotation.x = Math.PI / 2;
-    cloud.rotation.y = random() * Math.PI * 2;
-    cloud.position.set((random() - 0.5) * reach * 2, 110 + random() * 50, (random() - 0.5) * reach * 2);
-    cloud.material = material;
-    cloud.isPickable = false;
-    cloud.alwaysSelectAsActiveMesh = true;
-    clouds.push(cloud);
-  }
-  // Drift. Slow, and wrapping, so the sky is never empty on one side.
-  scene.onBeforeRenderObservable.add(() => {
-    const dt = scene.getEngine().getDeltaTime() / 1000;
-    for (const cloud of clouds) {
-      cloud.position.x += 1.2 * dt;
-      if (cloud.position.x > reach) cloud.position.x -= reach * 2;
-    }
-  });
-};
-
-const cloudRandom = (seed: number) => {
-  let state = (seed ^ 0x5bd1e995) >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-};
-
-/** A cumulus puff: overlapping soft discs, brightest in the middle, fading out. */
-const paintCloud = (context: CanvasRenderingContext2D, random: () => number): void => {
-  context.clearRect(0, 0, 256, 256);
-  for (let i = 0; i < 22; i += 1) {
-    const angle = random() * Math.PI * 2;
-    const distance = Math.sqrt(random()) * 70;
-    const x = 128 + Math.cos(angle) * distance;
-    const y = 128 + Math.sin(angle) * distance * 0.6;
-    const radius = 30 + random() * 40;
-    const puff = context.createRadialGradient(x, y, 0, x, y, radius);
-    puff.addColorStop(0, "rgba(255,252,246,0.55)");
-    puff.addColorStop(0.6, "rgba(255,252,246,0.22)");
-    puff.addColorStop(1, "rgba(255,252,246,0)");
-    context.fillStyle = puff;
-    context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
-  }
 };
 
 /**
@@ -266,8 +193,13 @@ const faceUVs = (brush: BoxBrush): Vector4[] => {
   ];
 };
 
-const buildMap = (scene: Scene, map: MapDefinition, anisotropy: number): Mesh[] => {
-  const library = createMaterialLibrary(scene, map.style, map.textureSeed, anisotropy);
+const buildMap = (
+  scene: Scene,
+  map: MapDefinition,
+  anisotropy: number,
+  relief: boolean,
+): Mesh[] => {
+  const library = createMaterialLibrary(scene, map.style, map.textureSeed, anisotropy, relief);
   // Bucketed by kind and tint together: a zone's coloured brushes still merge
   // with each other, so colour-coding costs one draw call per colour used
   // rather than one per brush.

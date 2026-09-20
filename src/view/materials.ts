@@ -2,7 +2,12 @@ import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import type { Scene } from "@babylonjs/core/scene";
 import type { MapStyle, SurfaceKind } from "../maps/types";
-import { createTextures, type SurfaceTextureId, type TextureSet } from "./textures";
+import {
+  createReliefMaps,
+  createTextures,
+  type SurfaceTextureId,
+  type TextureSet,
+} from "./textures";
 
 /**
  * Which generated texture dresses each kind of surface, and how shiny it is.
@@ -48,8 +53,10 @@ export const createMaterials = (
   style: MapStyle,
   seed: number,
   anisotropy = 1,
+  relief = false,
 ): { materials: MaterialSet; textures: TextureSet } => {
   const textures = createTextures(scene, style, seed, anisotropy);
+  const reliefs = relief ? createReliefMaps(scene, textures, anisotropy) : {};
   const set = {} as MaterialSet;
 
   for (const [kind, config] of Object.entries(SURFACES) as [
@@ -64,6 +71,11 @@ export const createMaterials = (
     material.ambientColor = new Color3(1, 1, 1);
     material.specularColor = new Color3(config.specular, config.specular, config.specular);
     material.specularPower = config.power;
+    // Relief is what lets a light find the shape of a surface rather than
+    // just its colour: mortar courses take a shadow, a grating reads as
+    // holes, asphalt roughens up underfoot.
+    const bump = reliefs[config.texture];
+    if (bump) material.bumpTexture = bump;
     material.useAlphaFromDiffuseTexture = false;
     // Materials are frozen because nothing about them changes at runtime;
     // this skips a per-frame dirty check on every draw.
@@ -87,8 +99,9 @@ export const createMaterialLibrary = (
   style: MapStyle,
   seed: number,
   anisotropy = 1,
+  relief = false,
 ): MaterialLibrary => {
-  const { materials, textures } = createMaterials(scene, style, seed, anisotropy);
+  const { materials, textures } = createMaterials(scene, style, seed, anisotropy, relief);
   const variants = new Map<string, StandardMaterial>();
 
   return {
@@ -103,6 +116,7 @@ export const createMaterialLibrary = (
       const material = new StandardMaterial(`mat_${kind}_${tint.replace("#", "")}`, scene);
       material.diffuseTexture = base.diffuseTexture;
       material.ambientTexture = base.ambientTexture;
+      material.bumpTexture = base.bumpTexture;
       material.ambientColor = Color3.FromHexString(tint);
       // diffuseColor multiplies the texture, which is what keeps the surface
       // reading as the material it is made of rather than as flat paint.
