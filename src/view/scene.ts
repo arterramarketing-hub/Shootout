@@ -54,7 +54,7 @@ export const createScene = (
     // Fog fades into the sky where there is one, so a distant roofline
     // dissolves into blue rather than into a grey that the sky is not.
     scene.fogColor = style.sky ? fog : fog.scale(0.55);
-    scene.fogStart = quality.viewDistance * 0.4;
+    scene.fogStart = quality.viewDistance * 0.45;
     scene.fogEnd = quality.viewDistance;
   }
 

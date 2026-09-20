@@ -7,13 +7,21 @@ export interface QualitySettings {
   antialias: boolean;
   shadows: boolean;
   fog: boolean;
-  /** Metres beyond which geometry is culled. */
+  /**
+   * Metres beyond which geometry is culled, and where the fog ends.
+   *
+   * It has to clear the backdrop outside the level, not just the level: a
+   * phone that can only see ninety metres looks down the street at haze and
+   * a clip plane, which is what a view distance tuned to a sixty-metre map
+   * gives you. The backdrop's silhouettes stand within a hundred and twenty,
+   * so every tier reaches them.
+   */
   viewDistance: number;
 }
 
 const TIERS: Record<QualityTier, QualitySettings> = {
-  low: { tier: "low", maxPixelRatio: 1.0, antialias: false, shadows: false, fog: true, viewDistance: 90 },
-  medium: { tier: "medium", maxPixelRatio: 1.25, antialias: false, shadows: false, fog: true, viewDistance: 140 },
+  low: { tier: "low", maxPixelRatio: 1.0, antialias: false, shadows: false, fog: true, viewDistance: 160 },
+  medium: { tier: "medium", maxPixelRatio: 1.25, antialias: false, shadows: false, fog: true, viewDistance: 190 },
   high: { tier: "high", maxPixelRatio: 1.5, antialias: true, shadows: true, fog: true, viewDistance: 220 },
 };
 

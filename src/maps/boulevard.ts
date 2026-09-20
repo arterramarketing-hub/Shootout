@@ -1,5 +1,6 @@
 import { createRandom } from "../sim/random";
 import { mergeBrushes } from "./merge";
+import { buildOutskirts } from "./outskirts";
 import type { BoxBrush, MapDefinition, MapStyle, SpawnPoint, TargetPlacement } from "./types";
 
 /**
@@ -720,6 +721,23 @@ box({ kind: "accent", x: 2.5, y: 0.08, z: -2, width: 3.2, height: 0.16, depth: 1
 // Inside the wings: machinery bases, the one thing too heavy to loot.
 for (const [x, z] of [[-29, -9], [-23, 9], [-17, 15], [-29, 15], [-23, -21], [11, 19], [11, -19], [29, 2], [29, -18], [23, 18], [17, -18]]) {
   box({ kind: "frame", x, y: 0.45, z, width: 2.2, height: 0.9, depth: 1.6, tint: "#9a9488" });
+}
+
+/* ------------------------------------------------------------------ *
+ * Everything past the fence.
+ *
+ * The city the plant sits in, built outside the level and solid nowhere, so
+ * that looking down the street shows a street rather than the end of the
+ * map. See `outskirts.ts` for what is out there.
+ * ------------------------------------------------------------------ */
+
+for (const brush of buildOutskirts({
+  seed: 0x0b0e1e ^ 0x5eed,
+  edge: { x: 32, z: 24 },
+  roadWest: ROAD.west,
+  roadEast: ROAD.east,
+}).brushes) {
+  box(brush);
 }
 
 /* ------------------------------------------------------------------ *
