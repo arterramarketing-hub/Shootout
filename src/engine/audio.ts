@@ -1,3 +1,4 @@
+import type { AmbienceId } from "../maps/types";
 import type { WeaponId } from "../sim/weapons";
 
 /**
@@ -58,55 +59,59 @@ interface ShotVoice {
   tail: NoiseLayer;
 }
 
+/*
+ * A gunshot is violent, and the way that reads is a hard edge on the front
+ * and a fast collapse behind it: almost all of the energy inside the first
+ * twenty milliseconds. Long decays are what make a synthesised shot sound
+ * like a door closing, so the crack is brief and the tails are kept short
+ * and quiet enough to sit under the next round of a burst.
+ */
 const VOICES: Record<WeaponId, ShotVoice> = {
   // A rifle: the crack dominates, with real weight under it.
   ar: {
-    gain: 0.62,
+    gain: 0.95,
     jitter: 0.05,
-    snap: { frequency: 3600, decay: 0.012, gain: 0.5 },
-    crack: { frequency: 1850, q: 1.8, decay: 0.09, gain: 0.55 },
-    body: { frequency: 118, drop: 0.42, decay: 0.12, gain: 0.5 },
-    blast: { frequency: 620, decay: 0.09, gain: 0.35 },
-    mech: { frequency: 5400, q: 2.5, delay: 0.05, decay: 0.035, gain: 0.13 },
-    tail: { frequency: 1700, decay: 0.36, gain: 0.14 },
+    snap: { frequency: 4200, decay: 0.008, gain: 0.95 },
+    crack: { frequency: 2100, q: 2.6, decay: 0.055, gain: 0.85 },
+    body: { frequency: 124, drop: 0.3, decay: 0.09, gain: 0.72 },
+    blast: { frequency: 760, decay: 0.05, gain: 0.6 },
+    mech: { frequency: 5400, q: 2.5, delay: 0.045, decay: 0.03, gain: 0.16 },
+    tail: { frequency: 1500, decay: 0.24, gain: 0.1 },
   },
   // A submachine gun: thin and fast, and the bolt is half the sound.
   smg: {
-    gain: 0.5,
+    gain: 0.82,
     jitter: 0.09,
-    snap: { frequency: 4400, decay: 0.008, gain: 0.42 },
-    crack: { frequency: 2700, q: 2.4, decay: 0.05, gain: 0.42 },
-    body: { frequency: 190, drop: 0.5, decay: 0.055, gain: 0.34 },
-    blast: { frequency: 900, decay: 0.05, gain: 0.2 },
-    mech: { frequency: 6300, q: 2.2, delay: 0.028, decay: 0.03, gain: 0.22 },
-    tail: { frequency: 2200, decay: 0.16, gain: 0.1 },
+    snap: { frequency: 5200, decay: 0.006, gain: 0.9 },
+    crack: { frequency: 3000, q: 3, decay: 0.032, gain: 0.7 },
+    body: { frequency: 205, drop: 0.36, decay: 0.045, gain: 0.5 },
+    blast: { frequency: 1000, decay: 0.032, gain: 0.36 },
+    mech: { frequency: 6300, q: 2.2, delay: 0.026, decay: 0.026, gain: 0.26 },
+    tail: { frequency: 2100, decay: 0.12, gain: 0.07 },
   },
   // A shotgun: almost all blast and body, and the pump comes afterwards.
   shotgun: {
-    gain: 0.85,
+    gain: 1.15,
     jitter: 0.04,
-    snap: { frequency: 1400, decay: 0.02, gain: 0.35 },
-    crack: { frequency: 620, q: 0.55, decay: 0.26, gain: 0.5 },
-    body: { frequency: 58, drop: 0.35, decay: 0.3, gain: 0.8 },
-    blast: { frequency: 1300, decay: 0.22, gain: 0.75 },
-    mech: { frequency: 2600, q: 1.4, delay: 0.16, decay: 0.07, gain: 0.24 },
-    tail: { frequency: 800, decay: 0.72, gain: 0.26 },
+    snap: { frequency: 1700, decay: 0.014, gain: 0.8 },
+    crack: { frequency: 700, q: 0.7, decay: 0.16, gain: 0.85 },
+    body: { frequency: 54, drop: 0.28, decay: 0.22, gain: 1.05 },
+    blast: { frequency: 1500, decay: 0.13, gain: 1 },
+    mech: { frequency: 2600, q: 1.4, delay: 0.16, decay: 0.06, gain: 0.26 },
+    tail: { frequency: 760, decay: 0.5, gain: 0.18 },
   },
   // A pistol: a snap and a short metallic ring, gone almost at once.
   pistol: {
-    gain: 0.56,
+    gain: 0.86,
     jitter: 0.06,
-    snap: { frequency: 3100, decay: 0.01, gain: 0.5 },
-    crack: { frequency: 1550, q: 1.3, decay: 0.085, gain: 0.5 },
-    body: { frequency: 150, drop: 0.45, decay: 0.1, gain: 0.42 },
-    blast: { frequency: 700, decay: 0.07, gain: 0.28 },
-    mech: { frequency: 4800, q: 2.8, delay: 0.045, decay: 0.03, gain: 0.18 },
-    tail: { frequency: 1500, decay: 0.26, gain: 0.12 },
+    snap: { frequency: 3700, decay: 0.007, gain: 0.95 },
+    crack: { frequency: 1750, q: 2, decay: 0.05, gain: 0.8 },
+    body: { frequency: 158, drop: 0.32, decay: 0.07, gain: 0.6 },
+    blast: { frequency: 820, decay: 0.04, gain: 0.44 },
+    mech: { frequency: 4800, q: 2.8, delay: 0.042, decay: 0.026, gain: 0.2 },
+    tail: { frequency: 1400, decay: 0.2, gain: 0.09 },
   },
 };
-
-/** Which bed of sound a level sits in. */
-export type AmbienceId = "ruin" | "substation" | "range";
 
 /** The one-off sounds an ambience throws in between its beds. */
 type Incidental =
@@ -117,13 +122,14 @@ type Incidental =
   | "horn"
   | "relay"
   | "buzz"
-  | "gust"
   | "drip";
 
 interface AmbienceProfile {
-  /** Wind: filtered noise, the loudest thing in an empty level. */
+  /** How loud a gust of wind gets. Between gusts the wind is barely there. */
   wind: number;
   windCentre: number;
+  /** Seconds between gusts, at the least and at the most. */
+  gustGap: [number, number];
   /** The floor of the mix: everything below the wind, felt more than heard. */
   rumble: number;
   /** A mains hum, where there is something left running. */
@@ -133,33 +139,48 @@ interface AmbienceProfile {
   events: Incidental[];
 }
 
+/**
+ * How loud the whole bed sits under the game.
+ *
+ * Ambience is meant to be noticed when you stop and listen for it and not
+ * before. Anything louder and a wide band of noise stops being weather and
+ * starts being the hiss of a broken speaker.
+ */
+const AMBIENCE_LEVEL = 0.5;
+
+/** What the wind falls back to between gusts: present, but only just. */
+const WIND_LULL = 0.12;
+
 const AMBIENCES: Record<AmbienceId, AmbienceProfile> = {
   // An open plant with the weather coming through it: wind in the frame,
   // traffic somewhere beyond the wall, birds in the roof, and a fight
   // happening a few streets away.
   ruin: {
     wind: 0.05,
-    windCentre: 520,
-    rumble: 0.035,
+    windCentre: 470,
+    gustGap: [7, 17],
+    rumble: 0.014,
     hum: 0,
     gap: [4, 13],
-    events: ["gunfire", "groan", "bird", "debris", "horn", "gust", "gust"],
+    events: ["gunfire", "groan", "bird", "debris", "horn"],
   },
   // A switchyard: less weather, more electricity.
   substation: {
-    wind: 0.028,
-    windCentre: 700,
-    rumble: 0.03,
-    hum: 0.022,
+    wind: 0.03,
+    windCentre: 640,
+    gustGap: [9, 22],
+    rumble: 0.012,
+    hum: 0.016,
     gap: [3.5, 10],
     events: ["relay", "buzz", "groan", "debris", "gunfire", "drip"],
   },
   // A range. Quiet enough to hear your own weapon properly.
   range: {
     wind: 0.02,
-    windCentre: 900,
-    rumble: 0.018,
-    hum: 0.008,
+    windCentre: 820,
+    gustGap: [12, 26],
+    rumble: 0.008,
+    hum: 0.006,
     gap: [7, 18],
     events: ["debris", "drip", "gunfire"],
   },
@@ -177,7 +198,10 @@ export class GameAudio {
   private ambienceNodes: AudioScheduledSourceNode[] = [];
   private ambienceGain: GainNode | null = null;
   private ambienceTimer: number | null = null;
+  private gustTimer: number | null = null;
   private gustGain: GainNode | null = null;
+  private windLull = 0;
+  private windPeak = 0;
 
   /**
    * Browsers refuse to start audio without a user gesture, so this must be
@@ -197,7 +221,19 @@ export class GameAudio {
     const context = new Constructor();
     const master = context.createGain();
     master.gain.value = 0.9;
-    master.connect(context.destination);
+    // A limiter on the way out. Shots are deliberately loud and hit hard at
+    // the front, and several layers of several weapons can land in the same
+    // millisecond; without this the sum runs past what the output can carry
+    // and the edge that makes a shot sound violent turns into a crackle.
+    // It also ducks the bed under gunfire, which is what a loud noise does
+    // to everything quiet around it.
+    const limiter = context.createDynamicsCompressor();
+    limiter.threshold.value = -9;
+    limiter.knee.value = 6;
+    limiter.ratio.value = 9;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.16;
+    master.connect(limiter).connect(context.destination);
 
     this.context = context;
     this.master = master;
@@ -241,6 +277,10 @@ export class GameAudio {
       window.clearTimeout(this.ambienceTimer);
       this.ambienceTimer = null;
     }
+    if (this.gustTimer !== null) {
+      window.clearTimeout(this.gustTimer);
+      this.gustTimer = null;
+    }
     for (const node of this.ambienceNodes) {
       try {
         node.stop();
@@ -263,30 +303,34 @@ export class GameAudio {
     const profile = AMBIENCES[this.ambience];
 
     const output = context.createGain();
-    output.gain.value = 1;
+    output.gain.value = AMBIENCE_LEVEL;
     output.connect(master);
     this.ambienceGain = output;
 
-    // Wind: a band of noise whose level and colour both drift, because a
-    // steady band of noise is heard as a fault in the sound card.
+    // Wind: a narrow band of noise, so it moans through the frame rather
+    // than hissing. A wide band held at a steady level is not weather, it
+    // is static, and the ear reads it as a fault in the speaker within
+    // seconds. It sits at a lull and is only properly audible in gusts.
     const wind = context.createBufferSource();
     wind.buffer = bed;
     wind.loop = true;
     const windFilter = context.createBiquadFilter();
     windFilter.type = "bandpass";
     windFilter.frequency.value = profile.windCentre;
-    windFilter.Q.value = 0.55;
+    windFilter.Q.value = 2.2;
     const windGain = context.createGain();
-    windGain.gain.value = profile.wind;
+    this.windPeak = profile.wind;
+    this.windLull = profile.wind * WIND_LULL;
+    windGain.gain.value = this.windLull;
     this.gustGain = windGain;
     wind.connect(windFilter).connect(windGain).connect(output);
     wind.start();
     this.ambienceNodes.push(wind);
     // Two drifts at unrelated rates, so the pattern never comes round.
     this.ambienceNodes.push(
-      this.drift(windGain.gain, 0.055, profile.wind * 0.55),
-      this.drift(windGain.gain, 0.017, profile.wind * 0.3),
-      this.drift(windFilter.frequency, 0.037, profile.windCentre * 0.35),
+      this.drift(windGain.gain, 0.055, this.windLull * 0.6),
+      this.drift(windGain.gain, 0.017, this.windLull * 0.35),
+      this.drift(windFilter.frequency, 0.037, profile.windCentre * 0.3),
     );
 
     // Rumble: the city, the weather, the building settling. Below anything
@@ -322,6 +366,25 @@ export class GameAudio {
     }
 
     this.scheduleIncidental(profile);
+    this.scheduleGust(profile);
+  }
+
+  /**
+   * Wind arrives and passes, rather than blowing at one level forever.
+   *
+   * The gaps are the point: a bed you can hear the whole time stops being
+   * heard at all, and a gust only lands as weather if there was quiet
+   * before it.
+   */
+  private scheduleGust(profile: AmbienceProfile): void {
+    const [low, high] = profile.gustGap;
+    const wait = (low + Math.random() * (high - low)) * 1000;
+    this.gustTimer = window.setTimeout(() => {
+      this.gustTimer = null;
+      if (!this.ambienceGain) return;
+      this.gust();
+      this.scheduleGust(profile);
+    }, wait);
   }
 
   /** A slow sine added to a parameter, for drift rather than repetition. */
@@ -365,8 +428,6 @@ export class GameAudio {
         return this.relay();
       case "buzz":
         return this.electricBuzz();
-      case "gust":
-        return this.gust();
       case "drip":
         return this.drip();
       default:
@@ -465,18 +526,19 @@ export class GameAudio {
     this.noiseLayer({ frequency: 4200, decay: length, gain: 0.02 }, "bandpass", 0.8, 0.01);
   }
 
-  /** A gust: the wind bed swelling and falling back. */
+  /** A gust: the wind rising out of its lull and dying back into it. */
   private gust(): void {
     const gain = this.gustGain;
     const context = this.context;
     if (!gain || !context) return;
     const now = context.currentTime;
-    const peak = gain.gain.value * (2.4 + Math.random() * 1.8);
-    const rise = 0.7 + Math.random() * 1.4;
-    const fall = 1.6 + Math.random() * 2.5;
+    const peak = this.windPeak * (0.55 + Math.random() * 0.45);
+    const rise = 1.1 + Math.random() * 1.8;
+    const fall = 2.2 + Math.random() * 3.5;
     gain.gain.cancelScheduledValues(now);
+    gain.gain.setValueAtTime(this.windLull, now);
     gain.gain.linearRampToValueAtTime(peak, now + rise);
-    gain.gain.linearRampToValueAtTime(Math.max(0.0001, peak / 3), now + rise + fall);
+    gain.gain.linearRampToValueAtTime(this.windLull, now + rise + fall);
   }
 
   /** Water finding its way through a floor it used to run under. */

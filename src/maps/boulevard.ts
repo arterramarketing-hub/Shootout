@@ -463,13 +463,6 @@ const truck = (x: number, z: number, yaw: number): void => {
   }
 };
 
-/** A tag on a wall: a thin panel proud of the surface, in the graffiti texture. */
-const tag = (axis: "x" | "z", at: number, a1: number, a2: number, y1: number, y2: number, side: 1 | -1): void => {
-  const off = at + side * (SPANDREL.thickness / 2 + 0.015);
-  if (axis === "z") span("graffiti", off - 0.01, off + 0.01, y1, y2, a1, a2, { solid: false });
-  else span("graffiti", a1, a2, y1, y2, off - 0.01, off + 0.01, { solid: false });
-};
-
 /* ------------------------------------------------------------------ *
  * The street.
  * ------------------------------------------------------------------ */
@@ -540,9 +533,6 @@ facade("x", west.z2, west.x1, west.x2, [L0, L1, L2], { brick: 1 });
 for (const z of [-18, -6, 6, 18]) {
   span("brick", -26 + COLUMN / 2, -20 - COLUMN / 2, L0, L0 + 1.3, z - 0.16, z + 0.16);
 }
-tag("z", west.x2, -22, -19, 1.1, 3.0, -1);
-tag("z", west.x2, 8, 11.5, 1.2, 2.8, -1);
-tag("z", west.x2, 14, 17.5, L1 + 1.0, L1 + 3.0, -1);
 
 // --- The tower. Brick, four storeys, a stair tower whose stair is long gone:
 // it is solid, and it is the landmark for the whole west side.
@@ -651,7 +641,6 @@ for (let z = -22; z < 24; z += 6) {
 // The penthouse on the street bar's roof, tagged on its street face.
 span("cladding", 9, 13.6, ROOF, ROOF + 3.0, 14, 20);
 span("cladding", 8.8, 13.8, ROOF + 3.0, ROOF + 3.3, 13.8, 20.2);
-tag("z", 9, 14.6, 19.4, ROOF + 0.4, ROOF + 2.7, -1);
 
 // Facades.
 // Street bar, west face: the long painted run at first floor is the face of
@@ -686,10 +675,6 @@ for (const x of [20]) {
   span("brick", x - 0.16, x + 0.16, L0, L0 + 1.3, 15 + COLUMN / 2, 21 - COLUMN / 2);
   span("brick", x - 0.16, x + 0.16, L0, L0 + 1.3, -21 + COLUMN / 2, -15 - COLUMN / 2);
 }
-tag("z", bar.x1, -16.5, -13, 1.0, 3.0, -1);
-tag("z", bar.x1, 15, 20, L1 + 1.1, L1 + 3.0, -1);
-tag("z", rear.x1, -8, -3, 1.0, 2.9, 1);
-tag("x", north.z1, 20.5, 25, 1.2, 3.0, -1);
 
 /* ------------------------------------------------------------------ *
  * The courtyard: where the building fell in, and where the fight is.

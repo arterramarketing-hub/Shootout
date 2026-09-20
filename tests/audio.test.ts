@@ -22,30 +22,45 @@ interface Recorded {
   stopped: boolean;
 }
 
+interface Knob {
+  value: number;
+  /** Every level this parameter has been asked to ramp to, in order. */
+  ramps: number[];
+}
+
 interface Harness {
   nodes: Recorded[];
+  gains: Knob[];
   timers: Map<number, () => void>;
   runTimers: () => void;
 }
 
 let harness: Harness;
 
-const param = (initial = 0): AudioParam => {
+const param = (initial = 0): AudioParam & Knob => {
   const self = {
     value: initial,
+    ramps: [] as number[],
     setValueAtTime: (value: number) => {
       self.value = value;
       return self;
     },
-    linearRampToValueAtTime: () => self,
-    exponentialRampToValueAtTime: () => self,
+    linearRampToValueAtTime: (value: number) => {
+      self.ramps.push(value);
+      return self;
+    },
+    exponentialRampToValueAtTime: (value: number) => {
+      self.ramps.push(value);
+      return self;
+    },
     cancelScheduledValues: () => self,
   };
-  return self as unknown as AudioParam;
+  return self as unknown as AudioParam & Knob;
 };
 
 const install = (): Harness => {
   const nodes: Recorded[] = [];
+  const gains: Knob[] = [];
   const timers = new Map<number, () => void>();
   let nextTimer = 1;
 
@@ -60,7 +75,11 @@ const install = (): Harness => {
     sampleRate: 48000,
     destination: {},
     resume: () => Promise.resolve(),
-    createGain: () => connectable({ gain: param(1) }),
+    createGain: () => {
+      const gain = param(1);
+      gains.push(gain);
+      return connectable({ gain });
+    },
     createBiquadFilter: () => {
       const node = connectable({ type: "", frequency: param(0), Q: param(0) });
       return node;
@@ -125,6 +144,14 @@ const install = (): Harness => {
         },
       });
     },
+    createDynamicsCompressor: () =>
+      connectable({
+        threshold: param(0),
+        knee: param(0),
+        ratio: param(0),
+        attack: param(0),
+        release: param(0),
+      }),
     createBuffer: (_channels: number, length: number) => ({
       duration: length / 48000,
       getChannelData: () => new Float32Array(length),
@@ -148,6 +175,7 @@ const install = (): Harness => {
 
   return {
     nodes,
+    gains,
     timers,
     runTimers: () => {
       for (const [id, fn] of [...timers]) {
@@ -257,7 +285,8 @@ describe("ambience", () => {
     const audio = new GameAudio();
     audio.setAmbience("ruin");
     const beds = capture(() => audio.start());
-    expect(harness.timers.size).toBe(1);
+    // One clock for the one-off sounds, one for the gusts.
+    expect(harness.timers.size).toBe(2);
 
     audio.stopAmbience();
     expect(beds.every((node) => node.stopped)).toBe(true);
@@ -283,9 +312,28 @@ describe("ambience", () => {
     for (let i = 0; i < 10; i += 1) {
       built += capture(() => harness.runTimers()).length;
       // Each firing queues the next one rather than falling silent.
-      expect(harness.timers.size, `after firing ${i + 1}`).toBe(1);
+      expect(harness.timers.size, `after firing ${i + 1}`).toBe(2);
     }
     expect(built).toBeGreaterThan(0);
+  });
+
+  it("keeps the wind in a lull and only lets it up in gusts", () => {
+    const audio = new GameAudio();
+    audio.start();
+    // Only the levels the ambience itself sets, not the master it hangs off.
+    const from = harness.gains.length;
+    audio.setAmbience("ruin");
+    const beds = harness.gains.slice(from);
+
+    harness.runTimers();
+    // The wind is the one level that gets ramped: the gust clock drives it.
+    const wind = beds.find((bed) => bed.ramps.length >= 2);
+    expect(wind, "nothing gusts").toBeDefined();
+    // It rests quiet enough to be missed, rises well clear of that in a
+    // gust, and comes back down to it. A bed held at one level is static.
+    expect(wind!.value).toBeLessThan(0.02);
+    expect(Math.max(...wind!.ramps)).toBeGreaterThan(wind!.value * 3);
+    expect(wind!.ramps[wind!.ramps.length - 1]).toBeCloseTo(wind!.value, 6);
   });
 
   it("queues nothing once the level is gone", () => {

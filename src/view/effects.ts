@@ -14,14 +14,21 @@ const TRACER_POOL = 24;
 const IMPACT_POOL = 32;
 const IMPACT_LIFE = 2.4;
 /**
- * How fast a tracer travels, in metres a second, and how long its streak is.
+ * How fast a tracer travels, in metres a second, and the least of the path
+ * it covers at once.
  *
  * A line drawn from the muzzle to the impact in one go converges on the aim
  * point at once, and reads as fired from the crosshair. A streak that leaves
  * the muzzle and crosses the ground in a few frames reads as fired from the
  * gun, which is where the player is looking for it.
+ *
+ * The streak is never shorter than the ground the round covered since the
+ * last frame. A fixed-length streak leaves gaps at any frame rate where the
+ * round outruns it, and gaps are what turn one straight line into a scatter
+ * of short dashes lying at whatever angle the path happened to be crossing
+ * the screen at — which is to say, sideways.
  */
-const TRACER_SPEED = 150;
+const TRACER_SPEED = 260;
 const TRACER_STREAK = 2.4;
 
 interface Pooled {
@@ -36,6 +43,8 @@ interface Tracer {
   length: number;
   /** How far the head of the streak has travelled; negative when idle. */
   head: number;
+  /** Where the streak starts, which is where its head was last frame. */
+  tail: number;
 }
 
 /**
@@ -102,7 +111,14 @@ export class ShotEffects {
       mesh.isPickable = false;
       mesh.setEnabled(false);
       mesh.rotationQuaternion = Quaternion.Identity();
-      this.tracers.push({ mesh, from: new Vector3(), direction: new Vector3(), length: 0, head: -1 });
+      this.tracers.push({
+        mesh,
+        from: new Vector3(),
+        direction: new Vector3(),
+        length: 0,
+        head: -1,
+        tail: 0,
+      });
     }
 
     for (let i = 0; i < IMPACT_POOL; i += 1) {
@@ -147,15 +163,16 @@ export class ShotEffects {
     entry.direction.copyFrom(delta.scale(1 / length));
     entry.length = length;
     entry.head = 0;
+    entry.tail = 0;
     // Point the stretched box down the path of the round.
     entry.mesh.rotationQuaternion = Quaternion.FromLookDirectionLH(entry.direction, Vector3.Up());
     this.placeTracer(entry);
   }
 
-  /** Lay the streak along the part of the path its head has reached. */
+  /** Lay the streak along the stretch of path the round is crossing. */
   private placeTracer(entry: Tracer): void {
     const tip = Math.min(entry.length, entry.head);
-    const tail = Math.max(0, entry.head - TRACER_STREAK);
+    const tail = Math.max(0, Math.min(entry.tail, entry.head - TRACER_STREAK));
     const span = tip - tail;
     // Nothing to show yet on the frame it is fired; it is there next frame.
     entry.mesh.setEnabled(span > 1e-4);
@@ -198,8 +215,11 @@ export class ShotEffects {
   update(deltaSeconds: number): void {
     for (const entry of this.tracers) {
       if (entry.head < 0) continue;
+      // The streak runs from where its head was to where it is now, so one
+      // frame's streak picks up exactly where the last one left off.
+      entry.tail = entry.head;
       entry.head += TRACER_SPEED * deltaSeconds;
-      if (entry.head - TRACER_STREAK >= entry.length) {
+      if (entry.tail >= entry.length) {
         entry.head = -1;
         entry.mesh.setEnabled(false);
         continue;
