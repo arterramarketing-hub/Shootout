@@ -5,6 +5,7 @@ import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imagePro
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascadedShadowGenerator";
+import { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3, Vector4 } from "@babylonjs/core/Maths/math.vector";
@@ -118,17 +119,28 @@ const gradeImage = (scene: Scene, map: MapDefinition): void => {
  * it afterward rebuilds the shadow map and quietly drops every caster added
  * before.
  */
-export const addSunShadows = (built: BuiltScene, camera: Camera): CascadedShadowGenerator => {
+export const addSunShadows = (
+  built: BuiltScene,
+  camera: Camera,
+  quality: QualitySettings,
+): CascadedShadowGenerator => {
   const { scene, key, staticMeshes: meshes } = built;
-  const generator = new CascadedShadowGenerator(1024, key, false, camera);
+  // A middling phone gets the same shadows at half the map and the cheaper
+  // filter. Half a shadow map is a quarter of the pixels, which is most of
+  // what the tier below could not afford; the shadows are softer and a
+  // little coarser and they are still shadows.
+  const high = quality.tier === "high";
+  const generator = new CascadedShadowGenerator(high ? 1024 : 512, key, false, camera);
   generator.numCascades = 2;
   generator.lambda = 0.85;
-  generator.shadowMaxZ = 90;
+  generator.shadowMaxZ = high ? 90 : 55;
   generator.stabilizeCascades = true;
   generator.usePercentageCloserFiltering = true;
-  generator.filteringQuality = CascadedShadowGenerator.QUALITY_MEDIUM;
+  generator.filteringQuality = high
+    ? CascadedShadowGenerator.QUALITY_MEDIUM
+    : CascadedShadowGenerator.QUALITY_LOW;
   generator.bias = 0.004;
-  generator.normalBias = 0.03;
+  generator.normalBias = high ? 0.03 : 0.05;
   for (const mesh of meshes) {
     generator.addShadowCaster(mesh, false);
     mesh.receiveShadows = true;
@@ -141,6 +153,38 @@ export const addSunShadows = (built: BuiltScene, camera: Camera): CascadedShadow
     material.freeze();
   }
   return generator;
+};
+
+/**
+ * Bloom, on the things that are actually giving off light.
+ *
+ * Babylon's glow layer redraws only the emissive part of the scene into a
+ * buffer of its own, blurs it and adds it back, so the cost is the size of
+ * that buffer and has nothing to do with how big the level is. Two hundred
+ * and fifty-six pixels square is plenty, because what it is blurring is a
+ * tracer two pixels wide and the sparks off an impact, and the whole point
+ * of the pass is that the result is soft.
+ *
+ * It is bound to the world camera. The weapon is drawn by a second camera
+ * with its own five-metre far plane, and its muzzle flash is already the
+ * brightest thing on the screen for the frame and a half it exists; running
+ * a second blur over it would buy nothing.
+ *
+ * The level's own surfaces are kept out of it. Every one of them carries a
+ * little emissive so that unlit corners stay readable rather than going
+ * black, and a bloom pass over a whole wall of that is not a light, it is a
+ * fog. What is left glowing is what is meant to: rounds in flight, what they
+ * hit, and the plates.
+ */
+export const addGlow = (built: BuiltScene, camera: Camera): GlowLayer => {
+  const glow = new GlowLayer("glow", built.scene, {
+    mainTextureFixedSize: 256,
+    blurKernelSize: 24,
+    camera,
+  });
+  glow.intensity = 0.62;
+  for (const mesh of built.staticMeshes) glow.addExcludedMesh(mesh);
+  return glow;
 };
 
 const buildLighting = (scene: Scene, map: MapDefinition): DirectionalLight => {

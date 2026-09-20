@@ -5,6 +5,15 @@ export interface QualitySettings {
   /** Upper bound on device pixel ratio. The single biggest mobile fps lever. */
   maxPixelRatio: number;
   antialias: boolean;
+  /**
+   * Sun shadows.
+   *
+   * The thing shadow does that nothing else does is put a figure on the
+   * ground. Without it a player standing in the street and a player a step
+   * above it on a slab are the same picture, so this reaches down as far as
+   * it can: only the weakest tier goes without, and that one has a shadow
+   * laid along the sun for each figure instead of one cast by it.
+   */
   shadows: boolean;
   fog: boolean;
   /**
@@ -21,7 +30,7 @@ export interface QualitySettings {
 
 const TIERS: Record<QualityTier, QualitySettings> = {
   low: { tier: "low", maxPixelRatio: 1.0, antialias: false, shadows: false, fog: true, viewDistance: 160 },
-  medium: { tier: "medium", maxPixelRatio: 1.25, antialias: false, shadows: false, fog: true, viewDistance: 190 },
+  medium: { tier: "medium", maxPixelRatio: 1.25, antialias: false, shadows: true, fog: true, viewDistance: 190 },
   high: { tier: "high", maxPixelRatio: 1.5, antialias: true, shadows: true, fog: true, viewDistance: 220 },
 };
 

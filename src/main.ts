@@ -64,7 +64,7 @@ import {
   type MatchState,
 } from "./sim/match";
 import { addLookOffset } from "./sim/look";
-import { createPlayer, eyeOffset, stepPlayer } from "./sim/player";
+import { createPlayer, eyeOffset, stanceHalfHeight, stepPlayer } from "./sim/player";
 import { finishById } from "./sim/cosmetics";
 import {
   applyMatchResult,
@@ -82,7 +82,9 @@ import { INTERPOLATION_DELAY_MS, type SnapshotMessage } from "./net/protocol";
 import { BotField } from "./view/botView";
 import { CameraRig } from "./view/cameraRig";
 import { ShotEffects } from "./view/effects";
-import { addSunShadows, createScene } from "./view/scene";
+import { addGlow, addSunShadows, createScene } from "./view/scene";
+import type { Mesh } from "@babylonjs/core/Meshes/mesh";
+import { ContactShadows } from "./view/contactShadow";
 import type { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascadedShadowGenerator";
 import { TargetField } from "./view/targetView";
 import { ViewmodelRig, WORLD_LAYER } from "./view/viewmodel";
@@ -141,6 +143,8 @@ const boot = (): void => {
   let effects!: ShotEffects;
   let botField!: BotField;
   let sun: CascadedShadowGenerator | null = null;
+  let shadowPatches!: ContactShadows;
+  let selfShadow!: Mesh;
   let nav!: ReturnType<typeof bakeNavGrid>;
 
   const buildWorld = (map: MapDefinition): void => {
@@ -150,7 +154,11 @@ const boot = (): void => {
     const built = createScene(engine, map, quality);
     scene = built.scene;
     rig = new CameraRig(scene, quality, settings.fovDegrees);
-    sun = quality.shadows ? addSunShadows(built, rig.camera) : null;
+    sun = quality.shadows ? addSunShadows(built, rig.camera, quality) : null;
+    // Tracers, impacts and strip lights bloom on anything but the weakest
+    // tier: it is one small blurred buffer, and it is what makes a round
+    // going past read as hot rather than as a yellow stick.
+    if (quality.tier !== "low") addGlow(built, rig.camera);
     viewmodel = new ViewmodelRig(scene);
     // The world camera must not draw the weapon, and the weapon camera must
     // not draw the world. Babylon clears depth between them, so the weapon
@@ -165,10 +173,17 @@ const boot = (): void => {
     body = world.createController(STANCE.radius, STANCE.standHeight / 2);
     targets = new TargetField(scene, map.targets);
     effects = new ShotEffects(scene);
-    botField = new BotField(scene);
-    // Figures cast the sun's shadow like the level does; without it they
-    // float over the ground they stand on.
+    shadowPatches = new ContactShadows(scene, map.style.keyDirection);
+    // Figures either cast the sun's shadow or have one laid along the sun
+    // for them. One of the two, never neither: a figure with nothing under
+    // it floats over the ground it is standing on, and at range that is the
+    // difference between a shot and a guess.
+    botField = new BotField(scene, quality.shadows ? null : shadowPatches);
     botField.onFigure = (mesh) => sun?.addShadowCaster(mesh, false);
+
+    // The player's own, on every tier. Nobody is standing there to cast one:
+    // in first person the camera is the whole character.
+    selfShadow = shadowPatches.create();
 
     // The navigation grid is baked once per map, from the level itself.
     nav = bakeNavGrid(world, activeMap.nav);
@@ -1029,6 +1044,14 @@ const boot = (): void => {
       playerLoadout.recoilYaw,
     );
     viewmodel.update(player, playerLoadout, rig.camera, delta, rig.magnification(settings.fovDegrees));
+    const stanceHeight = stanceHalfHeight(player.crouchAmount) * 2;
+    shadowPatches.place(
+      selfShadow,
+      player.position.x,
+      player.position.y - stanceHeight / 2,
+      player.position.z,
+      stanceHeight * 0.95,
+    );
 
     if (online) {
       // Everyone else is drawn a little in the past, between the snapshots

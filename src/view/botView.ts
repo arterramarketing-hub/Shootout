@@ -6,6 +6,7 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
+import { ContactShadows } from "./contactShadow";
 import type { BotState, Team } from "../sim/bots";
 import type { Vec3 } from "../sim/vec3";
 import { damp } from "../sim/vec3";
@@ -138,7 +139,12 @@ export interface BotBinding {
   deathTime: number;
   /** Which way it fell: to its left or its right. */
   fallSide: number;
+  /** The shadow laid on the ground, where the tier has no shadow map. */
+  patch: Mesh | null;
 }
+
+/** How tall a standing figure is, for the shadow it lays. */
+const FIGURE_HEIGHT = 1.72;
 
 export class BotField {
   readonly bindings: BotBinding[] = [];
@@ -146,8 +152,15 @@ export class BotField {
   onFigure: ((mesh: Mesh) => void) | null = null;
   private readonly byId = new Map<string, BotBinding>();
   private readonly materials = new Map<string, StandardMaterial>();
+  /**
+   * Set where the sun casts no shadow map, so figures still read as
+   * standing on something.
+   */
+  private readonly contact: ContactShadows | null;
 
-  constructor(private readonly scene: Scene) {}
+  constructor(private readonly scene: Scene, contact: ContactShadows | null = null) {
+    this.contact = contact;
+  }
 
   /** A figure for anyone the local player can see: a bot or a remote player. */
   add(id: string, team: Team, position: Vec3, yaw: number): BotBinding {
@@ -197,10 +210,16 @@ export class BotField {
     const meshes = [body, head, legLeft, legRight];
     if (this.onFigure) for (const mesh of meshes) this.onFigure(mesh);
 
+    // The patch is not parented to the figure: it belongs to the ground, and
+    // a figure that tips over when it dies must not take the ground with it.
+    const patch = this.contact?.create() ?? null;
+    if (patch) this.contact?.place(patch, position.x, position.y, position.z, FIGURE_HEIGHT);
+
     const binding: BotBinding = {
       id,
       team,
       root,
+      patch,
       renderYaw: yaw,
       dead: false,
       deathTime: 0,
@@ -254,6 +273,10 @@ export class BotField {
       binding.root.setEnabled(true);
     }
     binding.root.position.set(position.x, position.y, position.z);
+    if (binding.patch && this.contact) {
+      binding.patch.setEnabled(true);
+      this.contact.place(binding.patch, position.x, position.y, position.z, FIGURE_HEIGHT);
+    }
     binding.renderYaw = dampAngle(binding.renderYaw, yaw, deltaSeconds);
     binding.root.rotation.y = binding.renderYaw;
 
@@ -289,7 +312,15 @@ export class BotField {
     binding.deathTime += deltaSeconds;
     if (binding.deathTime >= FALLEN_SECONDS) {
       binding.root.setEnabled(false);
+      binding.patch?.setEnabled(false);
       return;
+    }
+    // The shadow gathers in as the figure goes down, because what is
+    // standing up to cast it no longer is.
+    if (binding.patch && this.contact) {
+      const down = Math.min(1, binding.deathTime / FALL_SECONDS);
+      const { x, y, z } = binding.root.position;
+      this.contact.place(binding.patch, x, y, z, FIGURE_HEIGHT * (1 - down * 0.72), 1 + down * 0.3);
     }
     const t = Math.min(1, binding.deathTime / FALL_SECONDS);
     // Fast out, easing into the ground: most of the fall happens early.
@@ -303,6 +334,7 @@ export class BotField {
     for (const binding of [...this.bindings]) {
       if (ids.has(binding.id)) continue;
       binding.root.dispose(false, true);
+      binding.patch?.dispose();
       this.byId.delete(binding.id);
       this.bindings.splice(this.bindings.indexOf(binding), 1);
     }

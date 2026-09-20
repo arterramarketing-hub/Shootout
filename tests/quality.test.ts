@@ -34,9 +34,21 @@ describe("settingsFor", () => {
     }
   });
 
-  it("keeps real-time shadows off below the top tier", () => {
+  it("keeps real-time shadows off only on the weakest tier", () => {
+    // A middling phone gets them at half the resolution and half the range;
+    // the tier below has one laid along the sun for each figure instead. What no
+    // tier gets is figures with nothing under them.
     expect(settingsFor("low").shadows).toBe(false);
-    expect(settingsFor("medium").shadows).toBe(false);
+    expect(settingsFor("medium").shadows).toBe(true);
+    expect(settingsFor("high").shadows).toBe(true);
+  });
+
+  it("sees far enough for the world outside the level", () => {
+    // The backdrop's near band stands within about a hundred and twenty
+    // metres. A view distance short of that shows a clip plane instead.
+    for (const tier of ["low", "medium", "high"] as const) {
+      expect(settingsFor(tier).viewDistance).toBeGreaterThanOrEqual(160);
+    }
   });
 
   it("returns a fresh object each call so callers cannot mutate the table", () => {
