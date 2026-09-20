@@ -122,7 +122,14 @@ export class ViewmodelRig {
   constructor(scene: Scene, fovDegrees = VIEWMODEL_FOV_DEGREES) {
     this.camera = new FreeCamera("viewmodel_camera", Vector3.Zero(), scene);
     this.camera.layerMask = VIEWMODEL_LAYER;
-    this.camera.minZ = 0.01;
+    // The near plane sits as far out as the weapon allows, because the
+    // distance between the two planes is what the depth buffer's precision is
+    // spent on. At a centimetre against five metres, a phone's sixteen-bit
+    // buffer cannot separate surfaces a millimetre apart, and the weapon is
+    // made of parts that close together. Five centimetres costs nothing --
+    // the nearest thing on the weapon is the butt of the stock, thirteen
+    // centimetres out with the sights up -- and buys back a fivefold margin.
+    this.camera.minZ = 0.05;
     this.camera.maxZ = 5;
     this.camera.inputs.clear();
     this.setFieldOfView(fovDegrees);

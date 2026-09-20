@@ -216,12 +216,17 @@ const slots = (fromZ: number, toZ: number, y: number, x: number, count: number):
 const rearAperture = (line: SightLine, outer = 0.030, wall = 0.0045): Part[] => {
   const { height: y, rearZ: z } = line;
   return [
+    // The post the ring stands on. It reaches a long way down into the deck
+    // below it -- further than it needs to -- so that its underside is
+    // nowhere near the underside of the deck. Buried by a good centimetre it
+    // is invisible; level with it to a fraction of a millimetre it is a
+    // flicker along the bottom edge of the sight.
     box({
       x: 0,
-      y: y - outer / 2 - 0.009,
+      y: y - outer / 2 - 0.014,
       z,
       width: 0.018,
-      height: 0.020,
+      height: 0.030,
       depth: 0.013,
       tone: "metal",
       role: "sight",
@@ -402,7 +407,12 @@ const magazine = (
         x: 0,
         y,
         z,
-        width,
+        // The segments overlap each other so the bends do not open gaps, and
+        // a magazine drawn from boxes of one width would then have three
+        // side faces in the same plane down its whole flank. Narrowing each
+        // one as it goes down separates them and is what a real magazine
+        // does anyway, the body tapering towards the floorplate.
+        width: width - i * 0.0018,
         height: segmentHeight * 1.06,
         depth,
         tone,
@@ -739,39 +749,38 @@ const ridgeline = (): ModelSpec => {
       tone: "metal",
     },
 
-    // The charging handle, and the latch that holds it shut. It is only
-    // used to charge the weapon: on a rifle built this way it stays put
-    // while the weapon fires, and having it ride back with the carrier put
-    // a pale block on the side of the receiver flicking back and forth
-    // twelve times a second. The carrier below is the part that moves.
+    // The charging handle: the pair of wings that stand out either side of
+    // the counter, behind the rear deck.
+    //
+    // It used to be a slab laid along the top of the receiver, which is
+    // where a real one lives and is also where the receiver's own top face
+    // already was: the two sat half a millimetre apart across sixteen square
+    // centimetres, directly under the shooter's eye, and traded places every
+    // frame. Two faces that close cannot be told apart by any depth buffer a
+    // phone has. So the handle moved to the one place on the back of this
+    // weapon that nothing else occupies, and each wing runs a centimetre
+    // into the deck rather than stopping against it, which leaves no pair of
+    // surfaces anywhere near each other to argue over.
+    ...[-1, 1].map((side) =>
+      box({
+        x: 0.0205 * side,
+        y: 0.0705,
+        z: 0.0835,
+        width: 0.009,
+        height: 0.010,
+        depth: 0.029,
+        tone: "metal",
+      }),
+    ),
+    // The latch, on the left wing where the hand finds it.
     box({
-      x: 0,
-      y: 0.057,
-      z: 0.105,
-      width: 0.052,
-      height: 0.011,
-      depth: 0.034,
+      x: -0.0205,
+      y: 0.0705,
+      z: 0.0700,
+      width: 0.014,
+      height: 0.005,
+      depth: 0.014,
       tone: "metal",
-    }),
-    box({
-      x: -0.026,
-      y: 0.057,
-      z: 0.099,
-      width: 0.013,
-      height: 0.014,
-      depth: 0.018,
-      tone: "metal",
-    }),
-    // The line the latch closes on, so it still reads as a separate catch
-    // now that it is the same finish as the handle it sits on.
-    box({
-      x: -0.0195,
-      y: 0.057,
-      z: 0.099,
-      width: 0.002,
-      height: 0.0125,
-      depth: 0.0165,
-      tone: "shadow",
     }),
     box({
       x: 0.028,
@@ -859,11 +868,14 @@ const ridgeline = (): ModelSpec => {
     },
 
     // Gas system, barrel and muzzle.
+    // The tube runs inside the handguard, and low enough inside it that its
+    // top and the handguard's are nowhere near the same height: half a
+    // millimetre apart over ten square centimetres is a strobe, not a tube.
     {
       shape: "cylinder",
       axis: "z",
       x: 0,
-      y: 0.052,
+      y: 0.047,
       z: 0.508,
       width: 0.009,
       height: 0.009,
@@ -897,15 +909,19 @@ const ridgeline = (): ModelSpec => {
       facets: 6,
       tone: "metal",
     },
+    // The crown at the muzzle: narrower than the flash hider and standing
+    // a few millimetres past its end, so it is plainly a separate ring
+    // rather than two faces in the same plane fighting for the front of the
+    // weapon.
     {
       shape: "ring",
       axis: "z",
       x: 0,
       y: bore,
-      z: 0.657,
-      width: 0.027,
-      height: 0.027,
-      depth: 0.006,
+      z: 0.6605,
+      width: 0.023,
+      height: 0.023,
+      depth: 0.007,
       thickness: 0.005,
       facets: 6,
       tone: "shadow",
@@ -915,7 +931,7 @@ const ridgeline = (): ModelSpec => {
     parts,
     sightLine,
     sight: { x: 0, y: sightLine.height, z: sightLine.rearZ },
-    muzzle: { y: bore, z: 0.665 },
+    muzzle: { y: bore, z: 0.668 },
     counter: { x: 0, y: 0.0705, z: 0.0884 },
     boltTravel: 0.016,
   };
@@ -930,7 +946,7 @@ const wasp = (): ModelSpec => {
     box({ x: 0, y: 0.028, z: 0.020, width: 0.036, height: 0.040, depth: 0.080, tone: "metal" }),
     // The rear deck the sight rises from, continuing the receiver's rear
     // face upward; the round count is projected off it.
-    box({ x: 0, y: 0.0615, z: 0.075, width: 0.052, height: 0.015, depth: 0.040, tone: "body" }),
+    box({ x: 0, y: 0.0615, z: 0.077, width: 0.052, height: 0.015, depth: 0.044, tone: "body" }),
     {
       shape: "cylinder",
       axis: "x",
@@ -1014,15 +1030,17 @@ const wasp = (): ModelSpec => {
       tone: "body",
     },
     ...slots(0.300, 0.400, 0.028, 0.0215, 3),
+    // The collar over the joint, standing forward of the receiver's front
+    // face rather than ending level with it.
     {
       shape: "ring",
       axis: "z",
       x: 0,
       y: 0.028,
-      z: 0.300,
+      z: 0.3095,
       width: 0.050,
       height: 0.050,
-      depth: 0.010,
+      depth: 0.011,
       thickness: 0.006,
       facets: 10,
       tone: "metal",
@@ -1166,15 +1184,16 @@ const breacher = (): ModelSpec => {
       facets: 12,
       tone: "metal",
     },
+    // The crown, narrower than the choke and standing past its end.
     {
       shape: "ring",
       axis: "z",
       x: 0,
       y: bore,
-      z: 0.628,
-      width: 0.033,
-      height: 0.033,
-      depth: 0.006,
+      z: 0.6325,
+      width: 0.028,
+      height: 0.028,
+      depth: 0.007,
       thickness: 0.006,
       facets: 12,
       tone: "shadow",
@@ -1184,7 +1203,7 @@ const breacher = (): ModelSpec => {
     parts,
     sightLine,
     sight: { x: 0, y: sightLine.height, z: sightLine.rearZ },
-    muzzle: { y: bore, z: 0.634 },
+    muzzle: { y: bore, z: 0.640 },
     counter: { x: 0, y: 0.063, z: 0.0445 },
     boltTravel: 0.030,
   };
