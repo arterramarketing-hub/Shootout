@@ -534,14 +534,142 @@ const serrations = (
   return parts;
 };
 
+/**
+ * A collapsible stock, closed up on its receiver extension.
+ *
+ * Kept short and mostly air. A stock is the one part of a weapon that sits
+ * against the shooter, which in first person is behind the camera, so a full
+ * extended one lands a few centimetres from the near plane and perspective
+ * blows it up until it covers the screen. Collapsed, skeletonised, and with
+ * its comb no higher than the tube it rides, it stays under the line of
+ * sight and finishes the weapon off instead.
+ */
+const collapsedStock = (tubeY: number, backZ: number, frontZ: number): Part[] => {
+  const length = frontZ - backZ;
+  const middle = backZ + length / 2;
+  return [
+    // Cheek walls either side of the tube, with the tube showing between
+    // them: this is what makes it read as a frame rather than a block.
+    ...[-1, 1].map((side) =>
+      box({
+        x: 0.0205 * side,
+        y: tubeY + 0.005,
+        z: middle + 0.008,
+        width: 0.008,
+        height: 0.038,
+        depth: length - 0.03,
+        tone: "body",
+      }),
+    ),
+    // The comb, stepped down towards the butt the way a real one tapers.
+    box({
+      x: 0,
+      y: tubeY + 0.021,
+      z: frontZ - 0.035,
+      width: 0.031,
+      height: 0.012,
+      depth: 0.07,
+      tone: "body",
+    }),
+    box({
+      x: 0,
+      y: tubeY + 0.017,
+      z: backZ + 0.045,
+      width: 0.031,
+      height: 0.012,
+      depth: 0.062,
+      tone: "body",
+    }),
+    // Ridges across the comb, narrower than it so they read as something
+    // laid on the cheek rest rather than bars painted over the whole stock.
+    ...[0, 1].map((i) =>
+      box({
+        x: 0,
+        y: tubeY + 0.026,
+        z: backZ + 0.052 + i * 0.018,
+        width: 0.025,
+        height: 0.004,
+        depth: 0.007,
+        tone: "shadow",
+      }),
+    ),
+    // The butt pad: rubber, taller than the rest, and the one part of the
+    // stock the shooter actually meets.
+    box({
+      x: 0,
+      y: tubeY - 0.004,
+      z: backZ + 0.009,
+      width: 0.046,
+      height: 0.064,
+      depth: 0.018,
+      tone: "shadow",
+    }),
+    ...[-1, 1].map((side) =>
+      box({
+        x: 0,
+        y: tubeY - 0.004 + 0.016 * side,
+        z: backZ + 0.002,
+        width: 0.048,
+        height: 0.005,
+        depth: 0.006,
+        tone: "metal",
+      }),
+    ),
+    // The underside: a strut back to the butt, the release lever under the
+    // tube, and a loop for a sling.
+    box({
+      x: 0,
+      y: tubeY - 0.019,
+      z: middle - 0.004,
+      width: 0.024,
+      height: 0.016,
+      depth: length - 0.05,
+      tone: "body",
+    }),
+    box({
+      x: 0,
+      y: tubeY - 0.030,
+      z: frontZ - 0.048,
+      width: 0.018,
+      height: 0.014,
+      depth: 0.032,
+      tone: "metal",
+    }),
+    {
+      shape: "ring",
+      axis: "x",
+      x: -0.024,
+      y: tubeY - 0.012,
+      z: backZ + 0.042,
+      width: 0.016,
+      height: 0.016,
+      depth: 0.006,
+      thickness: 0.004,
+      facets: 8,
+      tone: "metal",
+    },
+    // The notches the stock locks into, along the underside of the tube.
+    ...[0, 1, 2, 3].map((i) =>
+      box({
+        x: 0,
+        y: tubeY - 0.017,
+        z: frontZ - 0.012 - i * 0.016,
+        width: 0.026,
+        height: 0.005,
+        depth: 0.006,
+        tone: "shadow",
+      }),
+    ),
+  ];
+};
+
 /* ------------------------------------------------------------------ *
  * The weapons.
  *
  * Local space runs from the rear of the receiver forward, with the origin at
- * the firing hand. No shoulder stock is modelled: on a real weapon it sits
- * against the shooter, which in first person is behind the camera, and
- * modelling one only puts geometry a few centimetres from the near plane where
- * perspective blows it up until it covers the screen.
+ * the firing hand. Anything behind the receiver is close enough to the eye
+ * that it has to earn its place: see `collapsedStock` for what a shoulder
+ * stock has to be to fit in a first-person view at all.
  * ------------------------------------------------------------------ */
 
 const ridgeline = (): ModelSpec => {
@@ -554,21 +682,22 @@ const ridgeline = (): ModelSpec => {
     // it is part of the receiver rather than a fitting on it. The rear sight
     // rises out of it; the round count is projected off its back face.
     box({ x: 0, y: 0.0705, z: 0.106, width: 0.058, height: 0.017, depth: 0.034, tone: "body" }),
-    // Receiver extension, running back past the eye where the stock would be.
-    // Without it the weapon presents a flat wall to the shooter down the
+    // Receiver extension, running back past the eye, with the stock riding
+    // it. Without it the weapon presents a flat wall to the shooter down the
     // sights, and the whole lower half of the screen becomes a grey slab.
     {
       shape: "cylinder",
       axis: "z",
       x: 0,
       y: 0.030,
-      z: 0.020,
+      z: 0.006,
       width: 0.036,
       height: 0.036,
-      depth: 0.150,
+      depth: 0.178,
       facets: 12,
       tone: "metal",
     },
+    ...collapsedStock(0.030, -0.148, 0.012),
     {
       shape: "ring",
       axis: "z",
