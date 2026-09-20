@@ -1168,10 +1168,16 @@ const boot = (): void => {
         return +playerHealth.current.toFixed(1);
       },
       get targets() {
+        // Where each plate is and which way it faces, so a test can stand in
+        // front of one without knowing which level it is standing in.
         return targets.states.map((state) => ({
           id: state.id,
           health: Math.round(state.health),
           down: state.down,
+          ...(() => {
+            const placed = activeMap.targets.find((entry) => entry.id === state.id);
+            return { x: placed?.x ?? 0, z: placed?.z ?? 0, yaw: placed?.yaw ?? 0 };
+          })(),
         }));
       },
       get match() {

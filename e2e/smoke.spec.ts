@@ -17,7 +17,7 @@ interface GameState {
   };
   health: number;
   speed: number;
-  targets: { id: string; health: number; down: boolean }[];
+  targets: { id: string; health: number; down: boolean; x: number; z: number; yaw: number }[];
 }
 
 /** The development handle the game exposes on `window`. */
@@ -82,6 +82,17 @@ const bootGame = async (page: Page): Promise<void> => {
   await page.getByRole("button", { name: "DEPLOY" }).click();
   // Let the loop run long enough for the frame-rate meter to report.
   await page.waitForFunction(() => window.__shootout.fps > 0, null, { timeout: 20_000 });
+  // And long enough for the round to actually start. A round opens on a
+  // countdown with everyone held in place, so anything that measures
+  // movement before this measures the countdown. How long that takes in
+  // wall-clock is a property of the machine, not of the game: the level here
+  // renders at a handful of frames a second on a software rasteriser, and
+  // the simulation is capped at five steps a frame, so it runs at a fraction
+  // of real time. Waiting on the phase rather than on a stopwatch is the
+  // only form of this that holds on both.
+  await page.waitForFunction(() => window.__shootout.match.phase === "active", null, {
+    timeout: 40_000,
+  });
 };
 
 const readState = (page: Page): Promise<GameState> =>
@@ -149,28 +160,30 @@ test("the player spawns standing on the floor", async ({ page }) => {
 
 test("keyboard input moves the player", async ({ page }) => {
   await bootGame(page);
-  // The round opens on a countdown with everyone held in place, so measuring
-  // from the moment the level loads measures the countdown, not the walking.
-  await page.waitForFunction(() => window.__shootout.match.phase === "active", null, {
-    timeout: 20_000,
-  });
-  // And the spawn faces a wall, which is what the next test walks into on
-  // purpose. Start from the middle of the floor, facing down the open lane.
-  await page.evaluate(() => window.__shootout.teleport(0, 0, -Math.PI / 2));
+  // The spawn faces a wall, which is what the next test walks into on
+  // purpose. Start in the street with several metres of it ahead.
+  await page.evaluate(() => window.__shootout.teleport(4, -2, 0));
   // Long enough to land and shake off the landing, which costs speed for a
   // moment and would otherwise be measured as walking slowly.
   await page.waitForTimeout(1200);
   const before = (await readState(page)).position;
 
   await page.keyboard.down("w");
-  await page.waitForTimeout(700);
+  // Held until the player has covered ground, rather than for a fixed
+  // stretch of wall-clock: on a software rasteriser the simulation runs at a
+  // fraction of real time, and a stopwatch would be measuring the renderer.
+  await page.waitForFunction(
+    ([x, z]) => Math.hypot(window.__shootout.position.x - x, window.__shootout.position.z - z) > 3,
+    [before.x, before.z] as const,
+    { timeout: 25_000 },
+  );
+  // Speed is the part that does not depend on how many frames were drawn: it
+  // is what the simulation has the player doing at this instant.
+  const { speed } = await readState(page);
   await page.keyboard.up("w");
 
-  const after = (await readState(page)).position;
-  const travelled = Math.hypot(after.x - before.x, after.z - before.z);
-  // Seven tenths of a second at four metres a second, less the moment spent
-  // accelerating into it and the moment spent stopping.
-  expect(travelled).toBeGreaterThan(2.3);
+  expect(speed).toBeGreaterThan(4);
+  expect(speed).toBeLessThan(9);
 });
 
 test("the player cannot walk through the level geometry", async ({ page }) => {
@@ -184,9 +197,12 @@ test("the player cannot walk through the level geometry", async ({ page }) => {
   await page.keyboard.up("w");
 
   const { position } = await readState(page);
-  // The map is 40m across, so the player must still be inside its bounds.
-  expect(Math.abs(position.x)).toBeLessThan(21);
-  expect(Math.abs(position.z)).toBeLessThan(21);
+  // The level runs to thirty-two metres either side of the middle and
+  // twenty-four up and down the street, and the ends of the street are
+  // fenced. A metre or two of slack for the collider, and no more: past
+  // that is outside, where only the backdrop is.
+  expect(Math.abs(position.x)).toBeLessThan(34);
+  expect(Math.abs(position.z)).toBeLessThan(26);
   expect(position.y).toBeGreaterThan(0.4);
 });
 
@@ -314,20 +330,42 @@ test("swapping cycles through the loadout", async ({ page }) => {
 
 test("shooting a practice target knocks it down", async ({ page }) => {
   await bootGame(page);
-  // Stand square on to the nearest plate, which is six metres ahead.
-  await page.evaluate(() => window.__shootout.teleport(-3.5, -9.0, 0));
-  await page.waitForTimeout(400);
+  // Stand square on to a plate, wherever the level happens to put it. The
+  // test used to name a plate and the coordinates to shoot it from, which
+  // made it a test of one level rather than of shooting.
+  const plateId = await page.evaluate(() => {
+    const plate = window.__shootout.targets[0];
+    // A plate faces along its own yaw, so standing that way from it and
+    // looking back is square on to it whichever way it was placed.
+    const distance = 6;
+    window.__shootout.teleport(
+      plate.x + Math.sin(plate.yaw) * distance,
+      plate.z + Math.cos(plate.yaw) * distance,
+      plate.yaw + Math.PI,
+    );
+    return plate.id;
+  });
+  await page.waitForTimeout(700);
 
   await button(page, "btn-aim", true);
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(500);
   await button(page, "btn-fire", true);
-  await page.waitForTimeout(900);
-  await button(page, "btn-fire", false);
-  await button(page, "btn-aim", false);
+  // Held until the plate goes down rather than for a fixed burst: how many
+  // rounds leave the weapon in a second is a property of the frame rate on a
+  // software rasteriser.
+  await page
+    .waitForFunction(
+      (id) => window.__shootout.targets.find((t) => t.id === id)?.down === true,
+      plateId,
+      { timeout: 20_000 },
+    )
+    .finally(async () => {
+      await button(page, "btn-fire", false);
+      await button(page, "btn-aim", false);
+    });
 
   const state = await readState(page);
-  const plate = state.targets.find((target) => target.id === "t_close_a");
-  expect(plate?.down).toBe(true);
+  expect(state.targets.find((target) => target.id === plateId)?.down).toBe(true);
 });
 
 test("the weapon viewmodel is on screen", async ({ page }) => {
@@ -408,27 +446,38 @@ test("both teams are fielded and the round starts", async ({ page }) => {
 });
 
 test("bots patrol away from where they spawned", async ({ page }) => {
+  test.setTimeout(90_000);
   await bootGame(page);
-  await page.waitForTimeout(4000);
   const before = await page.evaluate(() => window.__shootout.bots);
-  await page.waitForTimeout(4000);
-  const after = await page.evaluate(() => window.__shootout.bots);
-
-  const moved = after.filter((bot, index) => {
-    const start = before[index];
-    return Math.hypot(bot.position.x - start.position.x, bot.position.z - start.position.z) > 1;
-  });
-  expect(moved.length).toBeGreaterThan(0);
+  // Waited for rather than slept through: a bot covers the same ground on a
+  // slow machine as on a fast one, it just takes more of the wall clock.
+  await page.waitForFunction(
+    (start: { x: number; z: number }[]) =>
+      window.__shootout.bots.some((bot, index) => {
+        const from = start[index];
+        return (
+          from && Math.hypot(bot.position.x - from.x, bot.position.z - from.z) > 1
+        );
+      }),
+    before.map((bot) => ({ x: bot.position.x, z: bot.position.z })),
+    { timeout: 45_000 },
+  );
 });
 
 test("bots fight each other and the score moves", async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(150_000);
   await bootGame(page);
-  // Long enough for two sides to find each other across a forty metre map.
-  await page.waitForTimeout(40_000);
-  const match = await page.evaluate(() => window.__shootout.match);
-  expect(match.scores.a + match.scores.b).toBeGreaterThan(0);
-  expect(match.feed).toBeGreaterThan(0);
+  // Long enough for two sides to find each other across the level. The wait
+  // is on the score rather than on a stopwatch, because how much of the
+  // match runs in a minute depends on how fast the machine draws it.
+  await page.waitForFunction(
+    () => {
+      const match = window.__shootout.match;
+      return match.scores.a + match.scores.b > 0 && match.feed > 0;
+    },
+    null,
+    { timeout: 120_000 },
+  );
 });
 
 test("settings persist across a reload", async ({ page }) => {
@@ -493,13 +542,20 @@ const joinServer = async (page: Page, name: string): Promise<void> => {
   await page.waitForFunction(() => window.__shootout.net.online === true, null, {
     timeout: 20_000,
   });
+  // A round on the server ends when its clock runs out, and the next one is
+  // started by the first player to be standing there when it does -- so a
+  // client arriving in the gap between two rounds has to wait for one. That
+  // gap is a handful of seconds and it is the server working as intended,
+  // not a client that failed to join.
+  await page.waitForFunction(() => window.__shootout.net.phase === "active", null, {
+    timeout: 30_000,
+  });
 };
 
 test.describe("online play", () => {
   test("connects to the server and joins a live round", async ({ page }) => {
     await joinServer(page, "Solo");
     await page.waitForTimeout(2500);
-
     const net = await page.evaluate(() => window.__shootout.net);
     expect(net.state).toBe("connected");
     expect(net.id).not.toBeNull();
@@ -511,11 +567,14 @@ test.describe("online play", () => {
 
   test("the server's clock drives the match bar", async ({ page }) => {
     await joinServer(page, "Clock");
-    await page.waitForTimeout(1500);
     const first = await page.evaluate(() => window.__shootout.match.timeRemaining);
-    await page.waitForTimeout(2500);
-    const second = await page.evaluate(() => window.__shootout.match.timeRemaining);
-    expect(second).toBeLessThan(first);
+    // Waited on rather than slept through, so a slow client is not read as a
+    // stopped clock.
+    await page.waitForFunction(
+      (from) => window.__shootout.match.timeRemaining < from,
+      first,
+      { timeout: 20_000 },
+    );
   });
 
   test("prediction moves the player without waiting for the server", async ({ page }) => {
@@ -524,8 +583,16 @@ test.describe("online play", () => {
     const before = await page.evaluate(() => ({ ...window.__shootout.position }));
 
     await page.keyboard.down("w");
-    // Far less than a round trip, so only prediction can have moved anything.
-    await page.waitForTimeout(250);
+    // Far less than a round trip's worth of simulation, so only prediction
+    // can have moved anything. Counted in ticks the client has run rather
+    // than in wall-clock: a machine drawing five frames a second has not
+    // simulated a quarter of a second of anything in a quarter of a second.
+    const startTick = await page.evaluate(() => window.__shootout.net.tick);
+    await page.waitForFunction(
+      (from) => window.__shootout.net.tick > from + 12,
+      startTick,
+      { timeout: 20_000 },
+    );
     const during = await page.evaluate(() => ({ ...window.__shootout.position }));
     await page.keyboard.up("w");
 
@@ -540,19 +607,27 @@ test.describe("online play", () => {
 
     await page.keyboard.down("w");
     await page.keyboard.down("Shift");
-    await page.waitForTimeout(2500);
+    // Run until real ground has been covered rather than for a set stretch
+    // of the clock, then hold still long enough for the server's own answer
+    // to arrive and be reconciled against.
+    await page.waitForFunction(
+      ([x, z]) =>
+        Math.hypot(window.__shootout.position.x - x, window.__shootout.position.z - z) > 3,
+      [before.x, before.z] as const,
+      { timeout: 25_000 },
+    );
     await page.keyboard.up("Shift");
     await page.keyboard.up("w");
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(900);
 
     const after = await page.evaluate(() => ({ ...window.__shootout.position }));
     const travelled = Math.hypot(after.x - before.x, after.z - before.z);
-    // Sprinting for two and a half seconds covers real ground, and the
-    // reconciliation must not have dragged it back to the start.
+    // The ground covered has to still be there: the reconciliation must not
+    // have dragged the player back to where they started.
     expect(travelled).toBeGreaterThan(2);
-    // Still inside the map, so the server did not let it through a wall.
-    expect(Math.abs(after.x)).toBeLessThan(21);
-    expect(Math.abs(after.z)).toBeLessThan(21);
+    // Still inside the level, so the server did not let it through a wall.
+    expect(Math.abs(after.x)).toBeLessThan(34);
+    expect(Math.abs(after.z)).toBeLessThan(26);
   });
 
   test("a networked player moves at the speed the simulation says", async ({ page }) => {
