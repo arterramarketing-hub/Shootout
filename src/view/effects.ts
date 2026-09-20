@@ -9,6 +9,7 @@ import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Scene } from "@babylonjs/core/scene";
 import type { PelletImpact } from "../sim/combat";
 import type { Vec3 } from "../sim/vec3";
+import { alignToDirection } from "./orient";
 
 const TRACER_POOL = 24;
 const IMPACT_POOL = 32;
@@ -165,7 +166,7 @@ export class ShotEffects {
     entry.head = 0;
     entry.tail = 0;
     // Point the stretched box down the path of the round.
-    entry.mesh.rotationQuaternion = Quaternion.FromLookDirectionLH(entry.direction, Vector3.Up());
+    alignToDirection(entry.direction, entry.mesh.rotationQuaternion as Quaternion);
     this.placeTracer(entry);
   }
 
@@ -199,11 +200,9 @@ export class ShotEffects {
       point.y + surfaceNormal.y * 0.006,
       point.z + surfaceNormal.z * 0.006,
     );
-    const reference = Math.abs(surfaceNormal.y) > 0.95 ? Vector3.Forward() : Vector3.Up();
-    entry.mesh.rotationQuaternion = Quaternion.FromLookDirectionLH(
-      surfaceNormal.scale(-1),
-      reference,
-    );
+    // Laid flat into the surface, whichever way that surface faces: a mark
+    // on a floor or a ceiling has to sit in it, not stand up out of it.
+    alignToDirection(surfaceNormal, entry.mesh.rotationQuaternion as Quaternion);
     // Rolled and sized at random, so a burst into one wall is a scatter of
     // holes rather than the same stamp printed eight times.
     entry.mesh.rotate(Vector3.Forward(), Math.random() * Math.PI * 2);

@@ -739,7 +739,11 @@ const ridgeline = (): ModelSpec => {
       tone: "metal",
     },
 
-    // Bolt carrier and charging handle: these ride back when it fires.
+    // The charging handle, and the latch that holds it shut. It is only
+    // used to charge the weapon: on a rifle built this way it stays put
+    // while the weapon fires, and having it ride back with the carrier put
+    // a pale block on the side of the receiver flicking back and forth
+    // twelve times a second. The carrier below is the part that moves.
     box({
       x: 0,
       y: 0.057,
@@ -748,17 +752,26 @@ const ridgeline = (): ModelSpec => {
       height: 0.011,
       depth: 0.034,
       tone: "metal",
-      group: "bolt",
     }),
     box({
       x: -0.026,
       y: 0.057,
       z: 0.099,
-      width: 0.014,
+      width: 0.013,
       height: 0.014,
       depth: 0.018,
-      tone: "highlight",
-      group: "bolt",
+      tone: "metal",
+    }),
+    // The line the latch closes on, so it still reads as a separate catch
+    // now that it is the same finish as the handle it sits on.
+    box({
+      x: -0.0195,
+      y: 0.057,
+      z: 0.099,
+      width: 0.002,
+      height: 0.0125,
+      depth: 0.0165,
+      tone: "shadow",
     }),
     box({
       x: 0.028,
