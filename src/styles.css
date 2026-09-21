@@ -1,8 +1,17 @@
 :root {
   --hud: #e8eef5;
   --hud-dim: rgba(232, 238, 245, 0.55);
-  --bg: #0d0f12;
-  --accent: #7ee0a8;
+  /*
+   * The menu is the first thing anybody sees and it used to be a different
+   * game's menu: a neutral near-black with a mint accent that appears
+   * nowhere in the level, measured at a twelfth of full brightness with
+   * ninety-seven per cent of it crushed to black. It carries the level's own
+   * arrangement now -- a cool slate, because the concrete is cool, and a
+   * warm accent, because the brick is warm. Same relationship, same world.
+   */
+  --bg: #12171c;
+  --accent: #e0a63f;
+  --accent-soft: rgba(224, 166, 63, 0.16);
   --safe-l: env(safe-area-inset-left, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -224,12 +233,23 @@ html, body {
  * dead space on purpose: somewhere to rest, and somewhere to start a drag
  * from without firing.
  */
+/*
+ * The controls are neutral glass, not a colour.
+ *
+ * They used to be a mint green, which was the only saturated cool thing on
+ * the screen and read as another game's furniture laid over this one. The
+ * deeper reason to take the colour out is that the level now reserves strong
+ * colour for the two things a player has to identify instantly -- the side a
+ * figure is on, and a hit -- and a thumb pad competing with those is a thumb
+ * pad taking attention it has no use for. It is always under the thumb; it
+ * does not need to be found.
+ */
 .pad-fire {
   --r: 110; --b: 136; --d: 84;
   font-size: calc(12px * var(--ctl));
   letter-spacing: 0.12em;
-  border-color: rgba(126, 224, 168, 0.55);
-  background: rgba(126, 224, 168, 0.1);
+  border-color: rgba(232, 238, 245, 0.6);
+  background: rgba(232, 238, 245, 0.09);
 }
 .pad-aim { --r: 114; --b: 226; --d: 68; border-color: rgba(232, 238, 245, 0.45); }
 .pad-dodge { --r: 196; --b: 208; --d: 66; }
@@ -253,18 +273,18 @@ html, body {
 }
 
 .pad-button.is-active {
-  background: rgba(126, 224, 168, 0.24);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: rgba(232, 238, 245, 0.26);
+  border-color: rgba(232, 238, 245, 0.85);
+  color: var(--hud);
 }
-.pad-fire.is-active { background: rgba(126, 224, 168, 0.34); }
+.pad-fire.is-active { background: rgba(232, 238, 245, 0.36); }
 /*
  * A latched control has to be distinguishable from a held one at a glance:
  * the player needs to know the sights will stay up when the thumb leaves.
  */
 .pad-button.is-latched {
   border-width: 2.5px;
-  box-shadow: 0 0 0 2px rgba(126, 224, 168, 0.25);
+  box-shadow: 0 0 0 2px rgba(232, 238, 245, 0.3);
 }
 
 .chip {
@@ -290,7 +310,14 @@ html, body {
   display: grid;
   place-items: center;
   overflow-y: auto;
-  background: radial-gradient(circle at 50% 38%, #16191e 0%, #0a0c0e 72%);
+  /*
+   * Two washes rather than one: a cool lift where the card sits, and a low
+   * warm ember along the bottom. That is the level's own pairing, and it is
+   * what stops a full screen of near-black reading as an unfinished page.
+   */
+  background:
+    radial-gradient(ellipse 130% 65% at 50% 106%, rgba(186, 108, 62, 0.26) 0%, rgba(186, 108, 62, 0) 72%),
+    radial-gradient(ellipse 90% 75% at 50% 30%, #33424f 0%, #1d262e 46%, #0f1419 100%);
   z-index: 10;
 }
 .screen.is-hidden { display: none; }
@@ -301,6 +328,7 @@ html, body {
   padding: 28px 24px;
   text-align: center;
 }
+
 .screen-card h1 {
   margin: 0;
   font-size: clamp(26px, 6vw, 34px);
@@ -357,7 +385,7 @@ html, body {
   cursor: pointer;
 }
 .segmented button.is-selected {
-  background: rgba(126, 224, 168, 0.16);
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
