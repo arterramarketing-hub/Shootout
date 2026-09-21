@@ -729,6 +729,40 @@ const reliefMap = (
 export type TextureSet = Record<SurfaceTextureId, Texture>;
 /** The relief that goes with each surface, where it has any. */
 export type ReliefSet = Partial<Record<SurfaceTextureId, Texture>>;
+/**
+ * What colour each surface averages out to, nought to one per channel.
+ *
+ * A tint is applied by multiplying it into the texture, and the texture is
+ * already painted in the palette's own colour for that surface. So a tint
+ * picked as a dusty brick came out at about half the lightness it was
+ * written as, and everything a map tinted arrived darker and greyer than
+ * anybody chose. Knowing what the texture averages is what lets a tint be
+ * divided through it and mean what it says.
+ */
+export type TextureLevels = Record<SurfaceTextureId, { r: number; g: number; b: number }>;
+
+/** The average colour of a painted texture, for normalising tints against. */
+const meanColour = (
+  context: CanvasRenderingContext2D,
+): { r: number; g: number; b: number } => {
+  const { data } = context.getImageData(0, 0, SIZE, SIZE);
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    r += data[i];
+    g += data[i + 1];
+    b += data[i + 2];
+  }
+  const pixels = data.length / 4;
+  // Never zero: a tint is divided by this, and a surface painted pure black
+  // would otherwise take every tint to infinity.
+  return {
+    r: Math.max(0.02, r / pixels / 255),
+    g: Math.max(0.02, g / pixels / 255),
+    b: Math.max(0.02, b / pixels / 255),
+  };
+};
 
 /** Draw every surface texture for one palette. */
 export const createTextures = (
@@ -736,8 +770,9 @@ export const createTextures = (
   palette: TexturePalette,
   seed = 1337,
   anisotropy = 1,
-): TextureSet => {
+): { textures: TextureSet; levels: TextureLevels } => {
   const set = {} as TextureSet;
+  const levels = {} as TextureLevels;
   const mottle = createNoiseField(seed ^ 0x5bf03635, SIZE);
   const grime = createNoiseField(seed ^ 0x27d4eb2f, SIZE);
   let offset = 0;
@@ -751,6 +786,7 @@ export const createTextures = (
     const context = texture.getContext() as unknown as CanvasRenderingContext2D;
     paint(context, palette, makeRandom(seed + offset));
     weather(context, mottle, grime, FINISHES[id]);
+    levels[id] = meanColour(context);
     offset += 7919;
     texture.update();
     // Wrapping is what lets one small texture cover a forty metre floor.
@@ -761,7 +797,7 @@ export const createTextures = (
     texture.anisotropicFilteringLevel = anisotropy;
     set[id] = texture;
   }
-  return set;
+  return { textures: set, levels };
 };
 
 /**

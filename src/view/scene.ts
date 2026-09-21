@@ -86,16 +86,23 @@ const gradeImage = (scene: Scene, map: MapDefinition): void => {
   // a filmic curve only pulls a sunlit street down into murk to make room
   // for highlights it will never be given.
   grade.toneMappingEnabled = false;
-  grade.exposure = map.style.sky ? 1.08 : 1.0;
-  grade.contrast = 1.06;
+  grade.exposure = map.style.sky ? 1.40 : 1.06;
+  grade.contrast = 1.08;
   grade.vignetteEnabled = true;
-  grade.vignetteWeight = 0.7;
+  // A vignette is a frame, not a mood. At seven tenths it was doing the work
+  // of the lighting: pulling the edges of every shot down until the level
+  // read as dim wherever the player looked. Enough to settle the corners.
+  grade.vignetteWeight = 0.45;
   grade.vignetteStretch = 0.5;
   grade.vignetteColor = new Color4(0.08, 0.06, 0.05, 0);
   grade.vignetteBlendMode = ImageProcessingConfiguration.VIGNETTEMODE_MULTIPLY;
   const curves = new ColorCurves();
-  curves.globalSaturation = -12;
-  curves.shadowsSaturation = -10;
+  // Nothing here was ever more saturated than a dusty brick, and the grade
+  // was then taking a further eighth of what there was. Desaturating a
+  // palette that is already washed out is how a level ends up the colour of
+  // nothing at all.
+  curves.globalSaturation = 0;
+  curves.shadowsSaturation = -4;
   curves.highlightsHue = 40;
   curves.highlightsSaturation = 6;
   grade.colorCurvesEnabled = true;
@@ -141,6 +148,11 @@ export const addSunShadows = (
     : CascadedShadowGenerator.QUALITY_LOW;
   generator.bias = 0.004;
   generator.normalBias = high ? 0.03 : 0.05;
+  // A shadow outdoors is not an absence of light, it is the sky instead of
+  // the sun. Left at nothing, the key is switched off entirely inside one
+  // and half a sunlit street goes to black; a third of it left on is what
+  // keeps a player standing in shadow a player rather than a silhouette.
+  generator.setDarkness(0.34);
   for (const mesh of meshes) {
     generator.addShadowCaster(mesh, false);
     mesh.receiveShadows = true;

@@ -55,17 +55,26 @@ const BRIDGE = { south: -4.5, north: 4.5, floor: L2, roof: L2 + 3.4 };
  * Palette. Zones are told apart by what they are built of, not by paint.
  * ------------------------------------------------------------------ */
 
+/*
+ * Zone tints, on the same split as the palette: anything structural is cool,
+ * anything laid into it or left behind is warm.
+ *
+ * The courtyard's fallen slabs used to be a warm cream, which was fine when
+ * every surface in the level was warm and became a sickly olive the moment
+ * a blue sky was lighting them. A slab is concrete; it is cool now, and a
+ * shade darker than the frame so the collapse still reads as its own zone.
+ */
 const TINT = {
   /** The painted spandrels down the east wing, the one splash of colour. */
   paint: undefined,
   /** Dark steel: the bridge girders, sash remnants, the car. */
-  steel: "#4d4b48",
-  /** Weathered timber and the courtyard's rust-streaked concrete. */
-  courtyard: "#c9b9a4",
+  steel: "#464f58",
+  /** The courtyard's fallen slabs, weathered paler than the frame. */
+  courtyard: "#8d979d",
   /** The tower's older, darker brick. */
-  tower: "#8d5d4f",
-  car: "#5c5060",
-  barrel: "#b56a3c",
+  tower: "#7e4540",
+  car: "#4e585e",
+  barrel: "#b06331",
 } as const;
 
 const brushes: BoxBrush[] = [];
@@ -771,36 +780,67 @@ const targets: TargetPlacement[] = [
  */
 const style: MapStyle = {
   /*
-   * One palette, sun-bleached. Every colour here is a warm grey with a
-   * little of something in it — brick a dusty brown-red, paint a rust that
-   * has lost its orange, foliage an olive rather than a green — so that
-   * nothing on the map is more saturated than the sky, and the sky is pale.
-   * The hard warm key and a neutral fill do the rest: surfaces are told
-   * apart by light and shade, not by hue.
+   * Three families, where there used to be one.
+   *
+   * Ten of the thirteen surfaces here were a warm grey between nine and
+   * fifty-three degrees of hue — concrete, panel, frame, rubble, asphalt,
+   * metal and grate within five degrees of each other, and brick and paint
+   * not far off. The note that used to sit here argued that was deliberate,
+   * that surfaces would be told apart by light and shade rather than by
+   * hue. Light and shade were not doing it either, so the level got neither,
+   * and a frame of one colour at one brightness is mud.
+   *
+   * So: everything the building is made of is cool now, a grey with two
+   * hundred and five degrees in it, which is what concrete looks like under
+   * a blue sky. Everything laid into the frame is warm — brick, the painted
+   * spandrels, the timber, the hazard orange. The overgrowth is green. That
+   * is a complementary structure rather than a wash, it is free because
+   * these are generated textures, and it is also simply what a concrete
+   * frame with brick infill looks like.
    */
-  concrete: "#a59f93",
-  panel: "#9a948a",
-  crate: "#8a7458",
-  metal: "#6b6a66",
-  grate: "#77766f",
-  hazard: "#b7784a",
-  hazardStripe: "#3a3733",
-  brick: "#78514a",
-  frame: "#a49e93",
-  cladding: "#9b9d9c",
-  spandrel: "#a2543a",
-  asphalt: "#5d5b56",
-  rubble: "#9e988c",
-  foliage: "#647a44",
-  graffiti: "#a09b92",
-  fog: "#cdd3d6",
+  concrete: "#aab1b5",
+  panel: "#9ea4a9",
+  crate: "#987a57",
+  metal: "#6f7880",
+  grate: "#757e84",
+  hazard: "#c97b40",
+  hazardStripe: "#33383d",
+  brick: "#975649",
+  frame: "#a4abb2",
+  cladding: "#9ca6ab",
+  spandrel: "#ae5337",
+  asphalt: "#51565d",
+  rubble: "#9ea5a9",
+  foliage: "#668745",
+  graffiti: "#989fa4",
+  /*
+   * Distance goes blue, not grey. The fog was a tenth saturated against a
+   * sky that is half, so everything far away drained to a pale neutral
+   * exactly where the one cool thing in the frame would have done the most
+   * good. It is the sky's own colour now, a little lighter.
+   */
+  fog: "#bdcfdb",
   sky: "#8fb5d9",
-  skyLight: "#c9d3dc",
-  groundLight: "#9a8a74",
-  keyLight: "#ffe6c4",
-  fillIntensity: 0.85,
-  keyIntensity: 1.15,
-  ambient: "#9a9793",
+  /*
+   * The lighting, rebuilt around the one thing an afternoon has that this
+   * did not: a sun.
+   *
+   * The ambient term is the first of it. It multiplies every surface before
+   * any light reaches it, so a mid-grey ambient lit the whole level to sixty
+   * per cent of its own albedo for free -- which is why the shadowed side of
+   * a column and the sunlit side of it were nearly the same colour, and why
+   * nothing in the frame could get bright: the range was spent before the
+   * key arrived. It is a third of what it was, and it is the colour of the
+   * sky rather than a neutral grey, because what actually fills a shadow
+   * outdoors is the sky. That one change puts a cool shadow against a warm
+   * light and gives the level a hue axis it never had.
+   */
+  skyLight: "#b3cde2",
+  groundLight: "#8f7255",
+  keyLight: "#ffe4be",
+  fillIntensity: 1.22,
+  keyIntensity: 2.50,
+  ambient: "#49535b",
   keyDirection: { x: 0.55, y: -0.72, z: 0.3 },
   stripLight: "#ffe9c4",
 };

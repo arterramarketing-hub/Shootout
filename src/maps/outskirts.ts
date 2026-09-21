@@ -39,24 +39,29 @@ const REACH = 150;
  * are simply the colours the buildings are. What they do carry is variety:
  * a backdrop of one brick is a wallpaper, and the eye reads wallpaper as
  * flat however far away it is.
+ *
+ * They follow the level's own split: concrete, steel and road are cool, the
+ * brick and the boarding are warm, the overgrowth is green. A backdrop in a
+ * different colour family from the foreground reads as a painted flat behind
+ * the level rather than as more of the same city.
  */
 const TONE = {
-  roadDark: "#43423f",
-  kerb: "#9c9a92",
-  brickRed: "#8a5647",
-  brickBuff: "#a08a6d",
-  brickDark: "#6d4c41",
-  concrete: "#a5a096",
-  concreteDark: "#7d786f",
-  sheet: "#7e837f",
-  sheetRust: "#8a6a55",
-  steel: "#55534f",
-  board: "#6f6252",
-  glassDark: "#2f3336",
-  weeds: "#6d7350",
-  dirt: "#7a6f5e",
-  timber: "#5f5348",
-  tank: "#8b9190",
+  roadDark: "#45494f",
+  kerb: "#9ea4a9",
+  brickRed: "#9b5c50",
+  brickBuff: "#ac8f72",
+  brickDark: "#7e4c44",
+  concrete: "#a5acb1",
+  concreteDark: "#7c858d",
+  sheet: "#848f94",
+  sheetRust: "#996d56",
+  steel: "#525960",
+  board: "#7e6b58",
+  glassDark: "#2d3339",
+  weeds: "#687e4e",
+  dirt: "#887863",
+  timber: "#706051",
+  tank: "#929ba0",
 } as const;
 
 export interface Outskirts {

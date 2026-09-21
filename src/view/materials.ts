@@ -6,6 +6,7 @@ import {
   createReliefMaps,
   createTextures,
   type SurfaceTextureId,
+  type TextureLevels,
   type TextureSet,
 } from "./textures";
 
@@ -15,6 +16,15 @@ import {
  * Keeping this mapping separate from the level data means a new map changes
  * its whole look by changing colours, without touching a single brush.
  */
+/**
+ * How far a tint may be scaled up when it is divided through its texture.
+ *
+ * A tint much lighter than the surface it sits on would push the texture's
+ * bright speckle past white, and a surface with its highlights clipped off
+ * has no grain left. Two and a half covers every tint any map asks for.
+ */
+const TINT_CEILING = 2.5;
+
 const SURFACES: Record<SurfaceKind, { texture: SurfaceTextureId; specular: number; power: number }> = {
   floor: { texture: "concrete", specular: 0.03, power: 16 },
   wall: { texture: "panel", specular: 0.05, power: 24 },
@@ -54,8 +64,8 @@ export const createMaterials = (
   seed: number,
   anisotropy = 1,
   relief = false,
-): { materials: MaterialSet; textures: TextureSet } => {
-  const textures = createTextures(scene, style, seed, anisotropy);
+): { materials: MaterialSet; textures: TextureSet; levels: TextureLevels } => {
+  const { textures, levels } = createTextures(scene, style, seed, anisotropy);
   const reliefs = relief ? createReliefMaps(scene, textures, anisotropy) : {};
   const set = {} as MaterialSet;
 
@@ -82,7 +92,7 @@ export const createMaterials = (
     material.freeze();
     set[kind] = material;
   }
-  return { materials: set, textures };
+  return { materials: set, textures, levels };
 };
 
 /**
@@ -93,6 +103,15 @@ export const createMaterials = (
  * takes on a colour while keeping the concrete, panelling or grating it is
  * made of. Variants are cached by kind and tint because the merge step asks
  * for the same one once per bucket.
+ *
+ * What the tint is multiplied by is the tint divided through the texture's
+ * own average, not the tint itself. The texture is already painted in the
+ * palette's colour for that surface, so multiplying a colour straight into
+ * it compounds the two: a brick written as a dusty red arrived at half the
+ * lightness, and every tinted surface in the level was darker and greyer
+ * than anyone had chosen. Dividing first means a tint comes out as the
+ * colour it says, with the texture supplying the grain and the grime around
+ * it rather than a second helping of darkness.
  */
 export const createMaterialLibrary = (
   scene: Scene,
@@ -101,7 +120,13 @@ export const createMaterialLibrary = (
   anisotropy = 1,
   relief = false,
 ): MaterialLibrary => {
-  const { materials, textures } = createMaterials(scene, style, seed, anisotropy, relief);
+  const { materials, textures, levels } = createMaterials(
+    scene,
+    style,
+    seed,
+    anisotropy,
+    relief,
+  );
   const variants = new Map<string, StandardMaterial>();
 
   return {
@@ -117,10 +142,22 @@ export const createMaterialLibrary = (
       material.diffuseTexture = base.diffuseTexture;
       material.ambientTexture = base.ambientTexture;
       material.bumpTexture = base.bumpTexture;
-      material.ambientColor = Color3.FromHexString(tint);
+      // Divided through the texture's own average, so what lands on screen
+      // is the tint rather than the tint times the palette. Held under a
+      // ceiling because a tint far lighter than the surface it is painted on
+      // would otherwise drive the texture's bright speckle past white and
+      // flatten the grain it was asked to keep.
+      const level = levels[SURFACES[kind].texture];
+      const wanted = Color3.FromHexString(tint);
+      const scaled = new Color3(
+        Math.min(TINT_CEILING, wanted.r / level.r),
+        Math.min(TINT_CEILING, wanted.g / level.g),
+        Math.min(TINT_CEILING, wanted.b / level.b),
+      );
+      material.ambientColor = scaled;
       // diffuseColor multiplies the texture, which is what keeps the surface
       // reading as the material it is made of rather than as flat paint.
-      material.diffuseColor = Color3.FromHexString(tint);
+      material.diffuseColor = scaled;
       material.specularColor = base.specularColor.clone();
       material.specularPower = base.specularPower;
       material.useAlphaFromDiffuseTexture = false;
