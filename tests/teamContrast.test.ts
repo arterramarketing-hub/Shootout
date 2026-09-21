@@ -93,6 +93,20 @@ describe("team colours", () => {
     );
   });
 
+  it("keeps the hit sprays visible on the sides they mark", () => {
+    // A mist the colour of the jacket it lands on is a hit marker that
+    // disappears against the thing it is marking, and a dust puff the
+    // colour of the wall is a round that left no sign of striking it.
+    const BLOOD = "#6b0d14";
+    const DUST = "#e8e3d6";
+    for (const team of Object.values(TEAM_COLOURS)) {
+      expect(distance(BLOOD, team.body)).toBeGreaterThan(AGAINST_THE_WORLD);
+      expect(distance(BLOOD, team.trim)).toBeGreaterThan(AGAINST_THE_WORLD);
+    }
+    expect(distance(DUST, boulevardMap.style.concrete)).toBeGreaterThan(AGAINST_THE_WORLD);
+    expect(distance(BLOOD, boulevardMap.style.brick)).toBeGreaterThan(AGAINST_THE_WORLD);
+  });
+
   it("keeps a side's own two colours related rather than unrelated", () => {
     // Far enough apart to read as a marking, close enough to read as one
     // person rather than two.

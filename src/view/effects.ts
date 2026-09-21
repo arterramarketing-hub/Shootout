@@ -89,7 +89,23 @@ export class ShotEffects {
     this.impactMaterial.backFaceCulling = false;
     this.impactMaterial.freeze();
 
-    this.blood = new Spray(scene, "blood", "#8e1218", 48, {
+    /*
+     * Both sprays are picked against the level rather than for their own
+     * sake, because both exist to be noticed.
+     *
+     * The mist is darker than blood is usually drawn. It has to read as a
+     * hit while it is on a figure, and one of the two sides wears a strong
+     * red: a bright crimson sat fifteen units of CIE distance from that
+     * team's own body, which is a hit marker that disappears against the
+     * thing it is marking. Dark, it clears twenty-six from anything in the
+     * level and it reads on a rust jacket, on brick, and on concrete.
+     *
+     * The dust goes the other way. It comes off concrete and used to be
+     * almost exactly the colour of concrete -- twelve units -- so a round
+     * into a wall put up a puff nobody could see. Near-white, against a
+     * surface that is not, it is a round striking a wall.
+     */
+    this.blood = new Spray(scene, "blood", "#6b0d14", 48, {
       gravity: -9.5,
       drag: 2.6,
       startSize: 0.05,
@@ -97,7 +113,7 @@ export class ShotEffects {
       life: 0.55,
       glow: 0.16,
     });
-    this.dust = new Spray(scene, "dust", "#c2bbad", 36, {
+    this.dust = new Spray(scene, "dust", "#e8e3d6", 36, {
       gravity: -2.2,
       drag: 4.5,
       startSize: 0.05,
