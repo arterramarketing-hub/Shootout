@@ -703,8 +703,9 @@ html, body {
 .team { display: flex; align-items: center; gap: 7px; }
 .team-tag { font-size: 9.5px; letter-spacing: 0.16em; color: var(--hud-dim); }
 .team-score { font-size: 17px; font-weight: 600; }
-.team-a .team-score { color: #8fc4e8; }
-.team-b .team-score { color: #e8a68f; }
+/* The same two colours the figures wear, so the board and the street agree. */
+.team-a .team-score { color: #5cd6f2; }
+.team-b .team-score { color: #eeb84a; }
 .clock { font-size: 14px; letter-spacing: 0.06em; }
 .clock.is-urgent { color: #ff7a5c; }
 
@@ -1009,8 +1010,8 @@ html, body {
   border-radius: 50%;
   vertical-align: middle;
 }
-.board-team.team-a { background: #7fb2dc; }
-.board-team.team-b { background: #dc9a7f; }
+.board-team.team-a { background: #39d1ef; }
+.board-team.team-b { background: #ecb13c; }
 .board-tag {
   margin-left: 8px;
   padding: 1px 5px;

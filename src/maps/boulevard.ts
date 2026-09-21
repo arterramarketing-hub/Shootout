@@ -797,18 +797,26 @@ const style: MapStyle = {
    * is a complementary structure rather than a wash, it is free because
    * these are generated textures, and it is also simply what a concrete
    * frame with brick infill looks like.
+   *
+   * The warm half is quieter than it first came out. The painted spandrels
+   * were the loudest thing in the level at half saturation, and what that
+   * cost was the rust team: a side in a colour the building is already
+   * wearing cannot be picked out against it, and the only way to shout over
+   * a loud wall is a louder player. A backdrop that stays under forty-five
+   * per cent leaves the two sides room to be seen without either of them
+   * turning into a traffic cone.
    */
   concrete: "#aab1b5",
   panel: "#9ea4a9",
   crate: "#987a57",
   metal: "#6f7880",
   grate: "#757e84",
-  hazard: "#c97b40",
+  hazard: "#ba854f",
   hazardStripe: "#33383d",
   brick: "#975649",
   frame: "#a4abb2",
   cladding: "#9ca6ab",
-  spandrel: "#ae5337",
+  spandrel: "#996348",
   asphalt: "#51565d",
   rubble: "#9ea5a9",
   foliage: "#668745",

@@ -23,9 +23,33 @@ import { damp } from "../sim/vec3";
  * The head sits where the head hitbox is, and the body where the body hitbox
  * is; the figure is drawn to the shape that is shot, not the other way round.
  */
-const TEAM_COLOURS: Record<Team, { body: string; trim: string }> = {
-  a: { body: "#4f7fa8", trim: "#9fd0ee" },
-  b: { body: "#a8654f", trim: "#eeb08f" },
+/**
+ * The two sides, picked to be told apart from the level and from each other.
+ *
+ * The old rust was a dusty orange-red at fifteen degrees of hue, which is
+ * within six degrees of the brick and within one of the painted spandrels:
+ * measured properly it sat seven units of CIE distance from a brick wall,
+ * which is close enough that a figure standing against one was wearing it.
+ * That is not a matter of taste, it is a player who cannot see who shot
+ * them. The old blue was nearer the sky than anything should be, and once
+ * the level's concrete turned cool it was near that too.
+ *
+ * What separates these now is saturation as much as hue. The world is a
+ * washed-out place -- nothing in it is above forty-five per cent saturated
+ * and most of it is under ten -- so a strong colour on a figure reads
+ * against all of it at once, from any distance, in sun or in shade.
+ *
+ * They are no louder than they have to be, and finding out how loud that
+ * was took quieting the level first. Against the old painted spandrels, a
+ * rust below three quarters saturated was inside thirteen units of the wall
+ * behind it; against the quieter ones it clears thirty at under two thirds.
+ * The way to make a player visible is to stop the building competing, not
+ * to turn the player into a traffic cone. `tests/teamContrast.test.ts`
+ * holds the whole arrangement in place.
+ */
+export const TEAM_COLOURS: Record<Team, { body: string; trim: string }> = {
+  a: { body: "#3560b1", trim: "#39d1ef" },
+  b: { body: "#ba3a2c", trim: "#ecb13c" },
 };
 
 /** Gear that is the same on both sides: boots, pack, webbing, rifle. */
