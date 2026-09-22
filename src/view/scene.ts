@@ -87,7 +87,7 @@ const gradeImage = (scene: Scene, map: MapDefinition): void => {
   // for highlights it will never be given.
   grade.toneMappingEnabled = false;
   grade.exposure = map.style.sky ? 1.40 : 1.06;
-  grade.contrast = 1.08;
+  grade.contrast = 1.14;
   grade.vignetteEnabled = true;
   // A vignette is a frame, not a mood. At seven tenths it was doing the work
   // of the lighting: pulling the edges of every shot down until the level
@@ -199,13 +199,43 @@ export const addGlow = (built: BuiltScene, camera: Camera): GlowLayer => {
   return glow;
 };
 
+/**
+ * How far the hemispheric fill leans off vertical, as a tangent.
+ *
+ * Far enough that a wall side-on to the sun and the wall opposite it are
+ * plainly different colours; short enough that the floor is still the
+ * brightest thing in the level and the sky is still overhead.
+ */
+const FILL_LEAN = 0.46;
+
 const buildLighting = (scene: Scene, map: MapDefinition): DirectionalLight => {
   const style = map.style;
+
+  const direction = new Vector3(
+    style.keyDirection.x,
+    style.keyDirection.y,
+    style.keyDirection.z,
+  ).normalize();
 
   // Two lights only. A hemispheric fill for shape, one directional for
   // direction. Its shadows are added below, on the one tier that can afford
   // them.
-  const fill = new HemisphericLight("fill", new Vector3(0.15, 1, 0.1), scene);
+  //
+  // The fill leans off vertical, across the sun rather than with it. Upright
+  // with a sun this steep, three of the five ways a face can point come out
+  // at the same value: the wall the sun misses and both walls side-on to it
+  // all sit at the midpoint of the hemisphere, so a corner between two of
+  // them disappears. Leaning the fill across the sun gives those two side
+  // walls the sky and the ground respectively, which separates them from
+  // each other by a good part of the fill's whole range, and does it
+  // without taking anything off the two the sun has already sorted out.
+  const across = new Vector3(-direction.z, 0, direction.x);
+  if (across.lengthSquared() > 1e-6) across.normalize();
+  const fill = new HemisphericLight(
+    "fill",
+    new Vector3(across.x * FILL_LEAN, 1, across.z * FILL_LEAN),
+    scene,
+  );
   fill.intensity = style.fillIntensity;
   fill.diffuse = Color3.FromHexString(style.skyLight);
   // A warm bounce from the floor keeps undersides from going dead.
@@ -214,12 +244,7 @@ const buildLighting = (scene: Scene, map: MapDefinition): DirectionalLight => {
 
   // The key is angled well off vertical so that walls, not just floors,
   // catch it and the geometry reads in three dimensions.
-  const direction = style.keyDirection;
-  const key = new DirectionalLight(
-    "key",
-    new Vector3(direction.x, direction.y, direction.z).normalize(),
-    scene,
-  );
+  const key = new DirectionalLight("key", direction, scene);
   key.intensity = style.keyIntensity;
   key.diffuse = Color3.FromHexString(style.keyLight);
   key.specular = new Color3(0.16, 0.16, 0.16);

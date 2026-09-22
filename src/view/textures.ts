@@ -134,9 +134,9 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
   concrete: (context, palette, random) => {
     context.fillStyle = palette.concrete;
     context.fillRect(0, 0, SIZE, SIZE);
-    blotches(context, random, 26, "rgba(0,0,0,0.055)", 52);
-    blotches(context, random, 14, "rgba(255,255,255,0.035)", 40);
-    speckle(context, random, 2600, 0.05, 1.3);
+    blotches(context, random, 16, "rgba(0,0,0,0.04)", 70);
+    blotches(context, random, 9, "rgba(255,255,255,0.025)", 54);
+    speckle(context, random, 1040, 0.028, 1.3);
     // Expansion joints, which give a floor its sense of scale.
     context.strokeStyle = "rgba(0,0,0,0.16)";
     context.lineWidth = 1.4;
@@ -151,8 +151,8 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
   panel: (context, palette, random) => {
     context.fillStyle = palette.panel;
     context.fillRect(0, 0, SIZE, SIZE);
-    blotches(context, random, 16, "rgba(0,0,0,0.05)", 46);
-    speckle(context, random, 1200, 0.035, 1);
+    blotches(context, random, 10, "rgba(0,0,0,0.036)", 62);
+    speckle(context, random, 480, 0.019, 1);
     // One seam across the middle of each axis, drawn softly. Strong seams at
     // a tight repeat are what make a wall read as tile rather than panelling.
     const step = SIZE / 2;
@@ -223,7 +223,7 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
         : `rgba(0,0,0,${alpha.toFixed(3)})`;
       context.fillRect(0, y, SIZE, random() * 1.6 + 0.4);
     }
-    blotches(context, random, 8, "rgba(0,0,0,0.07)", 44);
+    blotches(context, random, 5, "rgba(0,0,0,0.05)", 59);
   },
 
   grate: (context, palette, random) => {
@@ -242,7 +242,7 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
       context.fillRect(i * cell - 1, 0, 2, SIZE);
       context.fillRect(0, i * cell - 1, SIZE, 2);
     }
-    speckle(context, random, 400, 0.05, 1);
+    speckle(context, random, 160, 0.028, 1);
   },
 
   hazard: (context, palette, random) => {
@@ -259,8 +259,8 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
       if (i % 2 === 0) context.fillRect(0, i * band, SIZE * 2, band);
     }
     context.restore();
-    blotches(context, random, 18, "rgba(0,0,0,0.14)", 40);
-    speckle(context, random, 900, 0.06, 1.2);
+    blotches(context, random, 11, "rgba(0,0,0,0.101)", 54);
+    speckle(context, random, 360, 0.033, 1.2);
   },
 
   brick: (context, palette, random) => {
@@ -298,9 +298,9 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
     // as new brick: the colour is there, but it is under a film.
     context.fillStyle = "rgba(196,188,176,0.22)";
     context.fillRect(0, 0, SIZE, SIZE);
-    blotches(context, random, 12, "rgba(0,0,0,0.18)", 60);
-    blotches(context, random, 8, "rgba(235,225,210,0.10)", 44);
-    speckle(context, random, 2200, 0.07, 1.1);
+    blotches(context, random, 7, "rgba(0,0,0,0.13)", 81);
+    blotches(context, random, 5, "rgba(235,225,210,0.072)", 59);
+    speckle(context, random, 880, 0.039, 1.1);
     // Soot and water running down from the top.
     for (let i = 0; i < 9; i += 1) {
       const x = random() * SIZE;
@@ -317,9 +317,9 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
     // running down it, rust bleeding from the bars where the cover has gone.
     context.fillStyle = palette.frame;
     context.fillRect(0, 0, SIZE, SIZE);
-    blotches(context, random, 30, "rgba(0,0,0,0.07)", 56);
-    blotches(context, random, 18, "rgba(255,255,255,0.05)", 48);
-    speckle(context, random, 3200, 0.06, 1.4);
+    blotches(context, random, 19, "rgba(0,0,0,0.05)", 76);
+    blotches(context, random, 11, "rgba(255,255,255,0.036)", 65);
+    speckle(context, random, 1280, 0.033, 1.4);
     // Board marks from the formwork, faint and horizontal.
     context.fillStyle = "rgba(0,0,0,0.07)";
     for (let y = 0; y < SIZE; y += SIZE / 6) context.fillRect(0, y, SIZE, 1.2);
@@ -363,7 +363,7 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
       context.fillStyle = shade;
       context.fillRect(x, 0, ribWidth, SIZE);
     }
-    speckle(context, random, 900, 0.05, 1);
+    speckle(context, random, 360, 0.028, 1);
     for (let i = 0; i < 12; i += 1) {
       const x = random() * SIZE;
       const rust = context.createLinearGradient(0, SIZE, 0, SIZE - 30 - random() * 90);
@@ -384,7 +384,7 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
     // still there in the middle and gone at the edges, showing the render.
     context.fillStyle = "#b8ad9c";
     context.fillRect(0, 0, SIZE, SIZE);
-    speckle(context, random, 1200, 0.05, 1.2);
+    speckle(context, random, 480, 0.028, 1.2);
     const paint = Color.parse(palette.spandrel);
     context.fillStyle = paint.css();
     context.fillRect(0, 0, SIZE, SIZE);
@@ -411,8 +411,8 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
       context.closePath();
       context.fill();
     }
-    blotches(context, random, 14, "rgba(0,0,0,0.12)", 50);
-    blotches(context, random, 8, "rgba(255,255,255,0.10)", 36);
+    blotches(context, random, 9, "rgba(0,0,0,0.086)", 68);
+    blotches(context, random, 5, "rgba(255,255,255,0.072)", 49);
     for (let i = 0; i < 8; i += 1) {
       const x = random() * SIZE;
       const streak = context.createLinearGradient(0, 0, 0, SIZE * (0.5 + random() * 0.5));
@@ -426,9 +426,9 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
   asphalt: (context, palette, random) => {
     context.fillStyle = palette.asphalt;
     context.fillRect(0, 0, SIZE, SIZE);
-    speckle(context, random, 5000, 0.07, 1.2);
-    blotches(context, random, 20, "rgba(0,0,0,0.10)", 60);
-    blotches(context, random, 10, "rgba(255,255,255,0.05)", 50);
+    speckle(context, random, 2000, 0.039, 1.2);
+    blotches(context, random, 12, "rgba(0,0,0,0.072)", 81);
+    blotches(context, random, 6, "rgba(255,255,255,0.036)", 68);
     // Cracks, wandering.
     context.strokeStyle = "rgba(0,0,0,0.35)";
     context.lineWidth = 1.2;
@@ -477,8 +477,8 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
     // Dust settles over everything, and takes the contrast down with it.
     context.fillStyle = "rgba(160,152,138,0.30)";
     context.fillRect(0, 0, SIZE, SIZE);
-    speckle(context, random, 2400, 0.07, 1.2);
-    blotches(context, random, 14, "rgba(0,0,0,0.12)", 50);
+    speckle(context, random, 960, 0.039, 1.2);
+    blotches(context, random, 9, "rgba(0,0,0,0.086)", 68);
   },
 
   foliage: (context, palette, random) => {
@@ -508,8 +508,8 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
         context.fill();
       }
     }
-    blotches(context, random, 10, "rgba(0,0,0,0.3)", 44);
-    blotches(context, random, 6, "rgba(255,250,200,0.10)", 30);
+    blotches(context, random, 6, "rgba(0,0,0,0.216)", 59);
+    blotches(context, random, 4, "rgba(255,250,200,0.072)", 40);
   },
 
   graffiti: (context, palette, random) => {
@@ -520,8 +520,8 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
      */
     context.fillStyle = palette.graffiti;
     context.fillRect(0, 0, SIZE, SIZE);
-    speckle(context, random, 1600, 0.05, 1.3);
-    blotches(context, random, 16, "rgba(0,0,0,0.10)", 50);
+    speckle(context, random, 640, 0.028, 1.3);
+    blotches(context, random, 10, "rgba(0,0,0,0.072)", 68);
     // Throw-ups in chrome and black, the way most of them are, with one
     // colour piece somewhere on the wall. Faded: the sun has had them.
     const paints = ["#d8d6cf", "#d8d6cf", "#2a2729", "#c9c3b8", random() < 0.5 ? "#c74a3d" : "#3a6fb5"];
@@ -573,6 +573,14 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
  * The painters above lay down what a surface is made of. This is what has
  * happened to it since: weather at every scale, and dirt where dirt
  * collects.
+ *
+ * Kept broad and light on purpose. Grime at the scale of a centimetre is
+ * invisible at the distance a wall is looked at and turns to crawling noise
+ * at the distance it is walked past; what it does reach is the mip chain,
+ * where it flattens into an even haze that lifts the surface's blacks and
+ * costs the plane the value it should have had. The difference between one
+ * face and the next belongs to the light, not to the dirt, so the dirt is
+ * wide enough to disguise the tiling and no stronger than that.
  */
 interface Finish {
   /** How deep the mottling cuts, as a fraction of the surface's colour. */
@@ -582,20 +590,20 @@ interface Finish {
 }
 
 const FINISHES: Record<SurfaceTextureId, Finish> = {
-  concrete: { wear: 0.16, cells: 3 },
-  panel: { wear: 0.1, cells: 4 },
-  crate: { wear: 0.12, cells: 3 },
-  metal: { wear: 0.13, cells: 4 },
-  grate: { wear: 0.06, cells: 4 },
-  hazard: { wear: 0.09, cells: 3 },
-  brick: { wear: 0.13, cells: 3 },
-  frame: { wear: 0.18, cells: 3 },
-  cladding: { wear: 0.1, cells: 5 },
-  spandrel: { wear: 0.16, cells: 3 },
-  asphalt: { wear: 0.15, cells: 3 },
-  rubble: { wear: 0.2, cells: 4 },
+  concrete: { wear: 0.1, cells: 2 },
+  panel: { wear: 0.06, cells: 3 },
+  crate: { wear: 0.08, cells: 2 },
+  metal: { wear: 0.08, cells: 3 },
+  grate: { wear: 0.04, cells: 3 },
+  hazard: { wear: 0.06, cells: 2 },
+  brick: { wear: 0.08, cells: 2 },
+  frame: { wear: 0.11, cells: 2 },
+  cladding: { wear: 0.06, cells: 4 },
+  spandrel: { wear: 0.1, cells: 2 },
+  asphalt: { wear: 0.09, cells: 2 },
+  rubble: { wear: 0.12, cells: 3 },
   foliage: { wear: 0.18, cells: 6 },
-  graffiti: { wear: 0.1, cells: 3 },
+  graffiti: { wear: 0.06, cells: 2 },
 };
 
 /**
