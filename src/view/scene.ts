@@ -18,7 +18,9 @@ import type { Look } from "../engine/look";
 import type { QualitySettings } from "../engine/quality";
 import type { MapDefinition, SurfaceKind } from "../maps/types";
 import { brushGeometry } from "./brushGeometry";
+import { lightRigFor } from "./lightRig";
 import { TEXEL_METRES, createMaterialLibrary } from "./materials";
+import { bakeBrushLighting, exposureFor } from "./retroBake";
 import { buildSky } from "./sky";
 
 export interface BuiltScene {
@@ -35,8 +37,8 @@ export const createScene = (
   quality: QualitySettings,
   look: Look = "modern",
 ): BuiltScene => {
-  void look;
   const style = map.style;
+  const retro = look === "retro";
   const scene = new Scene(engine);
   const fog = Color3.FromHexString(style.fog);
 
@@ -59,16 +61,19 @@ export const createScene = (
     // Fog fades into the sky where there is one, so a distant roofline
     // dissolves into blue rather than into a grey that the sky is not.
     scene.fogColor = style.sky ? fog : fog.scale(0.55);
-    scene.fogStart = quality.viewDistance * 0.45;
-    scene.fogEnd = quality.viewDistance;
+    // The retro look's fog starts close and is most of the picture: the
+    // world dissolving into the sky a street away is part of what it is,
+    // and everything past the fog is a draw call not made.
+    scene.fogStart = quality.viewDistance * (retro ? 0.3 : 0.45);
+    scene.fogEnd = quality.viewDistance * (retro ? 0.92 : 1);
   }
 
   const key = buildLighting(scene, map);
-  gradeImage(scene, map);
+  gradeImage(scene, map, look);
   // Anisotropy is close to free on a GPU and expensive without one, so it
   // rides with the rest of the settings a strong machine gets.
-  const staticMeshes = buildMap(scene, map, quality.tier === "high" ? 4 : 1);
-  buildSky(scene, style, quality, map.textureSeed);
+  const staticMeshes = buildMap(scene, map, quality.tier === "high" ? 4 : 1, look);
+  buildSky(scene, style, quality, map.textureSeed, look);
 
   return { scene, staticMeshes, key };
 };
@@ -83,8 +88,15 @@ export const createScene = (
  * a post-process, so it costs nothing on a phone. Interiors get the same
  * treatment: consistency is the point.
  */
-const gradeImage = (scene: Scene, map: MapDefinition): void => {
+const gradeImage = (scene: Scene, map: MapDefinition, look: Look): void => {
   const grade = scene.imageProcessingConfiguration;
+  if (look === "retro") {
+    // No grade at all. The hardware this look is after wrote its colours
+    // straight to the screen, and the grade is a pass over every fragment
+    // that this look is better off without.
+    grade.isEnabled = false;
+    return;
+  }
   // No tone mapping: these materials are not high-dynamic-range inputs, and
   // a filmic curve only pulls a sunlit street down into murk to make room
   // for highlights it will never be given.
@@ -203,42 +215,18 @@ export const addGlow = (built: BuiltScene, camera: Camera): GlowLayer => {
 };
 
 /**
- * How far the hemispheric fill leans off vertical, as a tangent.
+ * The engine's lights, from the rig's numbers.
  *
- * Far enough that a wall side-on to the sun and the wall opposite it are
- * plainly different colours; short enough that the floor is still the
- * brightest thing in the level and the sky is still overhead.
+ * Two lights only: a hemispheric fill for shape and one directional key for
+ * direction. The numbers — the key's line, the fill's lean across the sun,
+ * the colours — live in `lightRig.ts`, because the retro look bakes exactly
+ * the same rig into its vertices and the two have to agree.
  */
-const FILL_LEAN = 0.46;
-
 const buildLighting = (scene: Scene, map: MapDefinition): DirectionalLight => {
   const style = map.style;
+  const rig = lightRigFor(style);
 
-  const direction = new Vector3(
-    style.keyDirection.x,
-    style.keyDirection.y,
-    style.keyDirection.z,
-  ).normalize();
-
-  // Two lights only. A hemispheric fill for shape, one directional for
-  // direction. Its shadows are added below, on the one tier that can afford
-  // them.
-  //
-  // The fill leans off vertical, across the sun rather than with it. Upright
-  // with a sun this steep, three of the five ways a face can point come out
-  // at the same value: the wall the sun misses and both walls side-on to it
-  // all sit at the midpoint of the hemisphere, so a corner between two of
-  // them disappears. Leaning the fill across the sun gives those two side
-  // walls the sky and the ground respectively, which separates them from
-  // each other by a good part of the fill's whole range, and does it
-  // without taking anything off the two the sun has already sorted out.
-  const across = new Vector3(-direction.z, 0, direction.x);
-  if (across.lengthSquared() > 1e-6) across.normalize();
-  const fill = new HemisphericLight(
-    "fill",
-    new Vector3(across.x * FILL_LEAN, 1, across.z * FILL_LEAN),
-    scene,
-  );
+  const fill = new HemisphericLight("fill", new Vector3(...rig.fillAxis), scene);
   fill.intensity = style.fillIntensity;
   fill.diffuse = Color3.FromHexString(style.skyLight);
   // A warm bounce from the floor keeps undersides from going dead.
@@ -247,7 +235,7 @@ const buildLighting = (scene: Scene, map: MapDefinition): DirectionalLight => {
 
   // The key is angled well off vertical so that walls, not just floors,
   // catch it and the geometry reads in three dimensions.
-  const key = new DirectionalLight("key", direction, scene);
+  const key = new DirectionalLight("key", new Vector3(...rig.key), scene);
   key.intensity = style.keyIntensity;
   key.diffuse = Color3.FromHexString(style.keyLight);
   key.specular = new Color3(0.16, 0.16, 0.16);
@@ -258,8 +246,13 @@ const buildMap = (
   scene: Scene,
   map: MapDefinition,
   anisotropy: number,
+  look: Look,
 ): Mesh[] => {
-  const library = createMaterialLibrary(scene, map.style, map.textureSeed, anisotropy);
+  const library = createMaterialLibrary(scene, map.style, map.textureSeed, anisotropy, look);
+  // The retro look lights the level here, once, into its vertices, and its
+  // materials never look at a light again.
+  const rig = look === "retro" ? lightRigFor(map.style) : null;
+  const exposure = rig ? exposureFor(rig) : 1;
   // Bucketed by kind and tint together: a zone's coloured brushes still merge
   // with each other, so colour-coding costs one draw call per colour used
   // rather than one per brush.
@@ -268,6 +261,7 @@ const buildMap = (
   for (const [index, brush] of map.brushes.entries()) {
     const mesh = new Mesh(`brush_${index}`, scene);
     const geometry = brushGeometry(brush, TEXEL_METRES);
+    if (rig) bakeBrushLighting(geometry, brush, rig, exposure);
     const data = new VertexData();
     data.positions = geometry.positions;
     data.normals = geometry.normals;

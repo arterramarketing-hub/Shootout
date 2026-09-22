@@ -168,11 +168,13 @@ const placePart = (mesh: Mesh, part: Part): void => {
 export const createWeaponModels = (
   scene: Scene,
   layerMask: number,
+  /** No shine on anything: the retro look's weapon is matte like its world. */
+  matte = false,
 ): { models: Record<WeaponId, WeaponModel>; painter: FinishPainter } => {
   const materials = new Map<Tone, StandardMaterial>();
   for (const tone of TONE_KEYS) {
     const material = new StandardMaterial(`mat_vm_${tone}`, scene);
-    material.specularColor = new Color3(0.12, 0.12, 0.13);
+    material.specularColor = matte ? Color3.Black() : new Color3(0.12, 0.12, 0.13);
     material.specularPower = 48;
     materials.set(tone, material);
   }

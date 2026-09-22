@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Team } from "../src/sim/bots";
-import { buildSkin, type Loft } from "../src/view/loft";
+import { buildSkin, flatten, type Loft } from "../src/view/loft";
 import { BONES, soldierSkin } from "../src/view/soldier";
 
 /**
@@ -116,6 +116,58 @@ describe("loft", () => {
       boxyMax = Math.max(boxyMax, Math.hypot(boxy.positions[i], boxy.positions[i + 2]));
     }
     expect(boxyMax).toBeGreaterThan(0.1 * 1.3);
+  });
+});
+
+describe("flatten", () => {
+  const tube: Loft = {
+    colour: "#808080",
+    sides: 6,
+    rings: [
+      { at: { x: 0, y: 0, z: 0 }, across: 0.1, through: 0.1, round: 1, bone: 2, shade: 0.5 },
+      { at: { x: 0, y: 1, z: 0 }, across: 0.1, through: 0.1, round: 1, bone: 2, blendBone: 3, blend: 0.5 },
+    ],
+  };
+
+  it("gives every triangle its own three vertices", () => {
+    const flat = flatten(buildSkin([tube]));
+    expect(flat.positions.length / 3).toBe(flat.indices.length);
+    for (const [i, index] of flat.indices.entries()) expect(index).toBe(i);
+  });
+
+  it("points every face outward, one normal to a face", () => {
+    const flat = flatten(buildSkin([tube]));
+    for (let i = 0; i < flat.indices.length; i += 3) {
+      const n = [flat.normals[i * 3], flat.normals[i * 3 + 1], flat.normals[i * 3 + 2]];
+      for (let k = 1; k < 3; k += 1) {
+        expect(flat.normals[(i + k) * 3]).toBeCloseTo(n[0], 9);
+        expect(flat.normals[(i + k) * 3 + 1]).toBeCloseTo(n[1], 9);
+        expect(flat.normals[(i + k) * 3 + 2]).toBeCloseTo(n[2], 9);
+      }
+      expect(Math.hypot(n[0], n[1], n[2])).toBeCloseTo(1, 6);
+      // On the wall of a tube, outward is away from the axis: the face's
+      // centre and its normal point the same way from it.
+      const cx = (flat.positions[i * 3] + flat.positions[(i + 1) * 3] + flat.positions[(i + 2) * 3]) / 3;
+      const cz = (flat.positions[i * 3 + 2] + flat.positions[(i + 1) * 3 + 2] + flat.positions[(i + 2) * 3 + 2]) / 3;
+      if (Math.abs(n[1]) > 0.9) continue; // a cap
+      expect(cx * n[0] + cz * n[2]).toBeGreaterThan(0);
+    }
+  });
+
+  it("carries colours and bones across", () => {
+    const smooth = buildSkin([tube]);
+    const flat = flatten(smooth);
+    const seen = new Set<string>();
+    for (let v = 0; v < flat.positions.length / 3; v += 1) {
+      seen.add(`${flat.boneIndices[v * 4]}:${flat.boneWeights[v * 4].toFixed(2)}`);
+      const total = flat.boneWeights[v * 4] + flat.boneWeights[v * 4 + 1];
+      expect(total).toBeCloseTo(1, 6);
+    }
+    expect(seen).toContain("2:1.00");
+    expect(seen).toContain("2:0.50");
+    // The shade set on the first ring is still on its vertices.
+    const shades = new Set(flat.colors.filter((_, i) => i % 4 === 0).map((c) => c.toFixed(3)));
+    expect(shades.size).toBeGreaterThan(1);
   });
 });
 
@@ -253,6 +305,42 @@ describe("soldier", () => {
     expect(b.positions).toEqual(a.positions);
     expect(b.indices).toEqual(a.indices);
     expect(b.colors).not.toEqual(a.colors);
+  });
+
+  it("builds a low figure at a third of the full one's polygons, and flat", () => {
+    const full = soldierSkin("a", "full");
+    const low = soldierSkin("a", "low");
+    expect(low.indices.length / 3).toBeLessThan((full.indices.length / 3) * 0.4);
+    // Flat: every triangle owns its vertices.
+    expect(low.positions.length / 3).toBe(low.indices.length);
+  });
+
+  it("gives the low figure a bigger head and hands, and the same height", () => {
+    const width = (skin: ReturnType<typeof soldierSkin>, low: number, high: number): number => {
+      let wide = 0;
+      for (let v = 0; v < skin.positions.length / 3; v += 1) {
+        const y = skin.positions[v * 3 + 1];
+        if (y < low || y > high) continue;
+        wide = Math.max(wide, Math.abs(skin.positions[v * 3]));
+      }
+      return wide;
+    };
+    const full = soldierSkin("a", "full");
+    const low = soldierSkin("a", "low");
+    expect(width(low, 1.66, 1.72)).toBeGreaterThan(width(full, 1.66, 1.72) * 1.08);
+    const top = (skin: ReturnType<typeof soldierSkin>): number =>
+      Math.max(...skin.positions.filter((_, i) => i % 3 === 1));
+    expect(top(low)).toBeCloseTo(top(full), 2);
+  });
+
+  it("keeps the low figure's head on the head hitbox too", () => {
+    const points = vertices(soldierSkin("b", "low")).filter(
+      (p) => p[1] > HEAD_BOX.y[0] && p[1] < HEAD_BOX.y[1] && Math.abs(p[0]) < 0.095,
+    );
+    expect(points.length).toBeGreaterThan(20);
+    const centre = points.reduce((t, p) => t + p[1], 0) / points.length;
+    expect(centre).toBeGreaterThan(1.56);
+    expect(centre).toBeLessThan(1.7);
   });
 
   it("stays within a budget a phone can draw seven of", () => {

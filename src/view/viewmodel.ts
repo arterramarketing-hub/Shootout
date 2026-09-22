@@ -121,7 +121,6 @@ export class ViewmodelRig {
   private readonly rotation = new Vector3();
 
   constructor(scene: Scene, look: Look = "modern", fovDegrees = VIEWMODEL_FOV_DEGREES) {
-    void look;
     this.camera = new FreeCamera("viewmodel_camera", Vector3.Zero(), scene);
     this.camera.layerMask = VIEWMODEL_LAYER;
     // The near plane sits as far out as the weapon allows, because the
@@ -146,7 +145,7 @@ export class ViewmodelRig {
 
     this.holder = new TransformNode("viewmodel_holder", scene);
 
-    const built = createWeaponModels(scene, VIEWMODEL_LAYER);
+    const built = createWeaponModels(scene, VIEWMODEL_LAYER, look === "retro");
     this.models = built.models;
     this.painter = built.painter;
     for (const model of Object.values(this.models)) {

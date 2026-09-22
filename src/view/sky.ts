@@ -7,9 +7,11 @@ import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import type { Scene } from "@babylonjs/core/scene";
+import type { Look } from "../engine/look";
 import type { QualitySettings } from "../engine/quality";
 import type { MapStyle } from "../maps/types";
 import { createNoiseField } from "./noise";
+import { posterize } from "./retroBake";
 
 /**
  * The sky, painted at load like everything else.
@@ -113,10 +115,11 @@ const paintFaces = (
   style: MapStyle,
   seed: number,
   size: number,
+  clouds: boolean,
 ): ArrayBufferView[] => {
   const { horizon, zenith, ground, sun } = coloursFor(style);
   const [sx, sy, sz] = sunDirection(style);
-  const clouds = createNoiseField(seed ^ 0x1f83d9ab, CLOUD_SPAN);
+  const cloudField = createNoiseField(seed ^ 0x1f83d9ab, CLOUD_SPAN);
   const faces: ArrayBufferView[] = [];
 
   for (let face = 0; face < 6; face += 1) {
@@ -162,11 +165,11 @@ const paintFaces = (
         // Cloud, on a layer at a fixed height. Looking along the layer puts
         // far more of it in front of you than looking up through it does,
         // which is why cloud gathers into a band at the horizon by itself.
-        if (y > 0.015) {
+        if (clouds && y > 0.015) {
           const reach = Math.min(90, CLOUD_HEIGHT / y);
           const cu = x * reach * 26;
           const cv = z * reach * 26;
-          const shape = clouds.fbm(cu, cv, 3, 6);
+          const shape = cloudField.fbm(cu, cv, 3, 6);
           const body = smoothstep(0.52, 0.78, shape);
           // Thinned out where the layer runs away to the horizon, so it
           // fades into haze rather than turning to mush.
@@ -206,20 +209,26 @@ export const buildSky = (
   style: MapStyle,
   quality: QualitySettings,
   seed: number,
+  look: Look = "modern",
 ): Mesh | null => {
   if (!style.sky) return null;
 
-  const size = quality.tier === "high" ? 256 : 128;
-  const faces = paintFaces(style, seed, size);
+  // The retro sky is a gradient and a sun, at a size that blurs into bands
+  // when it is stretched over the screen. No cloud: a cloud at these texels
+  // is a smear, and the look never had one.
+  const retro = look === "retro";
+  const size = retro ? 32 : quality.tier === "high" ? 256 : 128;
+  const faces = paintFaces(style, seed, size, !retro);
+  if (retro) for (const face of faces) posterize(face as Uint8Array, 12);
   const texture = new RawCubeTexture(
     scene,
     faces,
     size,
     Constants.TEXTUREFORMAT_RGBA,
     Constants.TEXTURETYPE_UNSIGNED_BYTE,
-    true,
+    !retro,
     false,
-    Texture.TRILINEAR_SAMPLINGMODE,
+    retro ? Texture.BILINEAR_SAMPLINGMODE : Texture.TRILINEAR_SAMPLINGMODE,
   );
   texture.coordinatesMode = Texture.SKYBOX_MODE;
   texture.gammaSpace = true;

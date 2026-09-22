@@ -2,6 +2,7 @@ import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTextur
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import type { Scene } from "@babylonjs/core/scene";
 import { createNoiseField, type NoiseField } from "./noise";
+import { posterize } from "./retroBake";
 
 /**
  * Surface textures, drawn at load rather than downloaded.
@@ -654,8 +655,9 @@ export type TextureLevels = Record<SurfaceTextureId, { r: number; g: number; b: 
 /** The average colour of a painted texture, for normalising tints against. */
 const meanColour = (
   context: CanvasRenderingContext2D,
+  side = SIZE,
 ): { r: number; g: number; b: number } => {
-  const { data } = context.getImageData(0, 0, SIZE, SIZE);
+  const { data } = context.getImageData(0, 0, side, side);
   let r = 0;
   let g = 0;
   let b = 0;
@@ -674,29 +676,111 @@ const meanColour = (
   };
 };
 
+/**
+ * How a texture is finished for the retro look.
+ *
+ * The painters draw at full size either way; a period texture is the same
+ * painting shrunk to a few dozen texels and held to a few shades, and it
+ * keeps its identity through that. Brick stays brick.
+ */
+export interface TextureFinish {
+  /** Texels across one repeat. Below the painters' own size, it is shrunk. */
+  size: number;
+  /** Shades per channel to hold it to. */
+  posterize: number;
+}
+
+/**
+ * Shrink a painted surface onto a small canvas and hold it to a few shades.
+ *
+ * Averaged down rather than sampled, so the mortar of a brick wall survives
+ * as a lighter line rather than vanishing between texels, and quantised
+ * after, so what is left reads as painted rather than as a photograph
+ * shrunk.
+ */
+const finishSmall = (
+  painted: HTMLCanvasElement,
+  target: CanvasRenderingContext2D,
+  finish: TextureFinish,
+): void => {
+  target.imageSmoothingEnabled = true;
+  target.imageSmoothingQuality = "high";
+  target.drawImage(painted, 0, 0, finish.size, finish.size);
+  const image = target.getImageData(0, 0, finish.size, finish.size);
+  // The colour is pulled a good way towards the texture's own average before
+  // it is quantised. Shrunk, the painters' faint colour speckle averages to
+  // texels a shade off each other, and a few levels of quantising then snap
+  // those into patches of a different colour altogether: purple on grey
+  // concrete. The structure — mortar, seams, slots — is in the lightness and
+  // survives; what is taken out is the colour noise that never resolved.
+  const { data } = image;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    r += data[i];
+    g += data[i + 1];
+    b += data[i + 2];
+  }
+  const pixels = data.length / 4;
+  r /= pixels;
+  g /= pixels;
+  b /= pixels;
+  for (let i = 0; i < data.length; i += 4) {
+    // Keep the lightness of the texel, take most of its hue from the mean.
+    const lum = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    const meanLum = r * 0.299 + g * 0.587 + b * 0.114;
+    const lift = meanLum > 0 ? lum / meanLum : 1;
+    data[i] = data[i] * CHROMA_KEPT + r * lift * (1 - CHROMA_KEPT);
+    data[i + 1] = data[i + 1] * CHROMA_KEPT + g * lift * (1 - CHROMA_KEPT);
+    data[i + 2] = data[i + 2] * CHROMA_KEPT + b * lift * (1 - CHROMA_KEPT);
+  }
+  posterize(data, finish.posterize);
+  target.putImageData(image, 0, 0);
+};
+
+/** How much of a shrunk texel's own colour survives against the mean's. */
+const CHROMA_KEPT = 0.35;
+
 /** Draw every surface texture for one palette. */
 export const createTextures = (
   scene: Scene,
   palette: TexturePalette,
   seed = 1337,
   anisotropy = 1,
+  finish: TextureFinish | null = null,
 ): { textures: TextureSet; levels: TextureLevels } => {
   const set = {} as TextureSet;
   const levels = {} as TextureLevels;
   const mottle = createNoiseField(seed ^ 0x5bf03635, SIZE);
   const grime = createNoiseField(seed ^ 0x27d4eb2f, SIZE);
+  const small = finish !== null && finish.size < SIZE;
   let offset = 0;
   for (const [id, paint] of Object.entries(PAINTERS) as [SurfaceTextureId, Painter][]) {
+    const side = small ? finish.size : SIZE;
     const texture = new DynamicTexture(
       `tex_${id}`,
-      { width: SIZE, height: SIZE },
+      { width: side, height: side },
       scene,
       true,
+      small ? Texture.TRILINEAR_SAMPLINGMODE : undefined,
     );
     const context = texture.getContext() as unknown as CanvasRenderingContext2D;
-    paint(context, palette, makeRandom(seed + offset));
-    weather(context, mottle, grime, FINISHES[id]);
-    levels[id] = meanColour(context);
+    if (small) {
+      // Painted full size on a scratch canvas, then shrunk onto the texture's
+      // own. The scratch never reaches the GPU.
+      const scratch = document.createElement("canvas");
+      scratch.width = SIZE;
+      scratch.height = SIZE;
+      const big = scratch.getContext("2d") as CanvasRenderingContext2D;
+      paint(big, palette, makeRandom(seed + offset));
+      finishSmall(scratch, context, finish);
+      levels[id] = meanColour(context, side);
+    } else {
+      paint(context, palette, makeRandom(seed + offset));
+      weather(context, mottle, grime, FINISHES[id]);
+      levels[id] = meanColour(context);
+    }
     offset += 7919;
     texture.update();
     // Wrapping is what lets one small texture cover a forty metre floor.
