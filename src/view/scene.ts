@@ -61,10 +61,9 @@ export const createScene = (
 
   const key = buildLighting(scene, map);
   gradeImage(scene, map);
-  // Relief costs a second texture and a heavier shader on every surface, so
-  // it rides with the rest of the settings a strong machine gets.
-  const detailed = quality.tier === "high";
-  const staticMeshes = buildMap(scene, map, detailed ? 4 : 1, detailed);
+  // Anisotropy is close to free on a GPU and expensive without one, so it
+  // rides with the rest of the settings a strong machine gets.
+  const staticMeshes = buildMap(scene, map, quality.tier === "high" ? 4 : 1);
   buildSky(scene, style, quality, map.textureSeed);
 
   return { scene, staticMeshes, key };
@@ -253,9 +252,8 @@ const buildMap = (
   scene: Scene,
   map: MapDefinition,
   anisotropy: number,
-  relief: boolean,
 ): Mesh[] => {
-  const library = createMaterialLibrary(scene, map.style, map.textureSeed, anisotropy, relief);
+  const library = createMaterialLibrary(scene, map.style, map.textureSeed, anisotropy);
   // Bucketed by kind and tint together: a zone's coloured brushes still merge
   // with each other, so colour-coding costs one draw call per colour used
   // rather than one per brush.

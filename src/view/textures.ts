@@ -568,37 +568,34 @@ const PAINTERS: Record<SurfaceTextureId, Painter> = {
 };
 
 /**
- * How worn each surface is, and how much of that wear stands proud.
+ * How worn each surface is.
  *
  * The painters above lay down what a surface is made of. This is what has
- * happened to it since: weather at every scale, dirt where dirt collects,
- * and the relief that all of it casts once there is a light on it.
+ * happened to it since: weather at every scale, and dirt where dirt
+ * collects.
  */
 interface Finish {
   /** How deep the mottling cuts, as a fraction of the surface's colour. */
   wear: number;
   /** Cells of the broadest swell across one repeat: fewer is wider. */
   cells: number;
-  /** How much relief the normal map takes from the paint. Zero for none. */
-  relief: number;
 }
 
 const FINISHES: Record<SurfaceTextureId, Finish> = {
-  concrete: { wear: 0.16, cells: 3, relief: 1.1 },
-  panel: { wear: 0.1, cells: 4, relief: 1 },
-  crate: { wear: 0.12, cells: 3, relief: 0.9 },
-  metal: { wear: 0.13, cells: 4, relief: 0.7 },
-  grate: { wear: 0.06, cells: 4, relief: 1.4 },
-  hazard: { wear: 0.09, cells: 3, relief: 0.5 },
-  brick: { wear: 0.13, cells: 3, relief: 1.5 },
-  frame: { wear: 0.18, cells: 3, relief: 1 },
-  cladding: { wear: 0.1, cells: 5, relief: 1.2 },
-  spandrel: { wear: 0.16, cells: 3, relief: 0.8 },
-  asphalt: { wear: 0.15, cells: 3, relief: 1 },
-  rubble: { wear: 0.2, cells: 4, relief: 1.3 },
-  // Leaves are their own shape; relief on them reads as crumpled foil.
-  foliage: { wear: 0.18, cells: 6, relief: 0 },
-  graffiti: { wear: 0.1, cells: 3, relief: 0.4 },
+  concrete: { wear: 0.16, cells: 3 },
+  panel: { wear: 0.1, cells: 4 },
+  crate: { wear: 0.12, cells: 3 },
+  metal: { wear: 0.13, cells: 4 },
+  grate: { wear: 0.06, cells: 4 },
+  hazard: { wear: 0.09, cells: 3 },
+  brick: { wear: 0.13, cells: 3 },
+  frame: { wear: 0.18, cells: 3 },
+  cladding: { wear: 0.1, cells: 5 },
+  spandrel: { wear: 0.16, cells: 3 },
+  asphalt: { wear: 0.15, cells: 3 },
+  rubble: { wear: 0.2, cells: 4 },
+  foliage: { wear: 0.18, cells: 6 },
+  graffiti: { wear: 0.1, cells: 3 },
 };
 
 /**
@@ -633,102 +630,7 @@ const weather = (
   context.putImageData(image, 0, 0);
 };
 
-/**
- * Blur a field, wrapping at the edges so the result still tiles.
- *
- * Separable, and each axis carries a running total rather than adding up the
- * window again at every pixel: the cost is a few operations per pixel
- * instead of forty, which is the difference between this being free at load
- * and it being a pause on a phone.
- */
-const blurWrapped = (source: Float32Array, radius: number): Float32Array => {
-  const span = radius * 2 + 1;
-  const across = new Float32Array(SIZE * SIZE);
-  for (let y = 0; y < SIZE; y += 1) {
-    const row = y * SIZE;
-    let total = 0;
-    for (let k = -radius; k <= radius; k += 1) total += source[row + ((k + SIZE) % SIZE)];
-    for (let x = 0; x < SIZE; x += 1) {
-      across[row + x] = total / span;
-      total += source[row + ((x + 1 + radius) % SIZE)] - source[row + ((x - radius + SIZE) % SIZE)];
-    }
-  }
-  const done = new Float32Array(SIZE * SIZE);
-  for (let x = 0; x < SIZE; x += 1) {
-    let total = 0;
-    for (let k = -radius; k <= radius; k += 1) total += across[((k + SIZE) % SIZE) * SIZE + x];
-    for (let y = 0; y < SIZE; y += 1) {
-      done[y * SIZE + x] = total / span;
-      total +=
-        across[((y + 1 + radius) % SIZE) * SIZE + x] - across[((y - radius + SIZE) % SIZE) * SIZE + x];
-    }
-  }
-  return done;
-};
-
-/**
- * Turn a painted surface into the relief that goes with it.
- *
- * The paint is the only record of what the surface is shaped like, so the
- * relief is read back out of it: what is dark is taken to be low. That is
- * true of the things that matter — mortar courses, panel seams, the holes in
- * a grating, cracks in asphalt — and false of a stain, which is dark and
- * flat. So only the fine detail is kept: the paint is blurred and subtracted
- * first, which leaves the edges and throws away the blotches.
- */
-const reliefMap = (
-  scene: Scene,
-  id: SurfaceTextureId,
-  albedo: CanvasRenderingContext2D,
-  relief: number,
-  anisotropy: number,
-): Texture => {
-  const painted = albedo.getImageData(0, 0, SIZE, SIZE).data;
-  const height = new Float32Array(SIZE * SIZE);
-  for (let i = 0; i < SIZE * SIZE; i += 1) {
-    const p = i * 4;
-    height[i] = (painted[p] * 0.299 + painted[p + 1] * 0.587 + painted[p + 2] * 0.114) / 255;
-  }
-  const broad = blurWrapped(height, 9);
-  for (let i = 0; i < height.length; i += 1) height[i] -= broad[i];
-
-  const texture = new DynamicTexture(`nrm_${id}`, { width: SIZE, height: SIZE }, scene, true);
-  const context = texture.getContext() as unknown as CanvasRenderingContext2D;
-  const image = context.createImageData(SIZE, SIZE);
-  const data = image.data;
-  const at = (x: number, y: number): number =>
-    height[((y + SIZE) % SIZE) * SIZE + ((x + SIZE) % SIZE)];
-
-  for (let y = 0; y < SIZE; y += 1) {
-    for (let x = 0; x < SIZE; x += 1) {
-      // Sobel: the slope of the surface at this texel, in texture space.
-      const dx =
-        at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) -
-        (at(x - 1, y - 1) + 2 * at(x - 1, y) + at(x - 1, y + 1));
-      const dy =
-        at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) -
-        (at(x - 1, y - 1) + 2 * at(x, y - 1) + at(x + 1, y - 1));
-      const nx = -dx * relief * 7;
-      const ny = -dy * relief * 7;
-      const length = Math.hypot(nx, ny, 1);
-      const i = (y * SIZE + x) * 4;
-      data[i] = ((nx / length) * 0.5 + 0.5) * 255;
-      data[i + 1] = ((ny / length) * 0.5 + 0.5) * 255;
-      data[i + 2] = (1 / length) * 0.5 * 255 + 127.5;
-      data[i + 3] = 255;
-    }
-  }
-  context.putImageData(image, 0, 0);
-  texture.update();
-  texture.wrapU = Texture.WRAP_ADDRESSMODE;
-  texture.wrapV = Texture.WRAP_ADDRESSMODE;
-  texture.anisotropicFilteringLevel = anisotropy;
-  return texture;
-};
-
 export type TextureSet = Record<SurfaceTextureId, Texture>;
-/** The relief that goes with each surface, where it has any. */
-export type ReliefSet = Partial<Record<SurfaceTextureId, Texture>>;
 /**
  * What colour each surface averages out to, nought to one per channel.
  *
@@ -798,26 +700,4 @@ export const createTextures = (
     set[id] = texture;
   }
   return { textures: set, levels };
-};
-
-/**
- * The relief for a set of surfaces already painted.
- *
- * Kept apart from the paint because it costs a second texture and a heavier
- * shader per surface, which is worth it on a machine that can afford it and
- * is the first thing to drop on one that cannot.
- */
-export const createReliefMaps = (
-  scene: Scene,
-  textures: TextureSet,
-  anisotropy = 1,
-): ReliefSet => {
-  const set: ReliefSet = {};
-  for (const [id, texture] of Object.entries(textures) as [SurfaceTextureId, Texture][]) {
-    const { relief } = FINISHES[id];
-    if (relief <= 0) continue;
-    const context = (texture as DynamicTexture).getContext() as unknown as CanvasRenderingContext2D;
-    set[id] = reliefMap(scene, id, context, relief, anisotropy);
-  }
-  return set;
 };
