@@ -292,18 +292,33 @@ test("reloading refills the magazine from the reserve", async ({ page }) => {
 });
 
 test("aiming is a toggle: one tap raises the sights, the next drops them", async ({ page }) => {
-  // A phone has no spare thumb to hold an aim button down with, so the sights
-  // latch. Releasing the button must not drop them, which is the whole point.
+  /*
+   * A phone has no spare thumb to hold an aim button down with, so the
+   * sights latch. Releasing the button must not drop them, which is the
+   * whole point.
+   *
+   * Waited on rather than timed. The sights take a fixed amount of
+   * simulation time to come up, and how much wall clock that is depends on
+   * the frame rate of whatever is running the test: these render on a
+   * software rasteriser, and the simulation is capped at five steps a
+   * frame, so half a second of stopwatch can be a tenth of a second of
+   * game. That is what this test used to assert on, and it read as a
+   * broken toggle whenever the machine was busy.
+   */
   await bootGame(page);
-  await button(page, "btn-aim", true);
-  await button(page, "btn-aim", false);
-  await page.waitForTimeout(500);
-  expect((await readState(page)).weapon.ads).toBeGreaterThan(0.9);
-
-  await button(page, "btn-aim", true);
-  await button(page, "btn-aim", false);
-  await page.waitForTimeout(500);
-  expect((await readState(page)).weapon.ads).toBeLessThan(0.1);
+  const settle = async (up: boolean): Promise<void> => {
+    await button(page, "btn-aim", true);
+    await button(page, "btn-aim", false);
+    await page.waitForFunction(
+      (wantUp) => (wantUp ? window.__shootout.weapon.ads > 0.9 : window.__shootout.weapon.ads < 0.1),
+      up,
+      { timeout: 20_000 },
+    );
+  };
+  // Tapped once, the sights come up and stay up with nothing held down.
+  await settle(true);
+  // Tapped again, they drop.
+  await settle(false);
 });
 
 test("swapping cycles through the loadout", async ({ page }) => {
@@ -386,9 +401,20 @@ test("bots stand on the floor, not on the roof", async ({ page }) => {
   const bots = await page.evaluate(() => window.__shootout.bots);
   expect(bots.length).toBeGreaterThan(0);
   for (const bot of bots) {
-    // The mezzanine is the highest walkable surface, at about three metres.
+    /*
+     * Boulevard Works is three storeys with a bridge across the street at
+     * the second floor, and bots spawn and fight on all of them. What must
+     * not happen is a bot on the roof, which is where a navigation bake
+     * that sampled the wrong surface would put them.
+     *
+     * The bound used to be four metres, with a note about a mezzanine "at
+     * about three metres" — the highest walkable surface of a hall this
+     * level replaced two maps ago. It only kept passing because every
+     * spawn was on the ground and bots rarely climbed inside the window
+     * this test watches.
+     */
     expect(bot.position.y).toBeGreaterThanOrEqual(-0.5);
-    expect(bot.position.y).toBeLessThan(4);
+    expect(bot.position.y).toBeLessThan(9.6);
   }
 });
 
@@ -804,17 +830,29 @@ test.describe("the retro look", () => {
   });
 
   test("the modern look keeps its resolution", async ({ page }) => {
+    /*
+     * Whatever tier the machine is given: the modern look renders at the
+     * device's own ratio, so on a one-to-one screen the picture is the
+     * screen. That is the whole assertion, and it needs no particular tier.
+     *
+     * It used to ask for the high one, which was gratuitous and nearly cost
+     * the suite: high means a fifty per cent pixel ratio, antialiasing,
+     * shadow cascades and anisotropy, and on the software rasteriser these
+     * run on that is one and a third frames a second. The round's three
+     * second countdown then takes nearly thirty seconds of wall clock,
+     * because the simulation is capped at five steps a frame, and the boot
+     * helper's budget went on waiting for it.
+     */
     await page.addInitScript(() => {
       localStorage.setItem(
         "shootout.settings.v1",
-        JSON.stringify({ look: "modern", quality: "high", online: false, audioEnabled: false }),
+        JSON.stringify({ look: "modern", online: false, audioEnabled: false }),
       );
     });
     await bootGame(page);
     expect(await page.evaluate(() => window.__shootout.look)).toBe("modern");
     const cost = await page.evaluate(() => window.__shootout.frameCost);
     const viewport = page.viewportSize();
-    // At the high tier on a one-to-one screen the picture is the screen.
     expect(cost.height).toBeGreaterThanOrEqual(viewport!.height * 0.9);
   });
 });
