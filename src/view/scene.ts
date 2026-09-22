@@ -8,14 +8,15 @@ import { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascaded
 import { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
-import { Vector3, Vector4 } from "@babylonjs/core/Maths/math.vector";
+import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
-import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
+import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import { Scene } from "@babylonjs/core/scene";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import type { Camera } from "@babylonjs/core/Cameras/camera";
 import type { QualitySettings } from "../engine/quality";
-import type { BoxBrush, MapDefinition, SurfaceKind } from "../maps/types";
+import type { MapDefinition, SurfaceKind } from "../maps/types";
+import { brushGeometry } from "./brushGeometry";
 import { TEXEL_METRES, createMaterialLibrary } from "./materials";
 import { buildSky } from "./sky";
 
@@ -225,29 +226,6 @@ const buildLighting = (scene: Scene, map: MapDefinition): DirectionalLight => {
   return key;
 };
 
-/**
- * UV rectangles for one box, scaled by its real size.
- *
- * Without this every face maps the texture zero to one, so a forty metre floor
- * and a one metre crate get the same single tile and the level reads as
- * stretched plastic. Scaling by world size gives one texel density everywhere.
- */
-const faceUVs = (brush: BoxBrush): Vector4[] => {
-  const u = (metres: number) => Math.max(0.25, metres / TEXEL_METRES);
-  const width = u(brush.width);
-  const height = u(brush.height);
-  const depth = u(brush.depth);
-  // Babylon's face order: back, front, right, left, top, bottom.
-  return [
-    new Vector4(0, 0, width, height),
-    new Vector4(0, 0, width, height),
-    new Vector4(0, 0, depth, height),
-    new Vector4(0, 0, depth, height),
-    new Vector4(0, 0, width, depth),
-    new Vector4(0, 0, width, depth),
-  ];
-};
-
 const buildMap = (
   scene: Scene,
   map: MapDefinition,
@@ -260,17 +238,15 @@ const buildMap = (
   const buckets = new Map<string, { kind: SurfaceKind; tint?: string; meshes: Mesh[] }>();
 
   for (const [index, brush] of map.brushes.entries()) {
-    const mesh = MeshBuilder.CreateBox(
-      `brush_${index}`,
-      {
-        width: brush.width,
-        height: brush.height,
-        depth: brush.depth,
-        faceUV: faceUVs(brush),
-        wrap: true,
-      },
-      scene,
-    );
+    const mesh = new Mesh(`brush_${index}`, scene);
+    const geometry = brushGeometry(brush, TEXEL_METRES);
+    const data = new VertexData();
+    data.positions = geometry.positions;
+    data.normals = geometry.normals;
+    data.uvs = geometry.uvs;
+    data.colors = geometry.colors;
+    data.indices = geometry.indices;
+    data.applyToMesh(mesh);
     mesh.position.set(brush.x, brush.y, brush.z);
     mesh.rotation.set(brush.pitch ?? 0, brush.yaw ?? 0, 0);
     const key = `${brush.kind}|${brush.tint ?? ""}`;
