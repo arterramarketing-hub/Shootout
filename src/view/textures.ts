@@ -2,7 +2,7 @@ import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTextur
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import type { Scene } from "@babylonjs/core/scene";
 import { createNoiseField, type NoiseField } from "./noise";
-import { posterize } from "./retroBake";
+import { posterize, saturate } from "./retroBake";
 
 /**
  * Surface textures, drawn at load rather than downloaded.
@@ -686,8 +686,10 @@ const meanColour = (
 export interface TextureFinish {
   /** Texels across one repeat. Below the painters' own size, it is shrunk. */
   size: number;
-  /** Shades per channel to hold it to. */
+  /** Shades of lightness to hold it to. */
   posterize: number;
+  /** How much colour to push back in after the shrink; one leaves it alone. */
+  saturation: number;
 }
 
 /**
@@ -735,6 +737,8 @@ const finishSmall = (
     data[i + 1] = data[i + 1] * CHROMA_KEPT + g * lift * (1 - CHROMA_KEPT);
     data[i + 2] = data[i + 2] * CHROMA_KEPT + b * lift * (1 - CHROMA_KEPT);
   }
+  // The colour taken out above was noise; this puts back what was paint.
+  saturate(data, finish.saturation);
   posterize(data, finish.posterize);
   target.putImageData(image, 0, 0);
 };

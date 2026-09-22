@@ -14,7 +14,7 @@ import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import { Scene } from "@babylonjs/core/scene";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import type { Camera } from "@babylonjs/core/Cameras/camera";
-import type { Look } from "../engine/look";
+import { RETRO, type Look } from "../engine/look";
 import type { QualitySettings } from "../engine/quality";
 import type { MapDefinition, SurfaceKind } from "../maps/types";
 import { brushGeometry } from "./brushGeometry";
@@ -261,7 +261,7 @@ const buildMap = (
   for (const [index, brush] of map.brushes.entries()) {
     const mesh = new Mesh(`brush_${index}`, scene);
     const geometry = brushGeometry(brush, TEXEL_METRES);
-    if (rig) bakeBrushLighting(geometry, brush, rig, exposure);
+    if (rig) bakeBrushLighting(geometry, brush, rig, exposure, RETRO.saturation);
     const data = new VertexData();
     data.positions = geometry.positions;
     data.normals = geometry.normals;

@@ -113,6 +113,8 @@ export const bakeBrushLighting = (
   turn: { pitch?: number; yaw?: number },
   rig: LightRig,
   exposure: number,
+  /** How much colour to push back into the light; one leaves it alone. */
+  saturation = 1,
 ): void => {
   const pitch = turn.pitch ?? 0;
   const yaw = turn.yaw ?? 0;
@@ -125,7 +127,9 @@ export const bakeBrushLighting = (
       pitch,
       yaw,
     );
-    const light = lightAt(rig, nx, ny, nz);
+    // The era's light was coloured: a warm sun on one face and a cool sky
+    // on the next, more than the modern grade lets through.
+    const light = saturateRgb(lightAt(rig, nx, ny, nz), saturation);
     const i = v * 4;
     // Where the face sits between the darkest direction and the brightest,
     // held above the floor, then lifted the way the grade would have.
@@ -135,6 +139,38 @@ export const bakeBrushLighting = (
     geometry.colors[i + 1] = Math.min(1, geometry.colors[i + 1] * shade(light.g));
     geometry.colors[i + 2] = Math.min(1, geometry.colors[i + 2] * shade(light.b));
   }
+};
+
+/**
+ * Push a colour's channels apart from its own lightness, in place.
+ *
+ * A factor of one leaves it alone; above one is more colour, below one is
+ * less. Lightness is held, so a wall gets redder without getting brighter.
+ */
+export const saturate = (
+  data: Uint8ClampedArray | Uint8Array | number[],
+  factor: number,
+): void => {
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    for (let c = 0; c < 3; c += 1) {
+      data[i + c] = Math.max(0, Math.min(255, Math.round(lum + (data[i + c] - lum) * factor)));
+    }
+  }
+};
+
+/**
+ * The same, for one colour as a light: unbounded above, because a light sum
+ * runs well past one before it is exposed, and clipping it here would throw
+ * the sunlit floor away before the exposure ever saw it.
+ */
+export const saturateRgb = (
+  colour: { r: number; g: number; b: number },
+  factor: number,
+): { r: number; g: number; b: number } => {
+  const lum = colour.r * 0.299 + colour.g * 0.587 + colour.b * 0.114;
+  const push = (c: number): number => Math.max(0, lum + (c - lum) * factor);
+  return { r: push(colour.r), g: push(colour.g), b: push(colour.b) };
 };
 
 /**

@@ -89,6 +89,7 @@ const createRetroLibrary = (scene: Scene, style: MapStyle, seed: number): Materi
   const { textures, levels } = createTextures(scene, style, seed, 1, {
     size: RETRO.textureSize,
     posterize: RETRO.posterize,
+    saturation: RETRO.saturation,
   });
   const variants = new Map<string, Material>();
   return {

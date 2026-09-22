@@ -40,8 +40,18 @@ export const RETRO = {
   viewDistance: 150,
   /** Texels across one repeat of a surface texture. */
   textureSize: 32,
-  /** Shades per channel a texture is quantised to. */
+  /** Shades of lightness a texture is quantised to. */
   posterize: 6,
+  /**
+   * How much colour is pushed back into the picture.
+   *
+   * The modern grade washed the level out on purpose, so that two coloured
+   * figures would read against it. The era this look is after did the
+   * opposite: bold, warm, painterly colour everywhere, and the figures
+   * read by being bolder still. The textures and the baked light both take
+   * this, so a brick wall in the sun is a red wall and not a brownish one.
+   */
+  saturation: 1.3,
 } as const;
 
 /**

@@ -213,13 +213,14 @@ export const buildSky = (
 ): Mesh | null => {
   if (!style.sky) return null;
 
-  // The retro sky is a gradient and a sun, at a size that blurs into bands
-  // when it is stretched over the screen. No cloud: a cloud at these texels
-  // is a smear, and the look never had one.
+  // The retro sky is a gradient, a sun and big soft clouds, at a size that
+  // blurs into bands when it is stretched over the screen. Sixty-four
+  // texels: enough for a cloud to be a shape rather than a smear, and the
+  // skies of the era were mostly cloud shapes on a gradient.
   const retro = look === "retro";
-  const size = retro ? 32 : quality.tier === "high" ? 256 : 128;
-  const faces = paintFaces(style, seed, size, !retro);
-  if (retro) for (const face of faces) posterize(face as Uint8Array, 12);
+  const size = retro ? 64 : quality.tier === "high" ? 256 : 128;
+  const faces = paintFaces(style, seed, size, true);
+  if (retro) for (const face of faces) posterize(face as Uint8Array, 14);
   const texture = new RawCubeTexture(
     scene,
     faces,
