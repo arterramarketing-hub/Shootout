@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { HEALTH, applyDamage, createHealth, revive, stepHealth } from "../src/sim/health";
-import { TARGET, createTarget, damageTarget, stepTarget } from "../src/sim/targets";
 
 describe("health", () => {
   it("starts full and alive", () => {
@@ -80,76 +79,5 @@ describe("health", () => {
     revive(health);
     expect(health.current).toBe(HEALTH.max);
     expect(health.dead).toBe(false);
-  });
-});
-
-describe("targets", () => {
-  it("starts upright at full health", () => {
-    const target = createTarget("t1");
-    expect(target.down).toBe(false);
-    expect(target.health).toBe(TARGET.health);
-    expect(target.knockdown).toBe(0);
-  });
-
-  it("takes damage without going down", () => {
-    const target = createTarget("t1");
-    expect(damageTarget(target, 40, false)).toBe(false);
-    expect(target.health).toBe(60);
-    expect(target.flash).toBe(1);
-  });
-
-  it("goes down when its health runs out", () => {
-    const target = createTarget("t1");
-    expect(damageTarget(target, 150, false)).toBe(true);
-    expect(target.down).toBe(true);
-    expect(target.justDropped).toBe(true);
-    expect(target.health).toBe(0);
-  });
-
-  it("ignores further hits while down", () => {
-    const target = createTarget("t1");
-    damageTarget(target, 150, false);
-    expect(damageTarget(target, 50, false)).toBe(false);
-  });
-
-  it("remembers whether the last hit was a headshot", () => {
-    const target = createTarget("t1");
-    damageTarget(target, 150, true);
-    expect(target.lastHitHeadshot).toBe(true);
-  });
-
-  it("folds flat, waits, then stands back up at full health", () => {
-    const target = createTarget("t1");
-    damageTarget(target, 150, false);
-    stepTarget(target, TARGET.knockdownTime);
-    expect(target.knockdown).toBeCloseTo(1, 5);
-    expect(target.down).toBe(true);
-
-    stepTarget(target, TARGET.resetDelay);
-    expect(target.down).toBe(false);
-    expect(target.health).toBe(TARGET.health);
-
-    stepTarget(target, TARGET.resetTime);
-    expect(target.knockdown).toBeCloseTo(0, 5);
-  });
-
-  it("clears the justDropped flag after one step", () => {
-    const target = createTarget("t1");
-    damageTarget(target, 150, false);
-    stepTarget(target, 0.016);
-    expect(target.justDropped).toBe(false);
-  });
-
-  it("fades the hit flash out", () => {
-    const target = createTarget("t1");
-    damageTarget(target, 10, false);
-    stepTarget(target, TARGET.flashTime);
-    expect(target.flash).toBeCloseTo(0, 5);
-  });
-
-  it("ignores zero and negative damage", () => {
-    const target = createTarget("t1");
-    expect(damageTarget(target, 0, false)).toBe(false);
-    expect(target.health).toBe(TARGET.health);
   });
 });

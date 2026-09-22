@@ -1,3 +1,4 @@
+import { damageAllowed } from "../src/sim/match";
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MATCH,
@@ -157,5 +158,22 @@ describe("kill feed", () => {
   it("reads as a sentence", () => {
     expect(describeKill(kill())).toBe("Mercer killed Odom");
     expect(describeKill(kill({ headshot: true }))).toBe("Mercer headshot Odom");
+  });
+});
+
+describe("friendly fire", () => {
+  it("is on by default", () => {
+    expect(DEFAULT_MATCH.friendlyFire).toBe(true);
+  });
+
+  it("lets a round hurt a team-mate when it is on", () => {
+    expect(damageAllowed(true, "a", "a")).toBe(true);
+    expect(damageAllowed(true, "a", "b")).toBe(true);
+  });
+
+  it("spares a team-mate, and only a team-mate, when it is off", () => {
+    expect(damageAllowed(false, "a", "a")).toBe(false);
+    expect(damageAllowed(false, "b", "b")).toBe(false);
+    expect(damageAllowed(false, "a", "b")).toBe(true);
   });
 });

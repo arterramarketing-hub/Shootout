@@ -1,7 +1,7 @@
 import { createRandom } from "../sim/random";
 import { mergeBrushes } from "./merge";
 import { buildOutskirts } from "./outskirts";
-import type { BoxBrush, MapDefinition, MapStyle, SpawnPoint, TargetPlacement } from "./types";
+import type { BoxBrush, MapDefinition, MapStyle, SpawnPoint } from "./types";
 
 /**
  * Boulevard Works: a derelict reinforced-concrete auto plant, in daylight.
@@ -750,27 +750,83 @@ for (const brush of buildOutskirts({
 }
 
 /* ------------------------------------------------------------------ *
- * Spawns and targets.
+ * Spawns.
  * ------------------------------------------------------------------ */
 
-const spawns: SpawnPoint[] = [
-  { team: "a", x: -28.5, z: -15, yaw: 0.35 },
-  { team: "a", x: -28.5, z: -11, yaw: 0.2 },
-  { team: "a", x: -26, z: -18.5, yaw: 0.5 },
-  { team: "a", x: -29, z: -7, yaw: 0.1 },
-  { team: "b", x: 29, z: 14, yaw: -2.9 },
-  { team: "b", x: 29, z: 10, yaw: -3.0 },
-  { team: "b", x: 28, z: 18.5, yaw: -2.7 },
-  { team: "b", x: 29.5, z: 6, yaw: 3.1 },
-];
+/**
+ * Where a side arrives, spread through its own wing on every floor.
+ *
+ * There used to be four points a side, in a row along the far wall of each
+ * wing at ground level. Every respawn put a player in the same corner, so
+ * the corner was where the other side waited, and the walk out of it was
+ * the same walk every time. These run the depth of each wing, on the ground,
+ * the first floor and the bridge level, so the picker — which takes the
+ * free point furthest from the enemy — has somewhere to put a player that
+ * is out of the fight they just lost and a different way back into it.
+ *
+ * Every point stands on navigable ground at its own height; the map tests
+ * bake the grid and check. Points face the middle of the level, which is
+ * where the fight is.
+ */
+const facing = (x: number, z: number): number => Math.atan2(-x, -z);
+const point = (team: "a" | "b", x: number, z: number, y = L0): SpawnPoint => ({
+  team,
+  x,
+  z,
+  y,
+  yaw: facing(x, z),
+});
 
-const targets: TargetPlacement[] = [
-  { id: "t_court_a", x: 19, z: 1.5, y: 0, yaw: -Math.PI * 0.5 },
-  { id: "t_court_b", x: 24, z: -3, y: 0, yaw: -Math.PI * 0.6 },
-  { id: "t_street_a", x: 2, z: 10, y: 0, yaw: Math.PI },
-  { id: "t_street_b", x: -2.5, z: -19, y: 0, yaw: 0 },
-  { id: "t_high_a", x: 11, z: 9, y: L1, yaw: -Math.PI * 0.5 },
-  { id: "t_high_b", x: -11, z: -16, y: L1, yaw: Math.PI * 0.5 },
+const spawns: SpawnPoint[] = [
+  // Blue: the west wing.
+  point("a", -29, -15),
+  point("a", -29, -7),
+  point("a", -29, 3),
+  point("a", -29, 9),
+  point("a", -29, 21),
+  point("a", -26, -18.5),
+  point("a", -23, 21),
+  point("a", -23, -3),
+  point("a", -17, 3),
+  point("a", -17, 9),
+  point("a", -29, -15, L1),
+  point("a", -29, -3, L1),
+  point("a", -29, 9, L1),
+  point("a", -29, 21, L1),
+  point("a", -23, 15, L1),
+  point("a", -23, 3, L1),
+  point("a", -23, -9, L1),
+  point("a", -17, -15, L1),
+  point("a", -17, 15, L1),
+  point("a", -11, -3, L1),
+  point("a", -11, 9, L1),
+  point("a", -11, 3, L2),
+  // Rust: the east wing, the returns and the rear.
+  point("b", 29, 14),
+  point("b", 29, 10),
+  point("b", 28, 18.5),
+  point("b", 29.5, 6),
+  point("b", 29, -3),
+  point("b", 29, -9),
+  point("b", 29, -15),
+  point("b", 29, -21),
+  point("b", 23, -21),
+  point("b", 23, 21),
+  point("b", 17, -15),
+  point("b", 17, 15),
+  point("b", 29, 15, L1),
+  point("b", 29, 3, L1),
+  point("b", 29, -9, L1),
+  point("b", 29, -21, L1),
+  point("b", 23, 15, L1),
+  point("b", 23, 21, L1),
+  point("b", 23, -15, L1),
+  point("b", 23, -21, L1),
+  point("b", 17, 15, L1),
+  point("b", 17, -15, L1),
+  point("b", 11, -3, L1),
+  point("b", 11, 9, L1),
+  point("b", 11, -9, L2),
 ];
 
 /**
@@ -869,5 +925,4 @@ export const boulevardMap: MapDefinition = {
     maxLayers: 5,
   },
   spawns,
-  targets,
 };

@@ -823,11 +823,6 @@ export class GameAudio {
     this.chirp(1700, 1150, 0.06, 0.3, "triangle");
   }
 
-  /** A plate going over. */
-  targetDrop(): void {
-    this.tick(420, 0.26, 0.34, "lowpass");
-  }
-
   /* ------------------------------------------------------------------ *
    * The three ways a sound gets made.
    * ------------------------------------------------------------------ */

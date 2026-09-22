@@ -14,6 +14,23 @@ const points: SpawnOption[] = [
 ];
 
 describe("pickSpawn", () => {
+  it("arrives on the floor the point stands on", () => {
+    const upstairs: SpawnOption[] = [{ x: 0, z: 0, y: 4.3, yaw: 0 }];
+    expect(pickSpawn(upstairs, [], []).y).toBe(4.3);
+    expect(pickSpawn(points, [], []).y).toBe(0);
+  });
+
+  it("asks about open ground on the point's own floor", () => {
+    const upstairs: SpawnOption[] = [{ x: 0, z: 0, y: 4.3, yaw: 0 }];
+    const asked: number[] = [];
+    pickSpawn(upstairs, [{ x: 0, z: 0 }], [], (_x, _z, y) => {
+      asked.push(y);
+      return true;
+    });
+    expect(asked.length).toBeGreaterThan(0);
+    for (const y of asked) expect(y).toBe(4.3);
+  });
+
   it("takes a free point over one someone is standing on", () => {
     const choice = pickSpawn(points, [{ x: 0, z: 0 }], []);
     expect(choice.x).not.toBe(0);

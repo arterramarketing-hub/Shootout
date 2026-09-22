@@ -17,7 +17,6 @@ interface GameState {
   };
   health: number;
   speed: number;
-  targets: { id: string; health: number; down: boolean; x: number; z: number; yaw: number }[];
 }
 
 /** The development handle the game exposes on `window`. */
@@ -110,7 +109,6 @@ const readState = (page: Page): Promise<GameState> =>
     weapon: { ...window.__shootout.weapon },
     health: window.__shootout.health,
     speed: window.__shootout.speed,
-    targets: window.__shootout.targets.map((t) => ({ ...t })),
   }));
 
 /** Press or release an on-screen button by id. */
@@ -257,8 +255,6 @@ test("starts with a full rifle magazine and full health", async ({ page }) => {
   expect(state.weapon.id).toBe("ar");
   expect(state.weapon.magazine).toBe(30);
   expect(state.health).toBe(100);
-  expect(state.targets).toHaveLength(6);
-  expect(state.targets.every((target) => !target.down)).toBe(true);
 });
 
 test("holding fire spends ammunition", async ({ page }) => {
@@ -331,46 +327,6 @@ test("swapping cycles through the loadout", async ({ page }) => {
     seen.push((await readState(page)).weapon.id);
   }
   expect(seen).toEqual(["ar", "smg", "shotgun", "pistol"]);
-});
-
-test("shooting a practice target knocks it down", async ({ page }) => {
-  await bootGame(page);
-  // Stand square on to a plate, wherever the level happens to put it. The
-  // test used to name a plate and the coordinates to shoot it from, which
-  // made it a test of one level rather than of shooting.
-  const plateId = await page.evaluate(() => {
-    const plate = window.__shootout.targets[0];
-    // A plate faces along its own yaw, so standing that way from it and
-    // looking back is square on to it whichever way it was placed.
-    const distance = 6;
-    window.__shootout.teleport(
-      plate.x + Math.sin(plate.yaw) * distance,
-      plate.z + Math.cos(plate.yaw) * distance,
-      plate.yaw + Math.PI,
-    );
-    return plate.id;
-  });
-  await page.waitForTimeout(700);
-
-  await button(page, "btn-aim", true);
-  await page.waitForTimeout(500);
-  await button(page, "btn-fire", true);
-  // Held until the plate goes down rather than for a fixed burst: how many
-  // rounds leave the weapon in a second is a property of the frame rate on a
-  // software rasteriser.
-  await page
-    .waitForFunction(
-      (id) => window.__shootout.targets.find((t) => t.id === id)?.down === true,
-      plateId,
-      { timeout: 20_000 },
-    )
-    .finally(async () => {
-      await button(page, "btn-fire", false);
-      await button(page, "btn-aim", false);
-    });
-
-  const state = await readState(page);
-  expect(state.targets.find((target) => target.id === plateId)?.down).toBe(true);
 });
 
 test("the weapon viewmodel is on screen", async ({ page }) => {
@@ -810,7 +766,7 @@ test.describe("the retro look", () => {
     expect(await page.evaluate(() => window.__shootout.settings.look)).toBe("retro");
   });
 
-  test("it renders a few hundred lines, in whole pixels, at a fraction of the triangles", async ({
+  test("it renders a few hundred lines, softly stretched, at a fraction of the triangles", async ({
     page,
   }) => {
     const errors: string[] = [];
@@ -830,10 +786,10 @@ test.describe("the retro look", () => {
     // A fixed few hundred lines however tall the screen, stretched up.
     expect(cost.height).toBeLessThanOrEqual(300);
     expect(cost.height).toBeLessThan(viewport!.height);
-    // Whole pixels, not a blur: the canvas asks the browser for that.
+    // Stretched softly, the way a television showed it, not as hard squares.
     expect(
       await page.evaluate(() => getComputedStyle(document.getElementById("view")!).imageRendering),
-    ).toBe("pixelated");
+    ).not.toBe("pixelated");
     // No shadow passes and a shorter view: well under half the modern
     // look's triangles at the same spot.
     expect(cost.triangles).toBeLessThan(130_000);
@@ -847,7 +803,7 @@ test.describe("the retro look", () => {
     expect(errors).toEqual([]);
   });
 
-  test("the modern look keeps its resolution and casts shadows", async ({ page }) => {
+  test("the modern look keeps its resolution", async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.setItem(
         "shootout.settings.v1",
@@ -860,8 +816,5 @@ test.describe("the retro look", () => {
     const viewport = page.viewportSize();
     // At the high tier on a one-to-one screen the picture is the screen.
     expect(cost.height).toBeGreaterThanOrEqual(viewport!.height * 0.9);
-    expect(
-      await page.evaluate(() => getComputedStyle(document.getElementById("view")!).imageRendering),
-    ).not.toBe("pixelated");
   });
 });

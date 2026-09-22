@@ -17,13 +17,23 @@ import { vec3 } from "../src/sim/vec3";
  * rooms. The capsule is the only thing that answers the question the player
  * is actually asking.
  */
-const capsuleReach = (map: MapDefinition, from: { x: number; z: number }): number => {
+const capsuleReach = (
+  map: MapDefinition,
+  from: { x: number; z: number; y?: number },
+): number => {
   const world = new BrushWorld(map.brushes);
   const step = 0.5;
   const limit = map.size / 2 + 2;
   const key = (x: number, z: number) => `${Math.round(x / step)}:${Math.round(z / step)}`;
 
-  const start = { x: Math.round(from.x / step) * step, z: Math.round(from.z / step) * step };
+  // The walk starts on the floor the spawn stands on. Each step carries the
+  // height it reached, so a walk that goes up a ramp keeps climbing rather
+  // than being dropped back to the ground at every cell.
+  const start = {
+    x: Math.round(from.x / step) * step,
+    z: Math.round(from.z / step) * step,
+    y: from.y ?? 0,
+  };
   const seen = new Set<string>([key(start.x, start.z)]);
   const stack = [start];
 
@@ -35,12 +45,12 @@ const capsuleReach = (map: MapDefinition, from: { x: number; z: number }): numbe
       [0, step],
       [0, -step],
     ]) {
-      const target = { x: at.x + dx, z: at.z + dz };
+      const target = { x: at.x + dx, z: at.z + dz, y: at.y };
       if (Math.abs(target.x) > limit || Math.abs(target.z) > limit) continue;
       if (seen.has(key(target.x, target.z))) continue;
 
       const body = world.createController(STANCE.radius, STANCE.standHeight / 2);
-      body.setPosition(vec3(at.x, STANCE.standHeight / 2 + 0.05, at.z));
+      body.setPosition(vec3(at.x, at.y + STANCE.standHeight / 2 + 0.05, at.z));
       // Settle onto the ground before trying to walk anywhere.
       for (let i = 0; i < 6; i += 1) body.move(vec3(0, -0.2, 0));
       const before = body.getPosition();
@@ -51,6 +61,7 @@ const capsuleReach = (map: MapDefinition, from: { x: number; z: number }): numbe
       if (Math.abs(after.x - target.x) > step * 0.6) continue;
       if (Math.abs(after.z - target.z) > step * 0.6) continue;
 
+      target.y = after.y - STANCE.standHeight / 2;
       seen.add(key(target.x, target.z));
       stack.push(target);
     }
@@ -65,26 +76,29 @@ describe.each(MAP_IDS)("%s is not a trap", (id) => {
   // standing on a desk.
   const floor = 2500;
 
-  it("lets a player walk out of every spawn", () => {
+  // Nearly fifty spawns, each a flood fill with the real capsule: this is
+  // the slow test in the suite and it is allowed to be.
+  it("lets a player walk out of every spawn", { timeout: 120_000 }, () => {
     for (const spawn of map.spawns) {
       const reached = capsuleReach(map, spawn);
       expect(
         reached,
-        `spawn ${spawn.team} at (${spawn.x}, ${spawn.z}) reaches only ${reached} cells`,
+        `spawn ${spawn.team} at (${spawn.x}, ${spawn.z}, ${spawn.y ?? 0}) reaches only ${reached} cells`,
       ).toBeGreaterThan(floor);
     }
   });
 
-  it("puts every spawn on the ground, not on the furniture", () => {
+  it("puts every spawn on its own floor, not on the furniture", () => {
     const world = new BrushWorld(map.brushes);
     for (const spawn of map.spawns) {
+      const floorY = spawn.y ?? 0;
       const body = world.createController(STANCE.radius, STANCE.standHeight / 2);
-      body.setPosition(vec3(spawn.x, 4, spawn.z));
+      body.setPosition(vec3(spawn.x, floorY + 3, spawn.z));
       for (let i = 0; i < 60; i += 1) body.move(vec3(0, -0.1, 0));
       const feet = body.getPosition().y - STANCE.standHeight / 2;
       expect(
-        feet,
-        `spawn ${spawn.team} at (${spawn.x}, ${spawn.z}) lands ${feet.toFixed(2)}m up`,
+        Math.abs(feet - floorY),
+        `spawn ${spawn.team} at (${spawn.x}, ${spawn.z}) lands ${feet.toFixed(2)}m up, floor at ${floorY}`,
       ).toBeLessThan(0.4);
     }
   });
@@ -118,7 +132,7 @@ describe.each(MAP_IDS)("%s is not a trap", (id) => {
     expect(largest / grid.nodes.length).toBeGreaterThan(0.97);
 
     for (const spawn of map.spawns) {
-      const node = nearestNode(grid, vec3(spawn.x, 0.1, spawn.z), 6);
+      const node = nearestNode(grid, vec3(spawn.x, (spawn.y ?? 0) + 0.1, spawn.z), 6);
       expect(node, `spawn ${spawn.team} has no navigable ground`).not.toBeNull();
       expect(sizes[component[node!.index]]).toBe(largest);
     }

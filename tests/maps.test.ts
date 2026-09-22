@@ -26,11 +26,30 @@ describe("map registry", () => {
 describe.each(MAP_IDS)("%s", (id) => {
   const map = MAPS[id];
 
-  it("has geometry, spawns for both sides, and something to shoot", () => {
+  it("has geometry and spawns for both sides", () => {
     expect(map.brushes.length).toBeGreaterThan(10);
     expect(map.spawns.some((spawn) => spawn.team === "a")).toBe(true);
     expect(map.spawns.some((spawn) => spawn.team === "b")).toBe(true);
-    expect(map.targets.length).toBeGreaterThan(0);
+  });
+
+  it("spreads each side's spawns through its wing, on more than one floor", () => {
+    // A side that always arrives in one corner is a side that is always
+    // waited for in that corner.
+    for (const team of ["a", "b"] as const) {
+      const points = map.spawns.filter((spawn) => spawn.team === team);
+      expect(points.length).toBeGreaterThanOrEqual(12);
+      const floors = new Set(points.map((spawn) => Math.round((spawn.y ?? 0) * 10)));
+      expect(floors.size).toBeGreaterThanOrEqual(2);
+      const zs = points.map((spawn) => spawn.z);
+      expect(Math.max(...zs) - Math.min(...zs)).toBeGreaterThan(30);
+    }
+  });
+
+  it("keeps each side's spawns on its own side of the street", () => {
+    for (const spawn of map.spawns) {
+      if (spawn.team === "a") expect(spawn.x).toBeLessThan(-8);
+      else expect(spawn.x).toBeGreaterThan(8);
+    }
   });
 
   it("names itself and says what it plays like", () => {
@@ -54,11 +73,6 @@ describe.each(MAP_IDS)("%s", (id) => {
     }
   });
 
-  it("gives every target a distinct identifier", () => {
-    const ids = map.targets.map((target) => target.id);
-    expect(new Set(ids).size).toBe(ids.length);
-  });
-
   it("carries a complete style, with real colours", () => {
     const style = map.style;
     for (const key of ["concrete", "panel", "crate", "metal", "grate", "hazard", "fog"] as const) {
@@ -73,22 +87,28 @@ describe.each(MAP_IDS)("%s", (id) => {
     const result = bakeNavGrid(world, map.nav);
     expect(result.grid.nodes.length).toBeGreaterThan(800);
 
-    // Every spawn must stand on navigable ground, or bots start stranded.
+    // Every spawn must stand on navigable ground at its own height, or a
+    // bot starts stranded and a player starts inside a slab.
     for (const spawn of map.spawns) {
-      const node = nearestNode(result.grid, vec3(spawn.x, 0.1, spawn.z), 4);
-      expect(node).not.toBeNull();
+      const y = spawn.y ?? 0;
+      const node = nearestNode(result.grid, vec3(spawn.x, y + 0.1, spawn.z), 1);
+      expect(node, `spawn at ${spawn.x}, ${spawn.z}, ${y}`).not.toBeNull();
+      expect(Math.abs(node!.y - y), `spawn at ${spawn.x}, ${spawn.z}, ${y}`).toBeLessThan(0.6);
     }
 
-    // And the two sides must be able to reach each other.
-    const blue = map.spawns.find((spawn) => spawn.team === "a")!;
+    // And every spawn must be able to reach the other side.
     const rust = map.spawns.find((spawn) => spawn.team === "b")!;
-    const path = findPathBetween(
-      result.grid,
-      vec3(blue.x, 0.1, blue.z),
-      vec3(rust.x, 0.1, rust.z),
-    );
-    expect(path).not.toBeNull();
-    expect(path!.length).toBeGreaterThan(5);
+    const blue = map.spawns.find((spawn) => spawn.team === "a")!;
+    for (const spawn of map.spawns) {
+      const foe = spawn.team === "a" ? rust : blue;
+      const path = findPathBetween(
+        result.grid,
+        vec3(spawn.x, (spawn.y ?? 0) + 0.1, spawn.z),
+        vec3(foe.x, (foe.y ?? 0) + 0.1, foe.z),
+      );
+      expect(path, `spawn at ${spawn.x}, ${spawn.z}, ${spawn.y ?? 0}`).not.toBeNull();
+      expect(path!.length).toBeGreaterThan(5);
+    }
   });
 
   it("encloses the player, so nobody walks off the edge", () => {

@@ -39,6 +39,7 @@ import { createRandom } from "../src/sim/random";
 import { emptyInput, type InputFrame, type PlayerState } from "../src/sim/types";
 import { copy, lengthXZ, vec3, type Vec3 } from "../src/sim/vec3";
 import { DEFAULT_LOADOUT } from "../src/sim/weapons";
+import { damageAllowed } from "../src/sim/match";
 import { PositionHistory, rewindMillis } from "../src/net/history";
 import {
   INTERPOLATION_DELAY_MS,
@@ -63,6 +64,8 @@ import {
 
 const PORT = Number(process.env.PORT ?? 8080);
 const MODE: GameMode = process.env.MODE === "ffa" ? "ffa" : "tdm";
+/** Rounds hurt team-mates unless the server is started with FRIENDLY_FIRE=off. */
+const FRIENDLY_FIRE = process.env.FRIENDLY_FIRE !== "off";
 const TEAM_SIZE = Math.max(1, Math.min(5, Number(process.env.TEAM_SIZE ?? 5)));
 const DIFFICULTY = (process.env.DIFFICULTY ?? "regular") as keyof typeof DIFFICULTIES;
 const ROUND_SECONDS = Number(process.env.ROUND_SECONDS ?? 360);
@@ -209,10 +212,10 @@ const chooseSpawn = (team: Team, self: string): { position: Vec3; yaw: number } 
     others
       .filter((entry) => isEnemy({ id: self, team }, entry))
       .map((entry) => ({ x: entry.centre.x, z: entry.centre.z })),
-    (x, z) => nearestNode(nav.grid, vec3(x, 0.05, z), 1) !== null,
+    (x, z, y) => nearestNode(nav.grid, vec3(x, y + 0.05, z), 1) !== null,
   );
   return {
-    position: vec3(choice.x, STANCE.standHeight / 2 + 0.05, choice.z),
+    position: vec3(choice.x, choice.y + STANCE.standHeight / 2 + 0.05, choice.z),
     yaw: choice.yaw,
   };
 };
@@ -246,7 +249,7 @@ const balanceRoster = (): void => {
         CALLSIGNS[bots.length % CALLSIGNS.length],
         team,
         DIFFICULTIES[DIFFICULTY] ?? DIFFICULTIES.regular,
-        vec3(point.position.x, 0.05, point.position.z),
+        vec3(point.position.x, point.position.y - STANCE.standHeight / 2, point.position.z),
         point.yaw,
         bots.length % 3 === 0 ? ["smg", "pistol"] : ["ar", "pistol"],
       );
@@ -302,6 +305,13 @@ const applyResolvedDamage = (
   attackerOrigin: Vec3,
 ): void => {
   for (const entry of resolution.damage) {
+    // Free-for-all has no team-mates to spare; team deathmatch spares them
+    // only when the server was told to.
+    if (MODE === "tdm") {
+      const attacker = displayName(attackerId).team;
+      const victim = displayName(entry.targetId).team;
+      if (!damageAllowed(FRIENDLY_FIRE, attacker, victim)) continue;
+    }
     const victimHuman = humans.get(entry.targetId);
     if (victimHuman) {
       if (victimHuman.health.dead) continue;
@@ -424,7 +434,7 @@ const startRound = (): void => {
   }
   for (const bot of bots) {
     const point = chooseSpawn(bot.team, bot.id);
-    respawnBot(bot, vec3(point.position.x, 0.05, point.position.z), point.yaw);
+    respawnBot(bot, vec3(point.position.x, point.position.y - STANCE.standHeight / 2, point.position.z), point.yaw);
   }
   console.log(`[server] round started: ${MODE}, ${TEAM_SIZE} per side`);
 };
@@ -504,7 +514,7 @@ const stepBots = (dt: number): void => {
       bot.respawnTimer = Math.max(0, bot.respawnTimer - dt);
       if (bot.respawnTimer === 0) {
         const point = chooseSpawn(bot.team, bot.id);
-        respawnBot(bot, vec3(point.position.x, 0.05, point.position.z), point.yaw);
+        respawnBot(bot, vec3(point.position.x, point.position.y - STANCE.standHeight / 2, point.position.z), point.yaw);
       }
       continue;
     }

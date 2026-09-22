@@ -13,6 +13,16 @@ export interface MatchConfig {
   teamSize: number;
   /** Seconds of countdown before the round starts. */
   countdownSeconds: number;
+  /**
+   * Whether a round that lands on a team-mate hurts them.
+   *
+   * On. A stray burst into your own side costs the side a point and the
+   * team-mate their health, which is what makes a lane with a friend in it
+   * a lane to hold fire on. Bots never aim at their own side, and a shot
+   * they take is blocked by anybody standing in it, so what friendly fire
+   * costs a bot team is only what its own carelessness would.
+   */
+  friendlyFire: boolean;
 }
 
 export const DEFAULT_MATCH: MatchConfig = {
@@ -21,7 +31,17 @@ export const DEFAULT_MATCH: MatchConfig = {
   respawnSeconds: 4,
   teamSize: 5,
   countdownSeconds: 3,
+  friendlyFire: true,
 };
+
+/**
+ * Whether a hit from one side on another does anything.
+ *
+ * One rule, shared by the local match and the server, so a round that hurts
+ * a team-mate offline hurts them online too.
+ */
+export const damageAllowed = (friendlyFire: boolean, attacker: Team, victim: Team): boolean =>
+  friendlyFire || attacker !== victim;
 
 export interface KillEvent {
   killerName: string;

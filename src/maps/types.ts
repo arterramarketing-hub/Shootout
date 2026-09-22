@@ -58,16 +58,8 @@ export interface SpawnPoint {
   team: "a" | "b";
   x: number;
   z: number;
-  yaw: number;
-}
-
-export interface TargetPlacement {
-  id: string;
-  x: number;
-  z: number;
-  /** Height of the plate's base above the floor. */
-  y: number;
-  /** Facing, in radians. */
+  /** The floor the point stands on, as a height above the ground. Ground if absent. */
+  y?: number;
   yaw: number;
 }
 
@@ -143,6 +135,4 @@ export interface MapDefinition {
    */
   nav?: Partial<NavBakeOptions>;
   spawns: SpawnPoint[];
-  /** Practice targets. Replaced by bots in Phase 2. */
-  targets: TargetPlacement[];
 }

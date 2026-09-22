@@ -62,8 +62,7 @@ import {
   recordKill,
   startMatch,
   stepMatch,
-  type MatchState,
-} from "./sim/match";
+  type MatchState, damageAllowed } from "./sim/match";
 import { addLookOffset } from "./sim/look";
 import { createPlayer, eyeOffset, stanceHalfHeight, stepPlayer } from "./sim/player";
 import { finishById } from "./sim/cosmetics";
@@ -74,7 +73,6 @@ import {
 } from "./sim/progression";
 import { bearingTo } from "./sim/aim";
 import { createRandom } from "./sim/random";
-import { damageTarget, stepTargets } from "./sim/targets";
 import type { PlayerState } from "./sim/types";
 import { copy, lengthXZ, sub, vec3, type Vec3 } from "./sim/vec3";
 import { DEFAULT_LOADOUT } from "./sim/weapons";
@@ -87,7 +85,6 @@ import { addGlow, addSunShadows, createScene } from "./view/scene";
 import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { ContactShadows } from "./view/contactShadow";
 import type { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascadedShadowGenerator";
-import { TargetField } from "./view/targetView";
 import { ViewmodelRig, WORLD_LAYER } from "./view/viewmodel";
 
 /** Callsigns for the bots. Original, and short enough for a kill feed. */
@@ -155,7 +152,6 @@ const boot = (): void => {
   let viewmodel!: ViewmodelRig;
   let world!: BrushWorld;
   let body!: ReturnType<BrushWorld["createController"]>;
-  let targets!: TargetField;
   let effects!: ShotEffects;
   let botField!: BotField;
   let sun: CascadedShadowGenerator | null = null;
@@ -192,7 +188,6 @@ const boot = (): void => {
     // prediction land on the server's answer instead of near it.
     world = new BrushWorld(map.brushes);
     body = world.createController(STANCE.radius, STANCE.standHeight / 2);
-    targets = new TargetField(scene, map.targets);
     effects = new ShotEffects(scene);
     shadowPatches = new ContactShadows(scene, map.style.keyDirection);
     // Figures either cast the sun's shadow or have one laid along the sun
@@ -219,7 +214,7 @@ const boot = (): void => {
   const audio = new GameAudio();
 
   const spawn = activeMap.spawns[0];
-  const spawnPosition = vec3(spawn.x, STANCE.standHeight / 2 + 0.05, spawn.z);
+  const spawnPosition = vec3(spawn.x, (spawn.y ?? 0) + STANCE.standHeight / 2 + 0.05, spawn.z);
   body.setPosition(spawnPosition);
 
   const player: PlayerState = createPlayer(spawnPosition, spawn.yaw);
@@ -355,8 +350,8 @@ const boot = (): void => {
    * The navigation grid already knows every surface a body can stand on, so
    * it answers this without a second set of rules to keep in step.
    */
-  const isOpenGround = (x: number, z: number): boolean =>
-    nearestNode(nav.grid, vec3(x, 0.05, z), 1) !== null;
+  const isOpenGround = (x: number, z: number, y = 0): boolean =>
+    nearestNode(nav.grid, vec3(x, y + 0.05, z), 1) !== null;
 
   /**
    * Spawn for a team: never on top of anybody, then as far from living
@@ -373,7 +368,7 @@ const boot = (): void => {
         .map((entry) => ({ x: entry.centre.x, z: entry.centre.z })),
       isOpenGround,
     );
-    return { position: vec3(choice.x, 0.05, choice.z), yaw: choice.yaw };
+    return { position: vec3(choice.x, choice.y + 0.05, choice.z), yaw: choice.yaw };
   };
 
   const nameFor = (index: number): string =>
@@ -408,7 +403,7 @@ const boot = (): void => {
           nameFor(index),
           team,
           difficulty,
-          vec3(point.x, 0.05, point.z),
+          vec3(point.x, point.y + 0.05, point.z),
           point.yaw,
           i % 3 === 0 ? ["smg", "pistol"] : ["ar", "pistol"],
         );
@@ -432,26 +427,6 @@ const boot = (): void => {
     );
     for (const bot of bots) {
       world.setHitboxes(bot.id, bot.health.dead ? [] : botHitboxes(bot.position));
-    }
-    for (const binding of targets.bindings) {
-      // A folded plate is no longer a target, so it stops soaking rounds.
-      world.setHitboxes(
-        binding.state.id,
-        binding.state.down
-          ? []
-          : [
-              {
-                center: vec3(binding.origin.x, binding.origin.y + 1.02, binding.origin.z),
-                halfExtents: vec3(0.26, 0.48, 0.26),
-                isHead: false,
-              },
-              {
-                center: vec3(binding.origin.x, binding.origin.y + 1.63, binding.origin.z),
-                halfExtents: vec3(0.12, 0.13, 0.12),
-                isHead: true,
-              },
-            ],
-      );
     }
   };
 
@@ -495,19 +470,10 @@ const boot = (): void => {
     let dealt = 0;
 
     for (const entry of resolution.damage) {
-      const plate = targets.findState(entry.targetId);
-      if (plate) {
-        const dropped = damageTarget(plate, entry.damage, entry.headshot);
-        if (dropped && attackerId === PLAYER_ID) audio.targetDrop();
-        hitSomething = true;
-        headshot = headshot || entry.headshot;
-        dealt += entry.damage;
-        continue;
-      }
-
       const attacker = findCombatantName(attackerId);
       const victim = findCombatantName(entry.targetId);
       if (!attacker || !victim) continue;
+      if (!damageAllowed(match.config.friendlyFire, attacker.team, victim.team)) continue;
       hitSomething = true;
       headshot = headshot || entry.headshot;
       // A shotgun lands eight pellets at once; they are one shot to the
@@ -681,7 +647,7 @@ const boot = (): void => {
 
   const respawnPlayer = (): void => {
     const point = chooseSpawn("a", PLAYER_ID);
-    body.setPosition(vec3(point.position.x, player.halfHeight + 0.05, point.position.z));
+    body.setPosition(vec3(point.position.x, point.position.y + player.halfHeight, point.position.z));
     player.velocity.x = 0;
     player.velocity.y = 0;
     player.velocity.z = 0;
@@ -938,7 +904,6 @@ const boot = (): void => {
     previousPosition = copy(player.position);
     stepPlayer(player, frame, dt, body);
     stepHealth(playerHealth, dt);
-    stepTargets(targets.states, dt);
     stepMatch(match, dt);
     rebuildCombatants();
 
@@ -1095,7 +1060,6 @@ const boot = (): void => {
       botField.renderBots(bots, delta);
       netStatusBar.textContent = "";
     }
-    targets.render();
     effects.update(delta);
     scene.render();
 
@@ -1208,19 +1172,6 @@ const boot = (): void => {
       },
       get health() {
         return +playerHealth.current.toFixed(1);
-      },
-      get targets() {
-        // Where each plate is and which way it faces, so a test can stand in
-        // front of one without knowing which level it is standing in.
-        return targets.states.map((state) => ({
-          id: state.id,
-          health: Math.round(state.health),
-          down: state.down,
-          ...(() => {
-            const placed = activeMap.targets.find((entry) => entry.id === state.id);
-            return { x: placed?.x ?? 0, z: placed?.z ?? 0, yaw: placed?.yaw ?? 0 };
-          })(),
-        }));
       },
       get match() {
         return {

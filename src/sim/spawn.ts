@@ -8,6 +8,8 @@
 export interface SpawnOption {
   x: number;
   z: number;
+  /** Height of the floor it stands on. Ground if absent. */
+  y?: number;
   yaw: number;
 }
 
@@ -20,6 +22,8 @@ export interface SpawnBody {
 export interface SpawnChoice {
   x: number;
   z: number;
+  /** Height of the floor to arrive on. */
+  y: number;
   yaw: number;
 }
 
@@ -67,7 +71,8 @@ export const pickSpawn = (
   options: readonly SpawnOption[],
   bodies: readonly SpawnBody[],
   enemies: readonly SpawnBody[],
-  isOpen?: (x: number, z: number) => boolean,
+  /** Whether a body can stand at a point on a given floor. */
+  isOpen?: (x: number, z: number, y: number) => boolean,
 ): SpawnChoice => {
   if (options.length === 0) {
     throw new Error("pickSpawn: the map has no spawn points for this team");
@@ -90,8 +95,9 @@ export const pickSpawn = (
     }
   }
 
-  if (bestCount === 0) return { x: best.x, z: best.z, yaw: best.yaw };
-  return { ...stepAside(best, bodies, isOpen), yaw: best.yaw };
+  const y = best.y ?? 0;
+  if (bestCount === 0) return { x: best.x, z: best.z, y, yaw: best.yaw };
+  return { ...stepAside(best, bodies, isOpen), y, yaw: best.yaw };
 };
 
 /**
@@ -103,15 +109,16 @@ export const pickSpawn = (
 const stepAside = (
   option: SpawnOption,
   bodies: readonly SpawnBody[],
-  isOpen?: (x: number, z: number) => boolean,
+  isOpen?: (x: number, z: number, y: number) => boolean,
 ): { x: number; z: number } => {
   let best = { x: option.x, z: option.z };
+  const y = option.y ?? 0;
   let bestRoom = -Infinity;
   for (let i = 0; i < SPAWN.sidestepDirections; i += 1) {
     const angle = (i / SPAWN.sidestepDirections) * Math.PI * 2;
     const x = option.x + Math.sin(angle) * SPAWN.sidestep;
     const z = option.z + Math.cos(angle) * SPAWN.sidestep;
-    if (isOpen && !isOpen(x, z)) continue;
+    if (isOpen && !isOpen(x, z, y)) continue;
     const { nearest } = crowding({ x, z, yaw: option.yaw }, bodies);
     if (nearest > bestRoom) {
       bestRoom = nearest;
