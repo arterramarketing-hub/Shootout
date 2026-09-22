@@ -54,6 +54,15 @@ describe("loadSettings", () => {
     expect(loadSettings()).toEqual(wanted);
   });
 
+  it("keeps the look, and falls back from one it does not know", () => {
+    const storage = makeStorage();
+    install(storage);
+    saveSettings({ ...DEFAULT_SETTINGS, look: "retro" });
+    expect(loadSettings().look).toBe("retro");
+    storage.setItem(STORAGE_KEY, JSON.stringify({ look: "gamecube" }));
+    expect(loadSettings().look).toBe("modern");
+  });
+
   it("survives corrupted storage", () => {
     const storage = makeStorage();
     storage.setItem(STORAGE_KEY, "{not json");

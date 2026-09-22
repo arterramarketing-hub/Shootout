@@ -63,6 +63,13 @@ html, body {
   outline: none;
   touch-action: none;
 }
+/*
+ * The retro look renders a few hundred lines and stretches them up. Whole
+ * pixels, not a blur: the browser's default resampling would smear the
+ * picture into something that reads as out of focus rather than as low
+ * resolution, and the second is the look while the first is a fault.
+ */
+#view.is-retro { image-rendering: pixelated; }
 
 /* The HUD never swallows a touch; only the controls below do. */
 .hud { position: absolute; inset: 0; pointer-events: none; }

@@ -7,6 +7,7 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
+import type { Look } from "../engine/look";
 import { ContactShadows } from "./contactShadow";
 import { FALL_SECONDS, figurePose } from "./figurePose";
 import { BONES, FIGURE_HEIGHT, TEAM_PALETTES, soldierSkin } from "./soldier";
@@ -107,8 +108,10 @@ export class BotField {
   constructor(
     private readonly scene: Scene,
     contact: ContactShadows | null = null,
+    private readonly look: Look = "modern",
   ) {
     this.contact = contact;
+    void this.look;
   }
 
   /**

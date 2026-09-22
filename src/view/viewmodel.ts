@@ -10,6 +10,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { DynamicTexture } from "@babylonjs/core/Materials/Textures/dynamicTexture";
 import { Constants } from "@babylonjs/core/Engines/constants";
 import type { Scene } from "@babylonjs/core/scene";
+import type { Look } from "../engine/look";
 import { activeWeapon, isSwapping, type LoadoutState } from "../sim/loadout";
 import type { PlayerState } from "../sim/types";
 import type { WeaponId } from "../sim/weapons";
@@ -119,7 +120,8 @@ export class ViewmodelRig {
   private readonly position = new Vector3();
   private readonly rotation = new Vector3();
 
-  constructor(scene: Scene, fovDegrees = VIEWMODEL_FOV_DEGREES) {
+  constructor(scene: Scene, look: Look = "modern", fovDegrees = VIEWMODEL_FOV_DEGREES) {
+    void look;
     this.camera = new FreeCamera("viewmodel_camera", Vector3.Zero(), scene);
     this.camera.layerMask = VIEWMODEL_LAYER;
     // The near plane sits as far out as the weapon allows, because the

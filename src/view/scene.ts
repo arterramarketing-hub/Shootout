@@ -14,6 +14,7 @@ import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import { Scene } from "@babylonjs/core/scene";
 import type { AbstractEngine } from "@babylonjs/core/Engines/abstractEngine";
 import type { Camera } from "@babylonjs/core/Cameras/camera";
+import type { Look } from "../engine/look";
 import type { QualitySettings } from "../engine/quality";
 import type { MapDefinition, SurfaceKind } from "../maps/types";
 import { brushGeometry } from "./brushGeometry";
@@ -32,7 +33,9 @@ export const createScene = (
   engine: AbstractEngine,
   map: MapDefinition,
   quality: QualitySettings,
+  look: Look = "modern",
 ): BuiltScene => {
+  void look;
   const style = map.style;
   const scene = new Scene(engine);
   const fog = Color3.FromHexString(style.fog);

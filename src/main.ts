@@ -9,6 +9,7 @@ import {
   settingsFor,
   type QualitySettings,
 } from "./engine/quality";
+import { presentationFor, scalingLevelFor, type Look } from "./engine/look";
 import { loadProfile, saveProfile } from "./engine/profile";
 import {
   defaultServerUrl,
@@ -109,11 +110,24 @@ const byId = <T extends HTMLElement>(id: string): T => {
   return element as T;
 };
 
-const applyQuality = (engine: Engine, quality: QualitySettings): void => {
-  // Rendering below the device's native pixel ratio is the single cheapest
-  // way to hold a frame rate on a phone, and at arm's length it is invisible.
-  const ratio = Math.min(window.devicePixelRatio || 1, quality.maxPixelRatio);
-  engine.setHardwareScalingLevel(1 / ratio);
+/**
+ * Set how many pixels are rendered for the ones on screen.
+ *
+ * Rendering below the device's native pixel ratio is the single cheapest way
+ * to hold a frame rate on a phone, and at arm's length it is invisible. The
+ * retro look goes much further and does it on purpose: a fixed few hundred
+ * lines however big the screen, stretched up in whole pixels.
+ */
+const applyPresentation = (
+  engine: Engine,
+  canvas: HTMLCanvasElement,
+  quality: QualitySettings,
+  look: Look,
+): void => {
+  engine.setHardwareScalingLevel(
+    scalingLevelFor(look, quality, window.devicePixelRatio || 1, canvas.clientHeight),
+  );
+  canvas.classList.toggle("is-retro", look === "retro");
 };
 
 const boot = (): void => {
@@ -129,11 +143,13 @@ const boot = (): void => {
     audioEngine: false,
     doNotHandleContextLost: false,
   });
-  applyQuality(engine, quality);
+  applyPresentation(engine, canvas, quality, settings.look);
 
   // Everything below is rebuilt when the map changes, so the bindings are
   // mutable and the closures that capture them keep working across a swap.
   let activeMap: MapDefinition = mapById(settings.mapId);
+  /** The look the world was last built for; a change rebuilds it at the next deploy. */
+  let builtLook: Look = settings.look;
   let scene!: ReturnType<typeof createScene>["scene"];
   let rig!: CameraRig;
   let viewmodel!: ViewmodelRig;
@@ -147,19 +163,24 @@ const boot = (): void => {
   let selfShadow!: Mesh;
   let nav!: ReturnType<typeof bakeNavGrid>;
 
-  const buildWorld = (map: MapDefinition): void => {
+  const buildWorld = (map: MapDefinition, look: Look): void => {
     activeMap = map;
+    builtLook = look;
     scene?.dispose();
 
-    const built = createScene(engine, map, quality);
+    // The tier says what the device can afford; the look says what it wants.
+    // Retro wants no shadow map and a short view whatever the device.
+    const present = presentationFor(quality, look);
+    const built = createScene(engine, map, present, look);
     scene = built.scene;
-    rig = new CameraRig(scene, quality, settings.fovDegrees);
-    sun = quality.shadows ? addSunShadows(built, rig.camera, quality) : null;
+    rig = new CameraRig(scene, present, settings.fovDegrees);
+    sun = present.shadows ? addSunShadows(built, rig.camera, present) : null;
     // Tracers, impacts and strip lights bloom on anything but the weakest
     // tier: it is one small blurred buffer, and it is what makes a round
-    // going past read as hot rather than as a yellow stick.
-    if (quality.tier !== "low") addGlow(built, rig.camera);
-    viewmodel = new ViewmodelRig(scene);
+    // going past read as hot rather than as a yellow stick. The retro look
+    // has no bloom because nothing it is after had any.
+    if (present.tier !== "low" && look !== "retro") addGlow(built, rig.camera);
+    viewmodel = new ViewmodelRig(scene, look);
     // The world camera must not draw the weapon, and the weapon camera must
     // not draw the world. Babylon clears depth between them, so the weapon
     // never intersects a wall it is standing next to.
@@ -178,7 +199,7 @@ const boot = (): void => {
     // for them. One of the two, never neither: a figure with nothing under
     // it floats over the ground it is standing on, and at range that is the
     // difference between a shot and a guess.
-    botField = new BotField(scene, quality.shadows ? null : shadowPatches);
+    botField = new BotField(scene, present.shadows ? null : shadowPatches, look);
     botField.onFigure = (mesh) => sun?.addShadowCaster(mesh, false);
 
     // The player's own, on every tier. Nobody is standing there to cast one:
@@ -193,7 +214,7 @@ const boot = (): void => {
     );
   };
 
-  buildWorld(activeMap);
+  buildWorld(activeMap, settings.look);
 
   const audio = new GameAudio();
 
@@ -321,10 +342,10 @@ const boot = (): void => {
     // it by what the screen can carry, so a short screen still pulls the arc in.
     document.documentElement.style.setProperty("--ctl-user", String(next.controlScale));
     const tier = next.quality === "auto" ? detectQuality() : settingsFor(next.quality);
-    if (tier.tier !== quality.tier) {
-      quality = tier;
-      applyQuality(engine, quality);
-    }
+    if (tier.tier !== quality.tier) quality = tier;
+    // The look's resolution applies at once, so the lobby's backdrop shows
+    // the choice; its materials and figures wait for the next deploy.
+    applyPresentation(engine, canvas, quality, next.look);
     saveSettings(next);
   };
 
@@ -772,7 +793,9 @@ const boot = (): void => {
     // navigation grid. Cheap enough to do between rounds, and it keeps one
     // set of per-map objects alive rather than several.
     const wanted = mapById(settings.mapId);
-    if (wanted.id !== activeMap.id) buildWorld(wanted);
+    if (wanted.id !== activeMap.id || settings.look !== builtLook) {
+      buildWorld(wanted, settings.look);
+    }
     match.config.teamSize = settings.teamSize;
     createRoster();
     rebuildCombatants();
@@ -1103,13 +1126,16 @@ const boot = (): void => {
       const demoted = benchmark.update(delta, quality.tier);
       if (demoted) {
         quality = settingsFor(demoted);
-        applyQuality(engine, quality);
+        applyPresentation(engine, canvas, quality, builtLook);
         console.info(`[shootout] quality demoted to ${demoted} after benchmark`);
       }
     }
   });
 
   const resize = () => {
+    // The retro look's scaling is worked back from the canvas height, so a
+    // window that changes shape has to be measured again.
+    applyPresentation(engine, canvas, quality, builtLook);
     engine.resize();
     viewmodel.setFieldOfView();
   };
@@ -1132,8 +1158,24 @@ const boot = (): void => {
       get quality() {
         return quality.tier;
       },
+      /** The look the world on screen was built with. */
+      get look() {
+        return builtLook;
+      },
       get activeMeshes() {
         return sceneMeshCount();
+      },
+      /**
+       * What the frame costs, in the two numbers that decide it: how many
+       * pixels are rendered, and how many triangles are submitted. A test
+       * can hold a look to its budget with these.
+       */
+      get frameCost() {
+        return {
+          width: engine.getRenderWidth(),
+          height: engine.getRenderHeight(),
+          triangles: Math.round(scene.getActiveIndices() / 3),
+        };
       },
       get forward() {
         const direction = rig.camera.getDirection(Vector3.Forward());
