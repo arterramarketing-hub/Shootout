@@ -2,9 +2,10 @@ import { Color3 } from "@babylonjs/core/Maths/math.color";
 import type { Material } from "@babylonjs/core/Materials/material";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import type { Scene } from "@babylonjs/core/scene";
-import { RETRO, type Look } from "../engine/look";
+import type { Look } from "../engine/look";
 import type { MapStyle, SurfaceKind } from "../maps/types";
 import { createRetroMaterial } from "./retroMaterial";
+import { createRetroTextures } from "./retroTextures";
 import {
   createTextures,
   type SurfaceTextureId,
@@ -81,16 +82,17 @@ const scaledTint = (level: { r: number; g: number; b: number }, tint: string): C
 };
 
 /**
- * The retro look's library: the same surfaces at a few dozen texels, drawn
+ * The retro look's library: painted surfaces drawn at their own size,
  * through a shader that multiplies texture by vertex colour and nothing
  * else. The light is in the vertices already.
+ *
+ * The textures are a separate set rather than the modern ones shrunk.
+ * Shrinking was the mistake that made the first attempt at this look read
+ * as a blurred photograph: the modern set is grime, and grime at sixty-four
+ * texels is mush. `retroTextures.ts` draws brick as bricks.
  */
 const createRetroLibrary = (scene: Scene, style: MapStyle, seed: number): MaterialLibrary => {
-  const { textures, levels } = createTextures(scene, style, seed, 1, {
-    size: RETRO.textureSize,
-    posterize: RETRO.posterize,
-    saturation: RETRO.saturation,
-  });
+  const { textures, levels } = createRetroTextures(scene, style, seed);
   const variants = new Map<string, Material>();
   return {
     textures,

@@ -21,6 +21,7 @@ import { brushGeometry } from "./brushGeometry";
 import { lightRigFor } from "./lightRig";
 import { TEXEL_METRES, createMaterialLibrary } from "./materials";
 import { bakeBrushLighting, exposureFor } from "./retroBake";
+import { retroGeometry } from "./retroShapes";
 import { buildSky } from "./sky";
 
 export interface BuiltScene {
@@ -260,7 +261,10 @@ const buildMap = (
 
   for (const [index, brush] of map.brushes.entries()) {
     const mesh = new Mesh(`brush_${index}`, scene);
-    const geometry = brushGeometry(brush, TEXEL_METRES);
+    // The retro look draws what is not architecture as a shaped form rather
+    // than as the box it collides with. The brush is untouched either way.
+    const geometry =
+      (rig && retroGeometry(brush, TEXEL_METRES)) || brushGeometry(brush, TEXEL_METRES);
     if (rig) bakeBrushLighting(geometry, brush, rig, exposure, RETRO.saturation);
     const data = new VertexData();
     data.positions = geometry.positions;

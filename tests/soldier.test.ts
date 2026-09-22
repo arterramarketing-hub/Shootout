@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Team } from "../src/sim/bots";
 import { buildSkin, flatten, type Loft } from "../src/view/loft";
-import { BONES, soldierSkin } from "../src/view/soldier";
+import { BONES, FIGURE_HEIGHT, soldierSkin } from "../src/view/soldier";
 
 /**
  * The figure is drawn to the shape that is shot, so most of what is worth
@@ -315,22 +315,47 @@ describe("soldier", () => {
     expect(low.positions.length / 3).toBe(low.indices.length);
   });
 
-  it("gives the low figure a bigger head and hands, and the same height", () => {
-    const width = (skin: ReturnType<typeof soldierSkin>, low: number, high: number): number => {
-      let wide = 0;
+  it("caricatures the low figure: a head a quarter of it, not an eighth", () => {
+    // The whole point of the low figure is that it is not a small realistic
+    // soldier. A head that grew only sideways was the first attempt at this
+    // and read as a broad face on the same small skull.
+    const headSpan = (skin: ReturnType<typeof soldierSkin>): number => {
+      let low = Infinity;
+      let high = -Infinity;
       for (let v = 0; v < skin.positions.length / 3; v += 1) {
-        const y = skin.positions[v * 3 + 1];
-        if (y < low || y > high) continue;
-        wide = Math.max(wide, Math.abs(skin.positions[v * 3]));
+        if (skin.boneIndices[v * 4] !== boneNamed("head")) continue;
+        low = Math.min(low, skin.positions[v * 3 + 1]);
+        high = Math.max(high, skin.positions[v * 3 + 1]);
       }
-      return wide;
+      return high - low;
     };
     const full = soldierSkin("a", "full");
     const low = soldierSkin("a", "low");
-    expect(width(low, 1.66, 1.72)).toBeGreaterThan(width(full, 1.66, 1.72) * 1.08);
+    // Taller, not just wider.
+    expect(headSpan(low)).toBeGreaterThan(headSpan(full) * 1.25);
+    // And a quarter of the figure or thereabouts, where the realistic one
+    // is nearer an eighth.
+    expect(headSpan(low) / FIGURE_HEIGHT).toBeGreaterThan(0.2);
+    // Still inside a sane envelope: it grows about its own middle, so it
+    // settles into the shoulders rather than standing up off the neck.
     const top = (skin: ReturnType<typeof soldierSkin>): number =>
       Math.max(...skin.positions.filter((_, i) => i % 3 === 1));
-    expect(top(low)).toBeCloseTo(top(full), 2);
+    expect(top(low)).toBeLessThan(1.9);
+    expect(top(low)).toBeGreaterThan(top(full));
+  });
+
+  it("gives the low figure a longer boot, not just a fatter one", () => {
+    // The boot runs forward from the heel, so its size is in where its rings
+    // sit and not only in how wide they are.
+    const toe = (skin: ReturnType<typeof soldierSkin>): number => {
+      let reach = -Infinity;
+      for (let v = 0; v < skin.positions.length / 3; v += 1) {
+        if (skin.boneIndices[v * 4] !== boneNamed("footR")) continue;
+        reach = Math.max(reach, skin.positions[v * 3 + 2]);
+      }
+      return reach;
+    };
+    expect(toe(soldierSkin("a", "low"))).toBeGreaterThan(toe(soldierSkin("a", "full")) * 1.15);
   });
 
   it("keeps the low figure's head on the head hitbox too", () => {

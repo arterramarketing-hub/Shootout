@@ -152,9 +152,21 @@ interface DetailLevel {
   steps: number;
   /** The small kit: goggles, straps, pouches, the holster, the radio. */
   kit: boolean;
-  /** The head and the hands, a size up so they read at low resolution. */
+  /**
+   * Head, hands and boots, sized up.
+   *
+   * Not for legibility — for the idiom. The figures of this era were
+   * caricatures: a head a quarter of the body's height rather than an
+   * eighth, hands and feet you could see from across a room, and a torso
+   * that got out of their way. A realistic figure at low polygon counts
+   * reads as a badly-made realistic figure; a caricature at low polygon
+   * counts reads as a character.
+   */
   headScale: number;
   handScale: number;
+  bootScale: number;
+  /** How much the team's colours are pushed, away from the modern wash. */
+  vivid: number;
   /** One normal per face rather than one per vertex. */
   flat: boolean;
 }
@@ -168,6 +180,8 @@ const DETAIL: Record<Detail, DetailLevel> = {
     kit: true,
     headScale: 1,
     handScale: 1,
+    bootScale: 1,
+    vivid: 1,
     flat: false,
   },
   low: {
@@ -176,10 +190,32 @@ const DETAIL: Record<Detail, DetailLevel> = {
     blockSides: 4,
     steps: 2,
     kit: false,
-    headScale: 1.12,
-    handScale: 1.3,
+    headScale: 1.42,
+    handScale: 1.7,
+    bootScale: 1.3,
+    vivid: 1.5,
     flat: true,
   },
+};
+
+/** Push a colour away from its own lightness, for the bolder palette. */
+const vividHex = (hex: string, factor: number): string => {
+  if (factor === 1) return hex;
+  const value = parseInt(hex.replace("#", ""), 16);
+  const channels = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  const lum = channels[0] * 0.299 + channels[1] * 0.587 + channels[2] * 0.114;
+  const pushed = channels.map((c) =>
+    Math.max(0, Math.min(255, Math.round(lum + (c - lum) * factor))),
+  );
+  return `#${pushed.map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+};
+
+const vividPalette = (palette: SoldierPalette, factor: number): SoldierPalette => {
+  const out = { ...palette };
+  for (const key of Object.keys(out) as (keyof SoldierPalette)[]) {
+    out[key] = vividHex(out[key], factor);
+  }
+  return out;
 };
 
 /** A ring, with the fields that are the same nearly everywhere filled in. */
@@ -194,11 +230,34 @@ const ring = (
   extra: Partial<Ring> = {},
 ): Ring => ({ at: at(x, y, z), across, through, round, bone, ...extra });
 
-/** The same loft, its rings a size up or down about their own centres. */
-const scaled = (loft: Loft, factor: number): Loft => ({
+/**
+ * The same loft grown about a point, rather than each ring about itself.
+ *
+ * Growing the rings alone makes a part fatter without making it bigger,
+ * which is what the first attempt at the caricature did: a head that came
+ * out as a broad face on the same small skull, and a boot that got wider
+ * without getting longer. A part's size is in where its rings sit as much
+ * as in how wide they are, so both have to move, and they move about a
+ * point that keeps the part attached to the rest of the figure: a head
+ * about its own middle, so it settles down into the shoulders the way a
+ * caricature's does; a boot about the ankle it hangs from.
+ */
+const grown = (loft: Loft, factor: number, pivot: Vec3): Loft => ({
   ...loft,
-  rings: loft.rings.map((r) => ({ ...r, across: r.across * factor, through: r.through * factor })),
+  rings: loft.rings.map((r) => ({
+    ...r,
+    across: r.across * factor,
+    through: r.through * factor,
+    at: {
+      x: pivot.x + (r.at.x - pivot.x) * factor,
+      y: pivot.y + (r.at.y - pivot.y) * factor,
+      z: pivot.z + (r.at.z - pivot.z) * factor,
+    },
+  })),
 });
+
+/** Where the head is grown from: the middle of the head hitbox. */
+const HEAD_PIVOT = at(0, 1.62, 0);
 
 /** A straight run between two joints, narrowing as it goes. */
 const limb = (
@@ -402,7 +461,7 @@ const lofts = (p: SoldierPalette, d: DetailLevel): Loft[] => {
       );
     }
   }
-  for (const loft of head) out.push(scaled(loft, d.headScale));
+  for (const loft of head) out.push(grown(loft, d.headScale, HEAD_PIVOT));
 
   // Plate carrier, over the chest and round the ribs. Boxier than the body
   // under it, and standing off it, which is what a carrier looks like.
@@ -529,21 +588,26 @@ const lofts = (p: SoldierPalette, d: DetailLevel): Loft[] => {
         sides: d.limbSides,
         squash: 0.92,
       }),
-      // The boot, swept forward from the heel to the toe.
-      {
-        colour: p.boot,
-        sides: d.limbSides,
-        rings: [
-          ring(side * 0.095, 0.088, -0.072, 0.048, 0.055, 0.5, bone(`foot${suffix}`), {
-            shade: 0.82,
-          }),
-          ring(side * 0.095, 0.062, -0.03, 0.055, 0.062, 0.45, bone(`foot${suffix}`)),
-          ring(side * 0.095, 0.05, 0.05, 0.056, 0.05, 0.4, bone(`foot${suffix}`)),
-          ring(side * 0.095, 0.042, 0.115, 0.047, 0.042, 0.45, bone(`foot${suffix}`), {
-            shade: 1.04,
-          }),
-        ],
-      },
+      // The boot, swept forward from the heel to the toe, grown about the
+      // ankle so that sizing it up lengthens it rather than only fattening it.
+      grown(
+        {
+          colour: p.boot,
+          sides: d.limbSides,
+          rings: [
+            ring(side * 0.095, 0.088, -0.072, 0.048, 0.055, 0.5, bone(`foot${suffix}`), {
+              shade: 0.82,
+            }),
+            ring(side * 0.095, 0.062, -0.03, 0.055, 0.062, 0.45, bone(`foot${suffix}`)),
+            ring(side * 0.095, 0.05, 0.05, 0.056, 0.05, 0.4, bone(`foot${suffix}`)),
+            ring(side * 0.095, 0.042, 0.115, 0.047, 0.042, 0.45, bone(`foot${suffix}`), {
+              shade: 1.04,
+            }),
+          ],
+        },
+        d.bootScale,
+        at(side * 0.095, 0.1, 0),
+      ),
     );
     if (d.kit) {
       // The boot's upper, around the ankle.
@@ -583,7 +647,7 @@ const lofts = (p: SoldierPalette, d: DetailLevel): Loft[] => {
 /** One soldier's mesh, at rest, in a team's colours, at a level of detail. */
 export const soldierSkin = (team: Team, detail: Detail = "full"): Skin => {
   const level = DETAIL[detail];
-  const skin = buildSkin(lofts(TEAM_PALETTES[team], level));
+  const skin = buildSkin(lofts(vividPalette(TEAM_PALETTES[team], level.vivid), level));
   // A body occludes itself, and one key plus one fill will not find that on
   // a curved surface. Baked in, so it costs nothing to draw.
   bakeAmbient(skin, 0.68);
