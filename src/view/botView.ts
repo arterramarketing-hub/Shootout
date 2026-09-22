@@ -7,6 +7,7 @@ import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 import { ContactShadows } from "./contactShadow";
+import { FIGURE_HEIGHT, HIP_HEIGHT, figureParts, hipOffset, type Part } from "./figureParts";
 import type { BotState, Team } from "../sim/bots";
 import type { Vec3 } from "../sim/vec3";
 import { damp } from "../sim/vec3";
@@ -52,93 +53,8 @@ export const TEAM_COLOURS: Record<Team, { body: string; trim: string }> = {
   b: { body: "#ba3a2c", trim: "#ecb13c" },
 };
 
-/** Gear that is the same on both sides: boots, pack, webbing, rifle. */
+/** Gear that is the same on both sides: boots, pouches, webbing, rifle. */
 const GEAR = "#2b2a2c";
-const HEAD_HEIGHT = 1.62;
-const HIP_HEIGHT = 0.92;
-
-interface Part {
-  x: number;
-  y: number;
-  z: number;
-  width: number;
-  height: number;
-  depth: number;
-  tone: "body" | "trim" | "gear";
-  /** Radians about the part's own centre, yaw then pitch. */
-  yaw?: number;
-  pitch?: number;
-}
-
-const box = (part: Part): Part => part;
-
-/**
- * A limb: a box laid from one point to another, which is how arms are put
- * on the rifle without working the angles out by hand.
- */
-const limb = (from: Vec3, to: Vec3, thickness: number, tone: Part["tone"]): Part => {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const dz = to.z - from.z;
-  const length = Math.hypot(dx, dy, dz);
-  return {
-    x: (from.x + to.x) / 2,
-    y: (from.y + to.y) / 2,
-    z: (from.z + to.z) / 2,
-    width: thickness,
-    height: thickness,
-    depth: length,
-    tone,
-    yaw: Math.atan2(dx, dz),
-    pitch: -Math.atan2(dy, Math.hypot(dx, dz)),
-  };
-};
-
-/** Everything that does not move: torso, arms, gear, and the rifle. */
-const BODY: Part[] = [
-  // Belt and hips.
-  box({ x: 0, y: 0.98, z: 0, width: 0.42, height: 0.16, depth: 0.26, tone: "gear" }),
-  // Torso, with the plate carrier on the front and the pack on the back.
-  box({ x: 0, y: 1.26, z: 0, width: 0.44, height: 0.4, depth: 0.26, tone: "body" }),
-  box({ x: 0, y: 1.25, z: 0.15, width: 0.34, height: 0.32, depth: 0.06, tone: "trim" }),
-  box({ x: 0, y: 1.22, z: -0.17, width: 0.3, height: 0.3, depth: 0.12, tone: "gear" }),
-  // Shoulders and neck.
-  box({ x: -0.28, y: 1.4, z: 0, width: 0.16, height: 0.14, depth: 0.24, tone: "body" }),
-  box({ x: 0.28, y: 1.4, z: 0, width: 0.16, height: 0.14, depth: 0.24, tone: "body" }),
-  box({ x: 0, y: 1.48, z: 0, width: 0.12, height: 0.08, depth: 0.12, tone: "body" }),
-  // Arms: upper arm from the shoulder to the elbow, forearm to the hand.
-  limb({ x: 0.3, y: 1.38, z: 0 }, { x: 0.28, y: 1.14, z: 0.1 }, 0.13, "body"),
-  limb({ x: 0.28, y: 1.14, z: 0.1 }, { x: 0.16, y: 1.22, z: 0.22 }, 0.11, "body"),
-  limb({ x: -0.3, y: 1.38, z: 0 }, { x: -0.2, y: 1.18, z: 0.22 }, 0.13, "body"),
-  limb({ x: -0.2, y: 1.18, z: 0.22 }, { x: 0.02, y: 1.28, z: 0.48 }, 0.11, "body"),
-  // Hands.
-  box({ x: 0.16, y: 1.22, z: 0.24, width: 0.1, height: 0.1, depth: 0.1, tone: "gear" }),
-  box({ x: 0.02, y: 1.29, z: 0.5, width: 0.1, height: 0.1, depth: 0.1, tone: "gear" }),
-  // The rifle, across the chest and out.
-  box({ x: 0.08, y: 1.3, z: 0.38, width: 0.06, height: 0.09, depth: 0.5, tone: "gear" }),
-  box({ x: 0.08, y: 1.31, z: 0.74, width: 0.035, height: 0.035, depth: 0.24, tone: "gear" }),
-  box({ x: 0.08, y: 1.21, z: 0.34, width: 0.045, height: 0.14, depth: 0.07, tone: "gear" }),
-  box({ x: 0.08, y: 1.3, z: 0.08, width: 0.05, height: 0.09, depth: 0.16, tone: "gear" }),
-  box({ x: 0.08, y: 1.36, z: 0.3, width: 0.03, height: 0.04, depth: 0.05, tone: "gear" }),
-];
-
-/** The head, on the hitbox, with a helmet over it. */
-const HEAD: Part[] = [
-  box({ x: 0, y: HEAD_HEIGHT, z: 0, width: 0.22, height: 0.24, depth: 0.22, tone: "body" }),
-  box({ x: 0, y: HEAD_HEIGHT + 0.09, z: 0, width: 0.27, height: 0.13, depth: 0.28, tone: "trim" }),
-  box({ x: 0, y: HEAD_HEIGHT + 0.03, z: 0.13, width: 0.24, height: 0.04, depth: 0.08, tone: "trim" }),
-  // Chin strap and the shadow of the face under the brim.
-  box({ x: 0, y: HEAD_HEIGHT - 0.02, z: 0.1, width: 0.18, height: 0.1, depth: 0.03, tone: "gear" }),
-];
-
-/** One leg, built about its hip so it can swing. */
-const legParts = (side: -1 | 1): Part[] => [
-  box({ x: 0, y: -0.2, z: 0, width: 0.17, height: 0.4, depth: 0.2, tone: "body" }),
-  box({ x: 0, y: -0.58, z: 0.01, width: 0.15, height: 0.4, depth: 0.17, tone: "body" }),
-  box({ x: 0, y: -0.85, z: 0.05, width: 0.19, height: 0.14, depth: 0.3, tone: "gear" }),
-  // A knee pad, which is the kind of detail that reads at ten metres.
-  box({ x: side * 0.0, y: -0.4, z: 0.1, width: 0.15, height: 0.14, depth: 0.05, tone: "gear" }),
-];
 
 /** How long a figure takes to go down, and how long it lies there. */
 const FALL_SECONDS = 0.5;
@@ -166,9 +82,6 @@ export interface BotBinding {
   /** The shadow laid on the ground, where the tier has no shadow map. */
   patch: Mesh | null;
 }
-
-/** How tall a standing figure is, for the shadow it lays. */
-const FIGURE_HEIGHT = 1.72;
 
 export class BotField {
   readonly bindings: BotBinding[] = [];
@@ -224,12 +137,14 @@ export class BotField {
       return merged;
     };
 
-    const body = build(`bot_${id}_body`, BODY);
-    const head = build(`bot_${id}_head`, HEAD);
-    const legLeft = build(`bot_${id}_leg_l`, legParts(-1));
-    const legRight = build(`bot_${id}_leg_r`, legParts(1));
-    legLeft.position.set(-0.12, HIP_HEIGHT, 0);
-    legRight.position.set(0.12, HIP_HEIGHT, 0);
+    const parts = figureParts(team);
+    const body = build(`bot_${id}_body`, parts.body);
+    const head = build(`bot_${id}_head`, parts.head);
+    const legLeft = build(`bot_${id}_leg_l`, parts.leg);
+    const legRight = build(`bot_${id}_leg_r`, parts.leg);
+    const hip = hipOffset(team);
+    legLeft.position.set(-hip, HIP_HEIGHT, 0);
+    legRight.position.set(hip, HIP_HEIGHT, 0);
 
     const meshes = [body, head, legLeft, legRight];
     if (this.onFigure) for (const mesh of meshes) this.onFigure(mesh);
