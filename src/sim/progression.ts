@@ -18,6 +18,9 @@ export const AWARDS = {
   win: 400,
   /** Per point of the losing team's score, so a close loss still pays. */
   perScore: 4,
+  /** Survival pays per zombie and per wave seen off, not per soldier. */
+  zombieKill: 25,
+  waveCleared: 150,
 } as const;
 
 /** Experience needed to move from `level` to the next one. */
@@ -64,6 +67,9 @@ export interface MatchReward {
   otherScore: number;
   /** False when the round was abandoned rather than played out. */
   completed: boolean;
+  /** Survival only: zombies put down and waves cleared. */
+  zombieKills?: number;
+  wavesCleared?: number;
 }
 
 /** Experience a finished round is worth, itemised so it can be shown. */
@@ -75,6 +81,10 @@ export const rewardBreakdown = (
   if (reward.headshots > 0) {
     lines.push({ label: "Headshots", xp: reward.headshots * AWARDS.headshotBonus });
   }
+  const zombies = reward.zombieKills ?? 0;
+  if (zombies > 0) lines.push({ label: "Zombies", xp: zombies * AWARDS.zombieKill });
+  const waves = reward.wavesCleared ?? 0;
+  if (waves > 0) lines.push({ label: "Waves cleared", xp: waves * AWARDS.waveCleared });
   if (reward.completed) lines.push({ label: "Round played", xp: AWARDS.matchComplete });
   if (reward.won) lines.push({ label: "Victory", xp: AWARDS.win });
   const contested = Math.min(reward.ownScore, reward.otherScore) * AWARDS.perScore;

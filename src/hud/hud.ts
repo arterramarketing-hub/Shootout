@@ -20,6 +20,9 @@ export interface HudElements {
   damageVignette: HTMLElement;
   feed: HTMLElement;
   scoreA: HTMLElement;
+  /** The labels beside the scores, which survival renames. */
+  tagA: HTMLElement;
+  tagB: HTMLElement;
   scoreB: HTMLElement;
   clock: HTMLElement;
   killFeed: HTMLElement;
@@ -33,6 +36,18 @@ export interface HudElements {
   root: HTMLElement;
 }
 
+/** What the survival HUD shows, in place of the team scores and the clock. */
+export interface SurvivalReadout {
+  wave: number;
+  /** Zombies still to put down this wave. */
+  left: number;
+  kills: number;
+  /** Seconds to the next wave during a breather, or null while one is on. */
+  nextWaveIn: number | null;
+  /** A line across the middle of the screen, or null. */
+  announce: string | null;
+}
+
 export interface HudFrame {
   player: PlayerState;
   loadout: LoadoutState;
@@ -44,6 +59,8 @@ export interface HudFrame {
   tier: string;
   activeMeshes: number;
   deltaSeconds: number;
+  /** Set in survival, where there are no teams and no clock. */
+  survival?: SurvivalReadout | null;
 }
 
 /** How long a line stays in the feed. */
@@ -86,6 +103,7 @@ export class Hud {
   private lastClock = "";
   private lastScoreA = -1;
   private lastScoreB = -1;
+  private lastTags = "";
 
   constructor(private readonly elements: HudElements) {
     this.elements.debug.style.display = "none";
@@ -214,27 +232,52 @@ export class Hud {
 
   private updateMatch(frame: HudFrame): void {
     const { match, respawnIn } = frame;
+    const survival = frame.survival ?? null;
 
-    if (match.scores.a !== this.lastScoreA) {
-      this.lastScoreA = match.scores.a;
-      this.elements.scoreA.textContent = String(match.scores.a);
-    }
-    if (match.scores.b !== this.lastScoreB) {
-      this.lastScoreB = match.scores.b;
-      this.elements.scoreB.textContent = String(match.scores.b);
+    // Survival borrows the team bar: the wave on the left, what is left of
+    // it on the right, and the kills or the breather in the middle.
+    const tags = survival ? "WAVE|LEFT" : "BLUE|RUST";
+    if (tags !== this.lastTags) {
+      this.lastTags = tags;
+      const [left, right] = tags.split("|");
+      this.elements.tagA.textContent = left;
+      this.elements.tagB.textContent = right;
+      this.elements.root.classList.toggle("is-survival", survival !== null);
     }
 
-    const clock = formatClock(match.timeRemaining);
+    const scoreA = survival ? survival.wave : match.scores.a;
+    const scoreB = survival ? survival.left : match.scores.b;
+    if (scoreA !== this.lastScoreA) {
+      this.lastScoreA = scoreA;
+      this.elements.scoreA.textContent = String(scoreA);
+    }
+    if (scoreB !== this.lastScoreB) {
+      this.lastScoreB = scoreB;
+      this.elements.scoreB.textContent = String(scoreB);
+    }
+
+    const clock = survival
+      ? survival.nextWaveIn !== null
+        ? `NEXT ${Math.max(1, Math.ceil(survival.nextWaveIn))}`
+        : `${survival.kills} KILLS`
+      : formatClock(match.timeRemaining);
     if (clock !== this.lastClock) {
       this.lastClock = clock;
       this.elements.clock.textContent = clock;
-      this.elements.clock.classList.toggle("is-urgent", match.timeRemaining <= 30);
+      this.elements.clock.classList.toggle(
+        "is-urgent",
+        survival ? survival.nextWaveIn !== null && survival.nextWaveIn <= 3 : match.timeRemaining <= 30,
+      );
     }
 
-    const counting = match.phase === "countdown";
-    this.elements.countdown.classList.toggle("is-visible", counting);
+    const counting = !survival && match.phase === "countdown";
+    const announcing = survival?.announce ?? null;
+    this.elements.countdown.classList.toggle("is-visible", counting || announcing !== null);
+    this.elements.countdown.classList.toggle("is-announce", announcing !== null);
     if (counting) {
       this.elements.countdown.textContent = String(Math.max(1, Math.ceil(match.countdown)));
+    } else if (announcing !== null && this.elements.countdown.textContent !== announcing) {
+      this.elements.countdown.textContent = announcing;
     }
 
     const downed = respawnIn > 0;

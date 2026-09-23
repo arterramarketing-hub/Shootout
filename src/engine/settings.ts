@@ -3,6 +3,9 @@ import type { BotDifficulty } from "../sim/bots";
 import { CAMERA, LOOK } from "../sim/config";
 import type { QualityTier } from "./quality";
 
+/** Team deathmatch against bots, or holding out against zombies. */
+export type GameMode = "tdm" | "survival";
+
 export interface GameSettings {
   touchSensitivity: number;
   mouseSensitivity: number;
@@ -25,6 +28,8 @@ export interface GameSettings {
   playerName: string;
   /** Which level solo matches load. */
   mapId: string;
+  /** What a solo match is. Online play is always team deathmatch. */
+  mode: GameMode;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -44,6 +49,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   serverUrl: "",
   playerName: "Player",
   mapId: DEFAULT_MAP_ID,
+  mode: "tdm",
 };
 
 export const SETTINGS_LIMITS = {
@@ -128,6 +134,7 @@ export const loadSettings = (): GameSettings => {
         typeof parsed.mapId === "string" && parsed.mapId in MAPS
           ? parsed.mapId
           : DEFAULT_MAP_ID,
+      mode: parsed.mode === "survival" ? "survival" : DEFAULT_SETTINGS.mode,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

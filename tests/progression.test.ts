@@ -128,6 +128,26 @@ describe("round rewards", () => {
   });
 });
 
+describe("survival rewards", () => {
+  it("pays per zombie and per wave held off", () => {
+    const run = reward({ zombieKills: 12, wavesCleared: 2 });
+    expect(rewardTotal(run)).toBe(
+      12 * AWARDS.zombieKill + 2 * AWARDS.waveCleared + AWARDS.matchComplete,
+    );
+    const labels = rewardBreakdown(run).map((line) => line.label);
+    expect(labels).toContain("Zombies");
+    expect(labels).toContain("Waves cleared");
+  });
+
+  it("does not count zombies as kills of soldiers", () => {
+    const state = createProgression();
+    applyMatchResult(state, reward({ zombieKills: 30, wavesCleared: 3, deaths: 1 }));
+    expect(state.kills).toBe(0);
+    expect(state.matches).toBe(1);
+    expect(state.wins).toBe(0);
+  });
+});
+
 describe("applyMatchResult", () => {
   it("records the round in the lifetime statistics", () => {
     const state = createProgression();

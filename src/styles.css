@@ -786,6 +786,10 @@ html, body {
   transition: opacity 140ms linear;
 }
 .countdown.is-visible { opacity: 1; }
+/* A wave called out across the screen: words, not a digit, so smaller. */
+.countdown.is-announce { font-size: 30px; letter-spacing: 0.14em; }
+/* Survival borrows the team bar; the figures are not a team's colours. */
+.hud.is-survival .team-score { color: var(--hud); }
 
 .respawn {
   position: absolute;
@@ -862,6 +866,8 @@ html, body {
 /* The lobby shows only the rows that belong to the chosen match type. */
 .screen-card.is-online .is-offline,
 .screen-card.is-offline .is-online { display: none; }
+/* Survival has no bots to tune and one map, so those rows step aside. */
+.screen-card.is-survival.is-offline .is-tdm { display: none; }
 
 .net-status {
   margin: 14px 0 0;

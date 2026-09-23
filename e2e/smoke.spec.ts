@@ -43,6 +43,23 @@ interface DebugHandle extends GameState {
     position: { x: number; y: number; z: number };
   }[];
   nav: { nodes: number; cells: number; millis: number; raycasts: number; pruned: number };
+  survival: {
+    phase: string;
+    wave: number;
+    timer: number;
+    left: number;
+    kills: number;
+    cleared: number;
+    zombies: {
+      id: string;
+      dead: boolean;
+      runner: boolean;
+      health: number;
+      position: { x: number; y: number; z: number };
+    }[];
+  } | null;
+  callWave: () => void;
+  invulnerable: boolean;
   map: { id: string; name: string };
   profile: { level: number; xp: number; kills: number; carried: string[] };
   screen: string;
@@ -64,6 +81,7 @@ interface DebugHandle extends GameState {
     audioEnabled: boolean;
     difficulty: string;
     teamSize: number;
+    mode: string;
   };
 }
 
@@ -760,5 +778,165 @@ test.describe("maps and progression", () => {
 
     expect(await page.evaluate(() => window.__shootout.profile.carried)).toHaveLength(4);
     await expect(page.locator("#career-level")).toHaveText("8");
+  });
+});
+
+test.describe("zombie survival", () => {
+  /** Boot straight into survival from a saved setting, and wait for the run. */
+  const bootSurvival = async (page: Page): Promise<void> => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "shootout.settings.v1",
+        JSON.stringify({ mode: "survival", online: false, audioEnabled: false }),
+      );
+    });
+    await page.goto("/");
+    await page.waitForFunction(() => window.__shootout?.ready === true, null, {
+      timeout: 30_000,
+    });
+    await page.getByRole("button", { name: "DEPLOY" }).click();
+    await page.waitForFunction(
+      () => window.__shootout.screen === "game" && window.__shootout.survival !== null,
+      null,
+      { timeout: 40_000 },
+    );
+  };
+
+  /** Call the first wave in and wait for the dead to arrive. */
+  const callWave = async (page: Page, count = 1): Promise<void> => {
+    await page.evaluate(() => window.__shootout.callWave());
+    await page.waitForFunction(
+      (count) => (window.__shootout.survival?.zombies.length ?? 0) >= count,
+      count,
+      { timeout: 60_000 },
+    );
+  };
+
+  /** Stand four metres from the nearest zombie, looking at its chest. */
+  const faceNearestZombie = (page: Page, distance: number): Promise<boolean> =>
+    page.evaluate((distance) => {
+      const game = window.__shootout;
+      const living = game.survival?.zombies.filter((zombie) => !zombie.dead) ?? [];
+      if (living.length === 0) return false;
+      const here = game.position;
+      living.sort(
+        (a, b) =>
+          Math.hypot(a.position.x - here.x, a.position.z - here.z) -
+          Math.hypot(b.position.x - here.x, b.position.z - here.z),
+      );
+      const target = living[0].position;
+      const dx = here.x - target.x;
+      const dz = here.z - target.z;
+      const length = Math.hypot(dx, dz) || 1;
+      const x = target.x + (dx / length) * distance;
+      const z = target.z + (dz / length) * distance;
+      const yaw = Math.atan2(target.x - x, target.z - z);
+      // From an eye about 1.6 m up to a chest about 1.1 m up.
+      const pitch = Math.atan2(1.1 - 1.6, distance);
+      game.teleport(x, z, yaw, target.y, pitch);
+      return true;
+    }, distance);
+
+  test("the lobby offers survival and puts the bot rows away", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForFunction(() => window.__shootout?.ready === true, null, {
+      timeout: 30_000,
+    });
+    const difficultyRow = page
+      .locator("#pick-difficulty")
+      .locator("xpath=ancestor::div[contains(@class,'lobby-row')]");
+    await expect(difficultyRow).toBeVisible();
+    await page.getByRole("button", { name: "Zombie survival" }).click();
+    await expect(difficultyRow).toBeHidden();
+    await expect(page.locator("#map-tagline")).toContainText("coming from all of them");
+    expect(await page.evaluate(() => window.__shootout.settings.mode)).toBe("survival");
+    await page.getByRole("button", { name: "Team deathmatch" }).click();
+    await expect(difficultyRow).toBeVisible();
+  });
+
+  test("survival opens the streets and sends the dead in", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await bootSurvival(page);
+
+    expect(await page.evaluate(() => window.__shootout.map.id)).toBe("boulevard-survival");
+    expect(await page.evaluate(() => window.__shootout.bots)).toHaveLength(0);
+    const nav = await page.evaluate(() => window.__shootout.nav);
+    expect(nav.nodes).toBeGreaterThan(40_000);
+    await expect(page.locator("#tag-a")).toHaveText("WAVE");
+    await expect(page.locator("#tag-b")).toHaveText("LEFT");
+
+    await callWave(page);
+    const run = await page.evaluate(() => window.__shootout.survival!);
+    expect(run.phase).toBe("wave");
+    expect(run.left).toBeGreaterThan(0);
+
+    // The fence across the street's north end is gone: walk out through it.
+    await page.evaluate(() => {
+      window.__shootout.invulnerable = true;
+      window.__shootout.teleport(0, 18, 0, 0, 0);
+    });
+    await page.keyboard.down("KeyW");
+    await page
+      .waitForFunction(() => window.__shootout.position.z > 30, null, { timeout: 45_000 })
+      .finally(() => page.keyboard.up("KeyW"));
+    // And the south end.
+    await page.evaluate(() => window.__shootout.teleport(0, -18, Math.PI, 0, 0));
+    await page.keyboard.down("KeyW");
+    await page
+      .waitForFunction(() => window.__shootout.position.z < -30, null, { timeout: 45_000 })
+      .finally(() => page.keyboard.up("KeyW"));
+    expect(errors).toEqual([]);
+  });
+
+  test("a zombie can be shot down", async ({ page }) => {
+    await bootSurvival(page);
+    await page.evaluate(() => {
+      window.__shootout.invulnerable = true;
+    });
+    await callWave(page);
+
+    // They keep walking, so aim again between bursts.
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const kills = await page.evaluate(() => window.__shootout.survival!.kills);
+      if (kills > 0) break;
+      await faceNearestZombie(page, 4);
+      await button(page, "btn-fire", true);
+      await page.waitForTimeout(600);
+      await button(page, "btn-fire", false);
+      await page.waitForTimeout(200);
+    }
+    expect(await page.evaluate(() => window.__shootout.survival!.kills)).toBeGreaterThan(0);
+  });
+
+  test("the dead hit back, and falling ends the run on its results", async ({ page }) => {
+    test.setTimeout(150_000);
+    await bootSurvival(page);
+    await callWave(page);
+    // Stand in reach and let them come.
+    await faceNearestZombie(page, 0.9);
+    await page.waitForFunction(() => window.__shootout.health < 100, null, { timeout: 60_000 });
+    await page.waitForFunction(
+      () => {
+        const game = window.__shootout;
+        if (game.screen === "scoreboard") return true;
+        // Keep the nearest one close until it is over.
+        const living = game.survival?.zombies.filter((zombie) => !zombie.dead) ?? [];
+        const here = game.position;
+        const near = living.some(
+          (zombie) => Math.hypot(zombie.position.x - here.x, zombie.position.z - here.z) < 1.3,
+        );
+        if (!near && living[0]) {
+          const at = living[0].position;
+          game.teleport(at.x + 0.9, at.z, -Math.PI / 2, at.y, 0);
+        }
+        return false;
+      },
+      null,
+      { timeout: 120_000, polling: 500 },
+    );
+    await expect(page.locator("#result-title")).toContainText("FELL ON WAVE 1");
+    await expect(page.locator("#label-kills")).toHaveText("Wave");
+    await expect(page.locator("#rewards")).toContainText("Round played");
   });
 });

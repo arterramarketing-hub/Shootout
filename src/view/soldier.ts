@@ -40,7 +40,7 @@ export interface BoneSpec {
   at: Vec3;
 }
 
-const at = (x: number, y: number, z: number): Vec3 => ({ x, y, z });
+export const at = (x: number, y: number, z: number): Vec3 => ({ x, y, z });
 
 /**
  * The skeleton.
@@ -133,7 +133,7 @@ export const TEAM_PALETTES: Record<Team, SoldierPalette> = {
 };
 
 /** A ring, with the fields that are the same nearly everywhere filled in. */
-const ring = (
+export const ring = (
   x: number,
   y: number,
   z: number,
@@ -145,7 +145,7 @@ const ring = (
 ): Ring => ({ at: at(x, y, z), across, through, round, bone, ...extra });
 
 /** A straight run between two joints, narrowing as it goes. */
-const limb = (
+export const limb = (
   from: Vec3,
   to: Vec3,
   fromSize: number,
@@ -181,7 +181,7 @@ const limb = (
 };
 
 /** A small rounded block, for pouches, pads and the weapon. */
-const block = (
+export const block = (
   centre: Vec3,
   half: Vec3,
   bone: number,

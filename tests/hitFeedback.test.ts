@@ -102,6 +102,8 @@ const makeHud = () => {
     damageVignette: plain().el,
     feed: plain().el,
     scoreA: plain().el,
+    tagA: plain().el,
+    tagB: plain().el,
     scoreB: plain().el,
     clock: plain().el,
     killFeed: plain().el,

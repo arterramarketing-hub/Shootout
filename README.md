@@ -271,9 +271,24 @@ where you must look to find them.
 
 ## Match flow
 
+Two solo modes, picked in the lobby.
+
 Team deathmatch. Six minute rounds, first to 50 kills, four second respawns.
 Lobby sets difficulty and team size, the round plays, and a scoreboard reports
-kills, deaths, headshots and ratio.
+kills, deaths, headshots and ratio. Online play is always team deathmatch.
+
+Zombie survival. One life, no bots, and no fences: the survival variant of
+Boulevard Works takes down the barriers across both ends of the street, so the
+plant, the cross boulevards, the lots and the storefronts around it are all
+walkable, out to hidden walls about 88 m from the centre. The dead come in
+waves from breaches all over that city, never within 22 m of the player, at
+most fourteen at a time. They walk the navigation grid around walls, speed up
+wave by wave, and from wave 3 some of them run. A zombie telegraphs its swing,
+and the blow lands only if the player is still in reach when it does, so
+stepping back is a real answer. Ammunition is topped up at the start of every
+wave. The run ends when the player falls, and the results show the wave
+reached, waves cleared, kills and headshots. Survival pays experience per
+zombie and per wave cleared, and does not add zombies to the career kill count.
 
 Settings persist to local storage and cover look sensitivity for touch and
 mouse separately, gyroscope aim, inverted look, field of view, HUD scale,

@@ -1,5 +1,26 @@
 # Changelog
 
+## Zombie survival
+
+**Added**
+
+- A second solo mode, picked in the lobby: zombie survival. Waves of zombies
+  come in from breaches across the city until the player falls.
+- An open variant of Boulevard Works for it. The fences across both ends of
+  the street are gone, the streets and buildings around the plant are solid
+  and walkable, and hidden walls bound the city about 88 m out.
+- Zombie figures: lofted like the soldiers and driven by the same skeleton,
+  in three sets of torn clothes, with a hunched, dragging walk and a
+  telegraphed overhead swing.
+- A survival HUD in the team bar (wave, kills, zombies left, time to the next
+  wave), wave call-outs, and a survival results screen.
+- Experience for zombies killed and waves cleared.
+
+**Changed**
+
+- A* on the navigation grid uses a binary heap and reused scratch buffers, so
+  it holds up on the survival map's grid of about 85,000 nodes.
+
 ## Phase 4 — art, a second map, progression
 
 The prototype stops looking like a greybox. Every surface is textured, there

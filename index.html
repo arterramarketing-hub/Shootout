@@ -55,9 +55,9 @@
         <div class="netbar" id="netbar"></div>
 
         <div class="matchbar" id="matchbar">
-          <div class="team team-a"><span class="team-tag">BLUE</span><span id="score-a" class="team-score">0</span></div>
+          <div class="team team-a"><span class="team-tag" id="tag-a">BLUE</span><span id="score-a" class="team-score">0</span></div>
           <div class="clock" id="clock">6:00</div>
-          <div class="team team-b"><span id="score-b" class="team-score">0</span><span class="team-tag">RUST</span></div>
+          <div class="team team-b"><span id="score-b" class="team-score">0</span><span class="team-tag" id="tag-b">RUST</span></div>
         </div>
 
         <div id="killfeed" class="killfeed" aria-live="polite"></div>
@@ -150,7 +150,7 @@
       <div id="boot" class="boot screen">
         <div class="screen-card">
           <h1>SHOOTOUT</h1>
-          <p class="boot-sub">Phase 2 &middot; team deathmatch</p>
+          <p class="boot-sub">Team deathmatch &middot; zombie survival</p>
 
           <div class="career">
             <div class="career-head">
@@ -182,12 +182,20 @@
           </div>
 
           <div class="lobby-row is-offline">
+            <span class="lobby-label">Mode</span>
+            <div class="segmented" id="pick-mode" role="group" aria-label="Game mode">
+              <button type="button" data-value="tdm">Team deathmatch</button>
+              <button type="button" data-value="survival">Zombie survival</button>
+            </div>
+          </div>
+
+          <div class="lobby-row is-offline is-tdm">
             <span class="lobby-label">Map</span>
             <div class="segmented" id="pick-map" role="group" aria-label="Map"></div>
           </div>
           <p class="map-tagline is-offline" id="map-tagline"></p>
 
-          <div class="lobby-row is-offline">
+          <div class="lobby-row is-offline is-tdm">
             <span class="lobby-label">Difficulty</span>
             <div class="segmented" id="pick-difficulty" role="group" aria-label="Bot difficulty">
               <button type="button" data-value="recruit">Recruit</button>
@@ -196,7 +204,7 @@
             </div>
           </div>
 
-          <div class="lobby-row is-offline">
+          <div class="lobby-row is-offline is-tdm">
             <span class="lobby-label">Bots per team</span>
             <div class="segmented" id="pick-teamsize" role="group" aria-label="Bots per team">
               <button type="button" data-value="1">1</button>
@@ -288,10 +296,10 @@
           <p class="result-sub" id="result-sub">Blue 50 &middot; Rust 42</p>
 
           <dl class="stats">
-            <div><dt>Kills</dt><dd id="stat-kills">0</dd></div>
-            <div><dt>Deaths</dt><dd id="stat-deaths">0</dd></div>
-            <div><dt>Headshots</dt><dd id="stat-headshots">0</dd></div>
-            <div><dt>Ratio</dt><dd id="stat-ratio">0.00</dd></div>
+            <div><dt id="label-kills">Kills</dt><dd id="stat-kills">0</dd></div>
+            <div><dt id="label-deaths">Deaths</dt><dd id="stat-deaths">0</dd></div>
+            <div><dt id="label-headshots">Headshots</dt><dd id="stat-headshots">0</dd></div>
+            <div><dt id="label-ratio">Ratio</dt><dd id="stat-ratio">0.00</dd></div>
           </dl>
 
           <div class="rewards" id="rewards"></div>

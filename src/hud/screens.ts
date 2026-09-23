@@ -5,6 +5,7 @@ import {
   type GameSettings,
 } from "../engine/settings";
 import { MAPS } from "../maps";
+import { boulevardSurvivalMap } from "../maps/boulevard";
 
 import type { MatchState } from "../sim/match";
 import {
@@ -76,6 +77,7 @@ export class Screens {
   private readonly selectQuality: (value: string) => void;
   private readonly selectOnline: (value: string) => void;
   private readonly selectMap: (value: string) => void;
+  private readonly selectMode: (value: string) => void;
   private readonly card = byId("boot").querySelector<HTMLElement>(".screen-card")!;
   private readonly netStatus = byId("net-status");
 
@@ -114,6 +116,13 @@ export class Screens {
     }
     this.selectMap = segmented("pick-map", (value) => {
       this.settings.mapId = value;
+      this.showMapTagline();
+      this.commit();
+    });
+
+    this.selectMode = segmented("pick-mode", (value) => {
+      this.settings.mode = value === "survival" ? "survival" : "tdm";
+      this.applyMatchType();
       this.showMapTagline();
       this.commit();
     });
@@ -190,6 +199,7 @@ export class Screens {
     levels?: LevelUpResult,
   ): void {
     this.renderRewards(reward, levels);
+    this.labelStats("Kills", "Deaths", "Headshots", "Ratio");
     const { scores, playerKills, playerDeaths, playerHeadshots, winner } = match;
     byId("result-title").textContent =
       winner === "draw" ? "DRAW" : winner === "a" ? "BLUE WINS" : "RUST WINS";
@@ -201,6 +211,33 @@ export class Screens {
     const ratio = playerDeaths === 0 ? playerKills : playerKills / playerDeaths;
     byId("stat-ratio").textContent = ratio.toFixed(2);
     this.show("scoreboard");
+  }
+
+  /** Fill the end-of-round screen from a survival run that has ended. */
+  showSurvivalResults(
+    run: SurvivalSummary,
+    reward?: MatchReward,
+    levels?: LevelUpResult,
+  ): void {
+    this.renderRewards(reward, levels);
+    this.labelStats("Wave", "Cleared", "Kills", "Headshots");
+    byId("result-title").textContent = run.fell
+      ? `FELL ON WAVE ${run.wave}`
+      : `LEFT ON WAVE ${run.wave}`;
+    byId("result-sub").textContent =
+      run.cleared === 1 ? "1 wave held off" : `${run.cleared} waves held off`;
+    byId("stat-kills").textContent = String(run.wave);
+    byId("stat-deaths").textContent = String(run.cleared);
+    byId("stat-headshots").textContent = String(run.kills);
+    byId("stat-ratio").textContent = String(run.headshots);
+    this.show("scoreboard");
+  }
+
+  private labelStats(...labels: [string, string, string, string]): void {
+    const ids = ["label-kills", "label-deaths", "label-headshots", "label-ratio"];
+    ids.forEach((id, index) => {
+      byId(id).textContent = labels[index];
+    });
   }
 
   private renderRewards(reward?: MatchReward, levels?: LevelUpResult): void {
@@ -239,13 +276,15 @@ export class Screens {
   }
 
   private showMapTagline(): void {
-    const map = MAPS[this.settings.mapId];
+    const map =
+      this.settings.mode === "survival" ? boulevardSurvivalMap : MAPS[this.settings.mapId];
     byId("map-tagline").textContent = map ? map.tagline : "";
   }
 
   private applyMatchType(): void {
     this.card.classList.toggle("is-online", this.settings.online);
     this.card.classList.toggle("is-offline", !this.settings.online);
+    this.card.classList.toggle("is-survival", this.settings.mode === "survival");
   }
 
   private bindText(
@@ -323,6 +362,7 @@ export class Screens {
     this.selectQuality(this.settings.quality);
     this.selectOnline(this.settings.online ? "online" : "offline");
     this.selectMap(this.settings.mapId);
+    this.selectMode(this.settings.mode);
     this.showMapTagline();
     byId<HTMLInputElement>("set-server").value = this.settings.serverUrl;
     byId<HTMLInputElement>("set-name").value = this.settings.playerName;
@@ -333,6 +373,17 @@ export class Screens {
   private commit(): void {
     this.callbacks.onSettingsChanged(this.settings);
   }
+}
+
+/** How a survival run ended, for the results screen. */
+export interface SurvivalSummary {
+  /** The wave the run ended on. */
+  wave: number;
+  /** Overrun, rather than walked away from the board. */
+  fell: boolean;
+  cleared: number;
+  kills: number;
+  headshots: number;
 }
 
 /** What reaching a level hands over, named for the level-up line. */

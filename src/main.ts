@@ -21,6 +21,7 @@ import { LiveBoard, type BoardRow } from "./hud/liveBoard";
 import { Screens } from "./hud/screens";
 import { InputManager } from "./input/inputManager";
 import { mapById } from "./maps";
+import { boulevardSurvivalMap } from "./maps/boulevard";
 import type { MapDefinition } from "./maps/types";
 import {
   DIFFICULTIES,
@@ -75,6 +76,16 @@ import { createRandom } from "./sim/random";
 import type { PlayerState } from "./sim/types";
 import { copy, lengthXZ, sub, vec3, type Vec3 } from "./sim/vec3";
 import { DEFAULT_LOADOUT } from "./sim/weapons";
+import {
+  createSurvival,
+  damageZombie,
+  endSurvival,
+  remaining,
+  stepSurvival,
+  type Breach,
+  type SurvivalState,
+} from "./sim/zombies";
+import type { SurvivalReadout } from "./hud/hud";
 import { NetClient } from "./net/client";
 import { INTERPOLATION_DELAY_MS, type SnapshotMessage } from "./net/protocol";
 import { BotField } from "./view/botView";
@@ -224,6 +235,18 @@ const boot = (): void => {
   /** The newest roster the server sent, empty while playing offline. */
   let netRoster: BoardRow[] = [];
 
+  /** The run in progress while playing survival; null in team deathmatch. */
+  let survival: SurvivalState | null = null;
+  /** Where the dead come in from: the survival map's far spawns. */
+  let breaches: Breach[] = [];
+  /** Seconds the player lies downed before the run's results come up. */
+  let survivalEndTimer = 0;
+  /** A line called across the screen, and how long it has left. */
+  let announcement: { text: string; life: number } | null = null;
+  const announce = (text: string, life = 2.4): void => {
+    announcement = { text, life };
+  };
+
   const input = new InputManager(canvas);
   input.look.yaw = spawn.yaw;
   input.attachJoystick(byId("joystick-base"), byId("joystick-knob"));
@@ -252,6 +275,8 @@ const boot = (): void => {
     damageVignette: byId("damage-vignette"),
     feed: byId("feed"),
     scoreA: byId("score-a"),
+    tagA: byId("tag-a"),
+    tagB: byId("tag-b"),
     scoreB: byId("score-b"),
     clock: byId("clock"),
     killFeed: byId("killfeed"),
@@ -286,7 +311,8 @@ const boot = (): void => {
   byId("btn-board-close").addEventListener("click", () => setBoardOpen(false));
   byId("btn-board-quit").addEventListener("click", () => {
     setBoardOpen(false);
-    finishRound();
+    if (survival) finishSurvival();
+    else finishRound();
   });
   window.addEventListener("keydown", (event) => {
     if (screens.activeScreen !== "game") return;
@@ -407,6 +433,14 @@ const boot = (): void => {
     for (const bot of bots) {
       world.setHitboxes(bot.id, bot.health.dead ? [] : botHitboxes(bot.position));
     }
+    if (survival) {
+      for (const zombie of survival.zombies) {
+        world.setHitboxes(
+          zombie.id,
+          zombie.dead ? [] : zombieHitboxes(zombie.position, zombie.yaw),
+        );
+      }
+    }
   };
 
   const rebuildCombatants = (): void => {
@@ -449,6 +483,20 @@ const boot = (): void => {
     let dealt = 0;
 
     for (const entry of resolution.damage) {
+      if (survival) {
+        // Nobody else is on the field in survival: everything the player
+        // hits is one of the dead.
+        const zombie = survival.zombies.find((candidate) => candidate.id === entry.targetId);
+        if (!zombie || zombie.dead) continue;
+        hitSomething = true;
+        headshot = headshot || entry.headshot;
+        dealt += entry.damage;
+        if (damageZombie(survival, zombie, entry.damage, entry.headshot)) {
+          killedSomeone = true;
+          world.setHitboxes(zombie.id, []);
+        }
+        continue;
+      }
       const attacker = findCombatantName(attackerId);
       const victim = findCombatantName(entry.targetId);
       if (!attacker || !victim) continue;
@@ -505,6 +553,26 @@ const boot = (): void => {
     { center: vec3(position.x, position.y + 1.0, position.z), halfExtents: vec3(0.24, 0.52, 0.2), isHead: false },
     { center: vec3(position.x, position.y + 1.62, position.z), halfExtents: vec3(0.13, 0.14, 0.13), isHead: true },
   ];
+
+  /**
+   * A zombie's boxes: a soldier's, with the head carried a hand's width
+   * forward and a little lower, where the hunch in its walk puts it.
+   */
+  const zombieHitboxes = (position: Vec3, yaw: number) => {
+    const forward = 0.07;
+    return [
+      { center: vec3(position.x, position.y + 1.0, position.z), halfExtents: vec3(0.24, 0.52, 0.2), isHead: false },
+      {
+        center: vec3(
+          position.x + Math.sin(yaw) * forward,
+          position.y + 1.59,
+          position.z + Math.cos(yaw) * forward,
+        ),
+        halfExtents: vec3(0.13, 0.14, 0.13),
+        isHead: true,
+      },
+    ];
+  };
 
   /** The player's boxes hang off the eye, which is where their stance is known. */
   const playerHitboxes = (eyeY: number, position: Vec3) => [
@@ -737,12 +805,28 @@ const boot = (): void => {
     // Swapping the level rebuilds the scene, the collision world and the
     // navigation grid. Cheap enough to do between rounds, and it keeps one
     // set of per-map objects alive rather than several.
-    const wanted = mapById(settings.mapId);
+    const surviving = settings.mode === "survival";
+    const wanted = surviving ? boulevardSurvivalMap : mapById(settings.mapId);
     if (wanted.id !== activeMap.id) buildWorld(wanted);
+    world.clearHitboxes();
     match.config.teamSize = settings.teamSize;
-    createRoster();
-    rebuildCombatants();
     startMatch(match);
+    announcement = null;
+    if (surviving) {
+      // No bots and no teams: the player, the city and whatever comes out
+      // of it. The match is only kept running for the HUD's sake.
+      botField.clear();
+      bots = [];
+      survival = createSurvival();
+      breaches = activeMap.spawns.filter((point) => point.team === "b");
+      survivalEndTimer = 0;
+      match.phase = "active";
+      announce("SURVIVE");
+    } else {
+      survival = null;
+      createRoster();
+    }
+    rebuildCombatants();
     respawnPlayer();
     playerRespawnTimer = 0;
     screens.show("game");
@@ -875,14 +959,112 @@ const boot = (): void => {
     if (document.pointerLockElement) document.exitPointerLock();
   };
 
+  /** Bank a survival run's experience, then show how far it got. */
+  const finishSurvival = (): void => {
+    const run = survival;
+    if (!run) return;
+    endSurvival(run);
+    const reward: MatchReward = {
+      kills: 0,
+      headshots: 0,
+      deaths: playerHealth.dead ? 1 : 0,
+      won: false,
+      ownScore: 0,
+      otherScore: 0,
+      completed: true,
+      zombieKills: run.kills,
+      wavesCleared: run.cleared,
+    };
+    const result = applyMatchResult(profile, reward);
+    saveProfile(profile);
+    screens.renderCareer(profile);
+    screens.showSurvivalResults(
+      {
+        wave: run.wave,
+        cleared: run.cleared,
+        kills: run.kills,
+        headshots: run.headshots,
+        fell: playerHealth.dead,
+      },
+      reward,
+      result.levels,
+    );
+    announcement = null;
+    if (document.pointerLockElement) document.exitPointerLock();
+  };
+
+  /** The dead get a turn, and the player's run ends if they have landed. */
+  const stepSurvivalRun = (run: SurvivalState, dt: number): void => {
+    const feet = vec3(
+      player.position.x,
+      player.position.y - player.halfHeight,
+      player.position.z,
+    );
+    stepSurvival(
+      run,
+      { position: feet, alive: !playerHealth.dead },
+      breaches,
+      { grid: nav.grid, hitscan: world, random },
+      dt,
+      {
+        onAttack: (damage, from) => {
+          if (playerHealth.dead) return;
+          const bearing = bearingTo(player.position, from);
+          hud.showDamageFrom(bearing);
+          rig.addShake(0.9);
+          if (!debugInvulnerable && applyDamage(playerHealth, damage, bearing)) {
+            match.playerDeaths += 1;
+          }
+        },
+        onWaveStart: (wave) => {
+          announce(`WAVE ${wave}`);
+          // A fresh wave comes with fresh ammunition, so a long run is not
+          // lost to an empty rack rather than to the dead.
+          for (const weapon of playerLoadout.weapons) {
+            weapon.reserve = Math.max(weapon.reserve, weapon.definition.reserveAmmo);
+          }
+        },
+        onWaveCleared: (wave) => announce(`WAVE ${wave} CLEARED`),
+      },
+    );
+    if (playerHealth.dead && run.phase !== "over") {
+      endSurvival(run);
+      survivalEndTimer = 2.2;
+    }
+    if (run.phase === "over" && survivalEndTimer > 0) {
+      survivalEndTimer = Math.max(0, survivalEndTimer - dt);
+      if (survivalEndTimer === 0 && screens.activeScreen === "game") {
+        input.clearAimLatch();
+        finishSurvival();
+      }
+    }
+  };
+
+  /** What the HUD shows in place of scores while surviving. */
+  const survivalReadout = (): SurvivalReadout | null => {
+    if (!survival) return null;
+    return {
+      wave: survival.wave,
+      left: remaining(survival),
+      kills: survival.kills,
+      nextWaveIn: survival.phase === "breather" ? survival.timer : null,
+      announce: announcement ? announcement.text : playerHealth.dead ? "OVERRUN" : null,
+    };
+  };
+
   const stepSimulation = (dt: number, frame: ReturnType<typeof input.sample>): void => {
     const live = match.phase === "active";
 
     previousPosition = copy(player.position);
     stepPlayer(player, frame, dt, body);
     stepHealth(playerHealth, dt);
-    stepMatch(match, dt);
+    // Survival has no clock to run down; the match is only there for the HUD.
+    if (!survival) stepMatch(match, dt);
     rebuildCombatants();
+    if (announcement) {
+      announcement.life -= dt;
+      if (announcement.life <= 0) announcement = null;
+    }
 
     if (playerRespawnTimer > 0) {
       playerRespawnTimer = Math.max(0, playerRespawnTimer - dt);
@@ -904,6 +1086,7 @@ const boot = (): void => {
       if (!live) continue;
       stepBot(bot, botWorld, dt, onBotShot);
     }
+    if (survival) stepSurvivalRun(survival, dt);
 
     // The player can always shoot the practice plates, but only scores during
     // a live round.
@@ -1033,6 +1216,10 @@ const boot = (): void => {
       netStatusBar.textContent =
         `${Math.round(net.rttMs)} ms · ${INTERPOLATION_DELAY_MS} ms interp · ${views.length + 1} players`;
       netStatusBar.classList.toggle("is-poor", net.rttMs > 150);
+    } else if (survival) {
+      botField.renderZombies(survival.zombies, delta);
+      botField.retain(new Set(survival.zombies.map((zombie) => zombie.id)));
+      netStatusBar.textContent = "";
     } else {
       botField.renderBots(bots, delta);
       netStatusBar.textContent = "";
@@ -1059,6 +1246,7 @@ const boot = (): void => {
       tier: quality.tier,
       activeMeshes: sceneMeshCount(),
       deltaSeconds: delta,
+      survival: online ? null : survivalReadout(),
     });
 
     // The GPU-string guess is unreliable, so measured frame times get the
@@ -1156,6 +1344,32 @@ const boot = (): void => {
             z: +bot.position.z.toFixed(2),
           },
         }));
+      },
+      get survival() {
+        if (!survival) return null;
+        return {
+          phase: survival.phase,
+          wave: survival.wave,
+          timer: +survival.timer.toFixed(2),
+          left: remaining(survival),
+          kills: survival.kills,
+          cleared: survival.cleared,
+          zombies: survival.zombies.map((zombie) => ({
+            id: zombie.id,
+            dead: zombie.dead,
+            runner: zombie.runner,
+            health: Math.round(zombie.health),
+            position: {
+              x: +zombie.position.x.toFixed(2),
+              y: +zombie.position.y.toFixed(2),
+              z: +zombie.position.z.toFixed(2),
+            },
+          })),
+        };
+      },
+      /** Development helper: skip the breather and bring the next wave in now. */
+      callWave() {
+        if (survival && survival.phase === "breather") survival.timer = 0.01;
       },
       get nav() {
         return {

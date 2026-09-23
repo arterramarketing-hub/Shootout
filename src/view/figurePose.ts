@@ -46,6 +46,13 @@ export interface PoseInput {
   fallSide: number;
   /** Seconds since the figure appeared, for the idle to be out of step. */
   clock: number;
+  /** A zombie's walk rather than a soldier's. */
+  shamble?: boolean;
+  /**
+   * How far through a swing a zombie is, nought to one, or null when it is
+   * not swinging: the arms go up for the first part and come down after.
+   */
+  swing?: number | null;
 }
 
 const flat = (): JointPose => ({ pitch: 0, yaw: 0, roll: 0 });
@@ -109,6 +116,8 @@ export const figurePose = (input: PoseInput): FigurePose => {
     return { bob: -collapse * 0.42, sway: input.fallSide * collapse * 0.16, joints };
   }
 
+  if (input.shamble) return shamblePose(input, joints, set);
+
   const gait = Math.max(0, Math.min(1, input.gait));
   // How far the legs reach. A walk is a short stride; a run opens it up.
   const reach = (0.28 + Math.min(1, input.speed / 6.5) * 0.3) * gait;
@@ -153,6 +162,61 @@ export const figurePose = (input: PoseInput): FigurePose => {
     // Two bobs per stride: the body rises over each standing leg.
     bob: -Math.abs(Math.cos(input.stride)) * 0.028 * gait + breathe * 0.4,
     sway: Math.sin(input.stride) * 0.018 * gait,
+    joints,
+  };
+};
+
+/**
+ * A zombie's walk.
+ *
+ * Hunched, head lolling, one leg dragging behind the other, and the arms out
+ * in front bobbing with the step instead of swinging against it. The hunch
+ * is kept small on purpose: the head hitbox does not bend with the spine,
+ * and a head drawn well in front of where it is shot is a miss the player
+ * did not earn.
+ */
+const shamblePose = (
+  input: PoseInput,
+  joints: Record<string, JointPose>,
+  set: (name: string, pose: Partial<JointPose>) => void,
+): FigurePose => {
+  const gait = Math.max(0, Math.min(1, input.gait));
+  const reach = (0.22 + Math.min(1, input.speed / 5) * 0.34) * gait;
+  // The good leg steps out; the bad one comes after it, shorter and stiffer.
+  const right = legSwing(input.stride, reach);
+  const left = legSwing(input.stride + Math.PI, reach * 0.62);
+  set("thighR", { pitch: right.hip });
+  set("shinR", { pitch: -right.knee });
+  set("footR", { pitch: right.ankle });
+  set("thighL", { pitch: left.hip, roll: -0.05 });
+  set("shinL", { pitch: -left.knee * 0.5 });
+  set("footL", { pitch: left.ankle + 0.12 * gait });
+
+  const loll = Math.sin(input.clock * 0.9) * 0.14;
+  const lurch = Math.sin(input.stride) * 0.12 * gait;
+  set("pelvis", { yaw: lurch * 0.6, roll: -Math.cos(input.stride) * 0.1 * gait, pitch: 0.04 });
+  set("spine", { pitch: 0.12, roll: lurch * 0.4 });
+  set("chest", { pitch: 0.08, yaw: -lurch * 0.5, roll: 0.05 });
+  set("head", { pitch: -0.16 - input.pitch * 0.3, roll: 0.18 + loll, yaw: -loll * 0.5 });
+
+  // Out in front, rising and falling with each step, out of step with each
+  // other. A swing lifts them both and brings them down together.
+  const bobR = Math.sin(input.stride * 2) * 0.05 * gait + Math.sin(input.clock * 1.3) * 0.03;
+  const bobL = Math.sin(input.stride * 2 + 1.3) * 0.05 * gait + Math.sin(input.clock * 1.1) * 0.03;
+  let raise = 0;
+  if (input.swing !== undefined && input.swing !== null) {
+    const t = Math.max(0, Math.min(1, input.swing));
+    // Up over the first sixty per cent, down hard after it.
+    raise = t < 0.6 ? -(t / 0.6) * 0.75 : -0.75 + ((t - 0.6) / 0.4) * 1.2;
+  }
+  set("armR", { pitch: bobR + raise, yaw: -0.04 });
+  set("armL", { pitch: bobL + raise, yaw: 0.04 });
+  set("foreR", { pitch: -0.08 + Math.abs(bobR) * 0.5 });
+  set("foreL", { pitch: -0.04 + Math.abs(bobL) * 0.5 });
+
+  return {
+    bob: -Math.abs(Math.cos(input.stride)) * 0.045 * gait,
+    sway: Math.sin(input.stride) * 0.04 * gait,
     joints,
   };
 };

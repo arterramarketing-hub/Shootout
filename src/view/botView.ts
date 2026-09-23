@@ -9,8 +9,10 @@ import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 import { ContactShadows } from "./contactShadow";
 import { FALL_SECONDS, figurePose } from "./figurePose";
-import { BONES, FIGURE_HEIGHT, TEAM_PALETTES, soldierSkin } from "./soldier";
+import { BONES, FIGURE_HEIGHT, TEAM_PALETTES, soldierSkin, type BoneSpec } from "./soldier";
+import { ZOMBIE_BONES, isZombieLook, zombieLook, zombieSkin, type ZombieLook } from "./zombie";
 import type { BotState, Team } from "../sim/bots";
+import { ZOMBIE, type ZombieState } from "../sim/zombies";
 import type { Vec3 } from "../sim/vec3";
 import { damp } from "../sim/vec3";
 
@@ -56,12 +58,15 @@ export const TEAM_COLOURS: Record<Team, { body: string; trim: string }> = {
   b: { body: TEAM_PALETTES.b.uniform, trim: TEAM_PALETTES.b.lens },
 };
 
+/** Whose figure it is: a soldier of either side, or one of the dead. */
+export type FigureLook = Team | ZombieLook;
+
 /** How long a figure lies on the ground before it is taken away. */
 const FALLEN_SECONDS = 3.2;
 
 export interface BotBinding {
   id: string;
-  team: Team;
+  look: FigureLook;
   root: TransformNode;
   /** Yaw is smoothed for rendering so figures do not snap between frames. */
   renderYaw: number;
@@ -83,6 +88,10 @@ export interface BotBinding {
   clock: number;
   /** The shadow laid on the ground, where the tier has no shadow map. */
   patch: Mesh | null;
+  /** Walks like a zombie rather than a soldier. */
+  shamble: boolean;
+  /** How far through a swing it is, for a zombie; null when not swinging. */
+  swing: number | null;
 }
 
 /** Geometry and material for one team, built once and shared by every figure. */
@@ -96,7 +105,7 @@ export class BotField {
   /** Called with every mesh a new figure is built from, for shadow casting. */
   onFigure: ((mesh: Mesh) => void) | null = null;
   private readonly byId = new Map<string, BotBinding>();
-  private readonly builds = new Map<Team, TeamBuild>();
+  private readonly builds = new Map<FigureLook, TeamBuild>();
   private readonly spin = new Quaternion();
   /**
    * Set where the sun casts no shadow map, so figures still read as
@@ -117,12 +126,12 @@ export class BotField {
    * The source mesh is never drawn. Figures are instances cloned from it,
    * which share its vertex buffers, so a team of six costs one upload.
    */
-  private build(team: Team): TeamBuild {
-    const existing = this.builds.get(team);
+  private build(look: FigureLook): TeamBuild {
+    const existing = this.builds.get(look);
     if (existing) return existing;
 
-    const skin = soldierSkin(team);
-    const source = new Mesh(`soldier_${team}`, this.scene);
+    const skin = isZombieLook(look) ? zombieSkin(look) : soldierSkin(look);
+    const source = new Mesh(`figure_${look}`, this.scene);
     const data = new VertexData();
     data.positions = skin.positions;
     data.normals = skin.normals;
@@ -135,7 +144,7 @@ export class BotField {
 
     // Colour lives in the vertices, so one material covers a whole soldier:
     // uniform, carrier, skin, boots and rifle in a single draw.
-    const material = new StandardMaterial(`mat_soldier_${team}`, this.scene);
+    const material = new StandardMaterial(`mat_figure_${look}`, this.scene);
     material.diffuseColor = new Color3(1, 1, 1);
     material.ambientColor = new Color3(1, 1, 1);
     material.specularColor = new Color3(0.06, 0.06, 0.06);
@@ -144,7 +153,7 @@ export class BotField {
     source.material = material;
 
     const built = { source, material };
-    this.builds.set(team, built);
+    this.builds.set(look, built);
     return built;
   }
 
@@ -156,13 +165,16 @@ export class BotField {
    * exactly as it was built, and every angle the pose asks for is a
    * departure from a soldier standing up rather than from a star shape.
    */
-  private makeSkeleton(id: string): { skeleton: Skeleton; bones: Map<string, Bone> } {
+  private makeSkeleton(
+    id: string,
+    table: BoneSpec[],
+  ): { skeleton: Skeleton; bones: Map<string, Bone> } {
     const skeleton = new Skeleton(`skel_${id}`, `skel_${id}`, this.scene);
     const made: Bone[] = [];
     const bones = new Map<string, Bone>();
-    for (const spec of BONES) {
+    for (const spec of table) {
       const parent = spec.parent < 0 ? null : made[spec.parent];
-      const anchor = spec.parent < 0 ? { x: 0, y: 0, z: 0 } : BONES[spec.parent].at;
+      const anchor = spec.parent < 0 ? { x: 0, y: 0, z: 0 } : table[spec.parent].at;
       const local = Matrix.Translation(
         spec.at.x - anchor.x,
         spec.at.y - anchor.y,
@@ -176,12 +188,12 @@ export class BotField {
   }
 
   /** A figure for anyone the local player can see: a bot or a remote player. */
-  add(id: string, team: Team, position: Vec3, yaw: number): BotBinding {
+  add(id: string, look: FigureLook, position: Vec3, yaw: number): BotBinding {
     const root = new TransformNode(`figure_${id}`, this.scene);
     root.position.set(position.x, position.y, position.z);
 
-    const { source, material } = this.build(team);
-    const mesh = source.clone(`soldier_${id}`, root);
+    const { source, material } = this.build(look);
+    const mesh = source.clone(`figure_${id}`, root);
     mesh.setEnabled(true);
     mesh.material = material;
     // Hit detection runs against the shared world's boxes, not against
@@ -191,7 +203,8 @@ export class BotField {
     // needs, and it halves what the vertex shader does per figure.
     mesh.numBoneInfluencers = 2;
 
-    const { skeleton, bones } = this.makeSkeleton(id);
+    const zombie = isZombieLook(look);
+    const { skeleton, bones } = this.makeSkeleton(id, zombie ? ZOMBIE_BONES : BONES);
     mesh.skeleton = skeleton;
 
     if (this.onFigure) this.onFigure(mesh);
@@ -203,7 +216,7 @@ export class BotField {
 
     const binding: BotBinding = {
       id,
-      team,
+      look,
       root,
       patch,
       mesh,
@@ -217,6 +230,8 @@ export class BotField {
       stride: 0,
       gait: 0,
       clock: (id.charCodeAt(id.length - 1) % 32) * 0.19,
+      shamble: zombie,
+      swing: null,
     };
     this.bindings.push(binding);
     this.byId.set(id, binding);
@@ -233,6 +248,8 @@ export class BotField {
       dying: binding.dead ? binding.deathTime : null,
       fallSide: binding.fallSide,
       clock: binding.clock,
+      shamble: binding.shamble,
+      swing: binding.swing,
     });
     for (const [name, joint] of Object.entries(pose.joints)) {
       const bone = binding.bones.get(name);
@@ -248,13 +265,21 @@ export class BotField {
   /** Place one figure. Creates it on first sight. */
   place(
     id: string,
-    team: Team,
+    look: FigureLook,
     position: Vec3,
     yaw: number,
     dead: boolean,
     deltaSeconds: number,
+    swing: number | null = null,
   ): void {
-    const binding = this.byId.get(id) ?? this.add(id, team, position, yaw);
+    const binding = this.byId.get(id) ?? this.add(id, look, position, yaw);
+    if (swing !== null) {
+      binding.swing = swing;
+    } else if (binding.swing !== null) {
+      // The blow has landed: follow it through rather than snapping back.
+      binding.swing += deltaSeconds * 1.2;
+      if (binding.swing >= 1) binding.swing = null;
+    }
     binding.clock += deltaSeconds;
     if (dead) {
       this.fall(binding, deltaSeconds);
@@ -288,7 +313,12 @@ export class BotField {
     // One full cycle — two steps — per metre and a half, which is a walking
     // pace, and is what keeps the boots from sliding across the ground.
     binding.stride += moved * 4.2;
-    binding.gait = damp(binding.gait, Math.min(1, speed / 2.6), 0.001, deltaSeconds);
+    binding.gait = damp(
+      binding.gait,
+      Math.min(1, speed / (binding.shamble ? 1.6 : 2.6)),
+      0.001,
+      deltaSeconds,
+    );
     this.applyPose(binding, speed, 0);
   }
 
@@ -342,6 +372,24 @@ export class BotField {
 
   clear(): void {
     this.retain(new Set());
+  }
+
+  /** Push the survival horde into the scene. */
+  renderZombies(zombies: readonly ZombieState[], deltaSeconds: number): void {
+    for (const zombie of zombies) {
+      // The windup is the arms going up and starting down; the follow
+      // through after it lands is the view's own.
+      const swing = zombie.swing > 0 ? (1 - zombie.swing / ZOMBIE.windup) * 0.82 : null;
+      this.place(
+        zombie.id,
+        zombieLook(zombie.id, zombie.runner),
+        zombie.position,
+        zombie.yaw,
+        zombie.dead,
+        deltaSeconds,
+        swing,
+      );
+    }
   }
 
   /** Push local bot state into the scene. */

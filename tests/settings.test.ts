@@ -103,6 +103,20 @@ describe("loadSettings", () => {
 });
 
 describe("touch control settings", () => {
+  it("defaults to team deathmatch and keeps a saved survival mode", () => {
+    expect(DEFAULT_SETTINGS.mode).toBe("tdm");
+    install(makeStorage());
+    saveSettings({ ...DEFAULT_SETTINGS, mode: "survival" });
+    expect(loadSettings().mode).toBe("survival");
+  });
+
+  it("falls back to team deathmatch for a mode it does not know", () => {
+    const storage = makeStorage();
+    storage.setItem(STORAGE_KEY, JSON.stringify({ mode: "battle-royale" }));
+    install(storage);
+    expect(loadSettings().mode).toBe("tdm");
+  });
+
   it("defaults ADS to a tap that latches", () => {
     expect(DEFAULT_SETTINGS.adsToggle).toBe(true);
   });
