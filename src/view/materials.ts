@@ -1,11 +1,7 @@
 import { Color3 } from "@babylonjs/core/Maths/math.color";
-import type { Material } from "@babylonjs/core/Materials/material";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import type { Scene } from "@babylonjs/core/scene";
-import type { Look } from "../engine/look";
 import type { MapStyle, SurfaceKind } from "../maps/types";
-import { createRetroMaterial } from "./retroMaterial";
-import { createRetroTextures } from "./retroTextures";
 import {
   createTextures,
   type SurfaceTextureId,
@@ -57,61 +53,9 @@ export type MaterialSet = Record<SurfaceKind, StandardMaterial>;
 /** Hands out one material per surface kind and tint, making each on demand. */
 export interface MaterialLibrary {
   /** `tint` is a hex string; omitting it gives the surface's plain material. */
-  get(kind: SurfaceKind, tint?: string): Material;
+  get(kind: SurfaceKind, tint?: string): StandardMaterial;
   textures: TextureSet;
 }
-
-/**
- * A tint, divided through the texture it will multiply.
- *
- * The texture is already painted in the palette's colour for that surface,
- * so multiplying a colour straight into it compounds the two: a brick
- * written as a dusty red arrived at half the lightness. Dividing by the
- * texture's own average first means a tint comes out as the colour it says,
- * with the texture supplying the grain. Held under a ceiling because a tint
- * far lighter than the surface would otherwise drive the texture's bright
- * speckle past white and flatten the grain it was asked to keep.
- */
-const scaledTint = (level: { r: number; g: number; b: number }, tint: string): Color3 => {
-  const wanted = Color3.FromHexString(tint);
-  return new Color3(
-    Math.min(TINT_CEILING, wanted.r / level.r),
-    Math.min(TINT_CEILING, wanted.g / level.g),
-    Math.min(TINT_CEILING, wanted.b / level.b),
-  );
-};
-
-/**
- * The retro look's library: painted surfaces drawn at their own size,
- * through a shader that multiplies texture by vertex colour and nothing
- * else. The light is in the vertices already.
- *
- * The textures are a separate set rather than the modern ones shrunk.
- * Shrinking was the mistake that made the first attempt at this look read
- * as a blurred photograph: the modern set is grime, and grime at sixty-four
- * texels is mush. `retroTextures.ts` draws brick as bricks.
- */
-const createRetroLibrary = (scene: Scene, style: MapStyle, seed: number): MaterialLibrary => {
-  const { textures, levels } = createRetroTextures(scene, style, seed);
-  const variants = new Map<string, Material>();
-  return {
-    textures,
-    get(kind, tint) {
-      const key = `${kind}|${tint ?? ""}`;
-      const existing = variants.get(key);
-      if (existing) return existing;
-      const texture = SURFACES[kind].texture;
-      const material = createRetroMaterial(
-        scene,
-        `mat_retro_${kind}${tint ? `_${tint.replace("#", "")}` : ""}`,
-        textures[texture],
-        tint ? scaledTint(levels[texture], tint) : new Color3(1, 1, 1),
-      );
-      variants.set(key, material);
-      return material;
-    },
-  };
-};
 
 export const createMaterials = (
   scene: Scene,
@@ -166,9 +110,7 @@ export const createMaterialLibrary = (
   style: MapStyle,
   seed: number,
   anisotropy = 1,
-  look: Look = "modern",
 ): MaterialLibrary => {
-  if (look === "retro") return createRetroLibrary(scene, style, seed);
   const { materials, textures, levels } = createMaterials(scene, style, seed, anisotropy);
   const variants = new Map<string, StandardMaterial>();
 
@@ -185,8 +127,17 @@ export const createMaterialLibrary = (
       material.diffuseTexture = base.diffuseTexture;
       material.ambientTexture = base.ambientTexture;
       // Divided through the texture's own average, so what lands on screen
-      // is the tint rather than the tint times the palette.
-      const scaled = scaledTint(levels[SURFACES[kind].texture], tint);
+      // is the tint rather than the tint times the palette. Held under a
+      // ceiling because a tint far lighter than the surface it is painted on
+      // would otherwise drive the texture's bright speckle past white and
+      // flatten the grain it was asked to keep.
+      const level = levels[SURFACES[kind].texture];
+      const wanted = Color3.FromHexString(tint);
+      const scaled = new Color3(
+        Math.min(TINT_CEILING, wanted.r / level.r),
+        Math.min(TINT_CEILING, wanted.g / level.g),
+        Math.min(TINT_CEILING, wanted.b / level.b),
+      );
       material.ambientColor = scaled;
       // diffuseColor multiplies the texture, which is what keeps the surface
       // reading as the material it is made of rather than as flat paint.

@@ -74,7 +74,6 @@ export class Screens {
   private readonly selectDifficulty: (value: string) => void;
   private readonly selectTeamSize: (value: string) => void;
   private readonly selectQuality: (value: string) => void;
-  private readonly selectLook: (value: string) => void;
   private readonly selectOnline: (value: string) => void;
   private readonly selectMap: (value: string) => void;
   private readonly card = byId("boot").querySelector<HTMLElement>(".screen-card")!;
@@ -95,10 +94,6 @@ export class Screens {
     });
     this.selectQuality = segmented("pick-quality", (value) => {
       this.settings.quality = value as GameSettings["quality"];
-      this.commit();
-    });
-    this.selectLook = segmented("pick-look", (value) => {
-      this.settings.look = value as GameSettings["look"];
       this.commit();
     });
 
@@ -326,7 +321,6 @@ export class Screens {
     this.selectDifficulty(this.settings.difficulty);
     this.selectTeamSize(String(this.settings.teamSize));
     this.selectQuality(this.settings.quality);
-    this.selectLook(this.settings.look);
     this.selectOnline(this.settings.online ? "online" : "offline");
     this.selectMap(this.settings.mapId);
     this.showMapTagline();

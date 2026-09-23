@@ -21,10 +21,6 @@ interface GameState {
 
 /** The development handle the game exposes on `window`. */
 interface DebugHandle extends GameState {
-  /** Which look the world on screen was built with. */
-  look: string;
-  /** Rendered pixels and triangles submitted, which is what a frame costs. */
-  frameCost: { width: number; height: number; triangles: number };
   teleport: (x: number, z: number, yaw?: number, y?: number, pitch?: number) => void;
   weaponScreenPosition: () => { x: number; y: number } | null;
   startMatch: () => void;
@@ -68,7 +64,6 @@ interface DebugHandle extends GameState {
     audioEnabled: boolean;
     difficulty: string;
     teamSize: number;
-    look: string;
   };
 }
 
@@ -765,94 +760,5 @@ test.describe("maps and progression", () => {
 
     expect(await page.evaluate(() => window.__shootout.profile.carried)).toHaveLength(4);
     await expect(page.locator("#career-level")).toHaveText("8");
-  });
-});
-
-test.describe("the retro look", () => {
-  test("the lobby offers it, and remembers the choice", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForFunction(() => window.__shootout?.ready === true, null, {
-      timeout: 30_000,
-    });
-    const options = await page
-      .locator("#pick-look button")
-      .evaluateAll((buttons) => buttons.map((button) => button.dataset.value));
-    expect(options).toEqual(["modern", "retro"]);
-    // Modern by default: the game as built is what a first visit gets.
-    await expect(page.locator("#pick-look button[data-value=modern]")).toHaveClass(/is-selected/);
-
-    await page.locator("#pick-look button[data-value=retro]").click();
-    expect(await page.evaluate(() => window.__shootout.settings.look)).toBe("retro");
-
-    await page.reload();
-    await page.waitForFunction(() => window.__shootout?.ready === true, null, {
-      timeout: 30_000,
-    });
-    await expect(page.locator("#pick-look button[data-value=retro]")).toHaveClass(/is-selected/);
-    expect(await page.evaluate(() => window.__shootout.settings.look)).toBe("retro");
-  });
-
-  test("it renders a few hundred lines, softly stretched, at a fraction of the triangles", async ({
-    page,
-  }) => {
-    const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    await page.addInitScript(() => {
-      localStorage.setItem(
-        "shootout.settings.v1",
-        JSON.stringify({ look: "retro", online: false, audioEnabled: false }),
-      );
-    });
-    await bootGame(page);
-
-    expect(await page.evaluate(() => window.__shootout.look)).toBe("retro");
-    const cost = await page.evaluate(() => window.__shootout.frameCost);
-    const viewport = page.viewportSize();
-    expect(viewport).not.toBeNull();
-    // A fixed few hundred lines however tall the screen, stretched up.
-    expect(cost.height).toBeLessThanOrEqual(300);
-    expect(cost.height).toBeLessThan(viewport!.height);
-    // Stretched softly, the way a television showed it, not as hard squares.
-    expect(
-      await page.evaluate(() => getComputedStyle(document.getElementById("view")!).imageRendering),
-    ).not.toBe("pixelated");
-    // No shadow passes and a shorter view: well under half the modern
-    // look's triangles at the same spot.
-    expect(cost.triangles).toBeLessThan(130_000);
-    expect(cost.triangles).toBeGreaterThan(1000);
-
-    // And it is still the same game: bots on the field, a weapon in hand.
-    const bots = await page.evaluate(() => window.__shootout.bots);
-    expect(bots.length).toBeGreaterThan(0);
-    const state = await readState(page);
-    expect(state.weapon.magazine).toBeGreaterThan(0);
-    expect(errors).toEqual([]);
-  });
-
-  test("the modern look keeps its resolution", async ({ page }) => {
-    /*
-     * Whatever tier the machine is given: the modern look renders at the
-     * device's own ratio, so on a one-to-one screen the picture is the
-     * screen. That is the whole assertion, and it needs no particular tier.
-     *
-     * It used to ask for the high one, which was gratuitous and nearly cost
-     * the suite: high means a fifty per cent pixel ratio, antialiasing,
-     * shadow cascades and anisotropy, and on the software rasteriser these
-     * run on that is one and a third frames a second. The round's three
-     * second countdown then takes nearly thirty seconds of wall clock,
-     * because the simulation is capped at five steps a frame, and the boot
-     * helper's budget went on waiting for it.
-     */
-    await page.addInitScript(() => {
-      localStorage.setItem(
-        "shootout.settings.v1",
-        JSON.stringify({ look: "modern", online: false, audioEnabled: false }),
-      );
-    });
-    await bootGame(page);
-    expect(await page.evaluate(() => window.__shootout.look)).toBe("modern");
-    const cost = await page.evaluate(() => window.__shootout.frameCost);
-    const viewport = page.viewportSize();
-    expect(cost.height).toBeGreaterThanOrEqual(viewport!.height * 0.9);
   });
 });

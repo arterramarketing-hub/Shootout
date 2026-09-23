@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Team } from "../src/sim/bots";
-import { buildSkin, flatten, type Loft } from "../src/view/loft";
-import { BONES, FIGURE_HEIGHT, soldierSkin } from "../src/view/soldier";
+import { buildSkin, type Loft } from "../src/view/loft";
+import { BONES, soldierSkin } from "../src/view/soldier";
 
 /**
  * The figure is drawn to the shape that is shot, so most of what is worth
@@ -116,58 +116,6 @@ describe("loft", () => {
       boxyMax = Math.max(boxyMax, Math.hypot(boxy.positions[i], boxy.positions[i + 2]));
     }
     expect(boxyMax).toBeGreaterThan(0.1 * 1.3);
-  });
-});
-
-describe("flatten", () => {
-  const tube: Loft = {
-    colour: "#808080",
-    sides: 6,
-    rings: [
-      { at: { x: 0, y: 0, z: 0 }, across: 0.1, through: 0.1, round: 1, bone: 2, shade: 0.5 },
-      { at: { x: 0, y: 1, z: 0 }, across: 0.1, through: 0.1, round: 1, bone: 2, blendBone: 3, blend: 0.5 },
-    ],
-  };
-
-  it("gives every triangle its own three vertices", () => {
-    const flat = flatten(buildSkin([tube]));
-    expect(flat.positions.length / 3).toBe(flat.indices.length);
-    for (const [i, index] of flat.indices.entries()) expect(index).toBe(i);
-  });
-
-  it("points every face outward, one normal to a face", () => {
-    const flat = flatten(buildSkin([tube]));
-    for (let i = 0; i < flat.indices.length; i += 3) {
-      const n = [flat.normals[i * 3], flat.normals[i * 3 + 1], flat.normals[i * 3 + 2]];
-      for (let k = 1; k < 3; k += 1) {
-        expect(flat.normals[(i + k) * 3]).toBeCloseTo(n[0], 9);
-        expect(flat.normals[(i + k) * 3 + 1]).toBeCloseTo(n[1], 9);
-        expect(flat.normals[(i + k) * 3 + 2]).toBeCloseTo(n[2], 9);
-      }
-      expect(Math.hypot(n[0], n[1], n[2])).toBeCloseTo(1, 6);
-      // On the wall of a tube, outward is away from the axis: the face's
-      // centre and its normal point the same way from it.
-      const cx = (flat.positions[i * 3] + flat.positions[(i + 1) * 3] + flat.positions[(i + 2) * 3]) / 3;
-      const cz = (flat.positions[i * 3 + 2] + flat.positions[(i + 1) * 3 + 2] + flat.positions[(i + 2) * 3 + 2]) / 3;
-      if (Math.abs(n[1]) > 0.9) continue; // a cap
-      expect(cx * n[0] + cz * n[2]).toBeGreaterThan(0);
-    }
-  });
-
-  it("carries colours and bones across", () => {
-    const smooth = buildSkin([tube]);
-    const flat = flatten(smooth);
-    const seen = new Set<string>();
-    for (let v = 0; v < flat.positions.length / 3; v += 1) {
-      seen.add(`${flat.boneIndices[v * 4]}:${flat.boneWeights[v * 4].toFixed(2)}`);
-      const total = flat.boneWeights[v * 4] + flat.boneWeights[v * 4 + 1];
-      expect(total).toBeCloseTo(1, 6);
-    }
-    expect(seen).toContain("2:1.00");
-    expect(seen).toContain("2:0.50");
-    // The shade set on the first ring is still on its vertices.
-    const shades = new Set(flat.colors.filter((_, i) => i % 4 === 0).map((c) => c.toFixed(3)));
-    expect(shades.size).toBeGreaterThan(1);
   });
 });
 
@@ -305,67 +253,6 @@ describe("soldier", () => {
     expect(b.positions).toEqual(a.positions);
     expect(b.indices).toEqual(a.indices);
     expect(b.colors).not.toEqual(a.colors);
-  });
-
-  it("builds a low figure at a third of the full one's polygons, and flat", () => {
-    const full = soldierSkin("a", "full");
-    const low = soldierSkin("a", "low");
-    expect(low.indices.length / 3).toBeLessThan((full.indices.length / 3) * 0.4);
-    // Flat: every triangle owns its vertices.
-    expect(low.positions.length / 3).toBe(low.indices.length);
-  });
-
-  it("caricatures the low figure: a head a quarter of it, not an eighth", () => {
-    // The whole point of the low figure is that it is not a small realistic
-    // soldier. A head that grew only sideways was the first attempt at this
-    // and read as a broad face on the same small skull.
-    const headSpan = (skin: ReturnType<typeof soldierSkin>): number => {
-      let low = Infinity;
-      let high = -Infinity;
-      for (let v = 0; v < skin.positions.length / 3; v += 1) {
-        if (skin.boneIndices[v * 4] !== boneNamed("head")) continue;
-        low = Math.min(low, skin.positions[v * 3 + 1]);
-        high = Math.max(high, skin.positions[v * 3 + 1]);
-      }
-      return high - low;
-    };
-    const full = soldierSkin("a", "full");
-    const low = soldierSkin("a", "low");
-    // Taller, not just wider.
-    expect(headSpan(low)).toBeGreaterThan(headSpan(full) * 1.25);
-    // And a quarter of the figure or thereabouts, where the realistic one
-    // is nearer an eighth.
-    expect(headSpan(low) / FIGURE_HEIGHT).toBeGreaterThan(0.2);
-    // Still inside a sane envelope: it grows about its own middle, so it
-    // settles into the shoulders rather than standing up off the neck.
-    const top = (skin: ReturnType<typeof soldierSkin>): number =>
-      Math.max(...skin.positions.filter((_, i) => i % 3 === 1));
-    expect(top(low)).toBeLessThan(1.9);
-    expect(top(low)).toBeGreaterThan(top(full));
-  });
-
-  it("gives the low figure a longer boot, not just a fatter one", () => {
-    // The boot runs forward from the heel, so its size is in where its rings
-    // sit and not only in how wide they are.
-    const toe = (skin: ReturnType<typeof soldierSkin>): number => {
-      let reach = -Infinity;
-      for (let v = 0; v < skin.positions.length / 3; v += 1) {
-        if (skin.boneIndices[v * 4] !== boneNamed("footR")) continue;
-        reach = Math.max(reach, skin.positions[v * 3 + 2]);
-      }
-      return reach;
-    };
-    expect(toe(soldierSkin("a", "low"))).toBeGreaterThan(toe(soldierSkin("a", "full")) * 1.15);
-  });
-
-  it("keeps the low figure's head on the head hitbox too", () => {
-    const points = vertices(soldierSkin("b", "low")).filter(
-      (p) => p[1] > HEAD_BOX.y[0] && p[1] < HEAD_BOX.y[1] && Math.abs(p[0]) < 0.095,
-    );
-    expect(points.length).toBeGreaterThan(20);
-    const centre = points.reduce((t, p) => t + p[1], 0) / points.length;
-    expect(centre).toBeGreaterThan(1.56);
-    expect(centre).toBeLessThan(1.7);
   });
 
   it("stays within a budget a phone can draw seven of", () => {

@@ -63,16 +63,6 @@ html, body {
   outline: none;
   touch-action: none;
 }
-/*
- * The retro look renders a few hundred lines and stretches them up, and it
- * stretches them softly. The console this look is after put its picture out
- * through a video filter and an anti-aliasing pass onto a television, and
- * the result was never a grid of hard squares: it was a soft, slightly
- * blurred image, which is most of what "looks like that era" means. Hard
- * pixels are a different machine's look. The browser's own resampling is
- * the filter here.
- */
-#view.is-retro { image-rendering: auto; }
 
 /* The HUD never swallows a touch; only the controls below do. */
 .hud { position: absolute; inset: 0; pointer-events: none; }

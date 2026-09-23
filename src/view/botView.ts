@@ -1,4 +1,3 @@
-import "@babylonjs/core/Rendering/outlineRenderer";
 import { Bone } from "@babylonjs/core/Bones/bone";
 import { Skeleton } from "@babylonjs/core/Bones/skeleton";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
@@ -8,10 +7,8 @@ import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
-import type { Look } from "../engine/look";
 import { ContactShadows } from "./contactShadow";
 import { FALL_SECONDS, figurePose } from "./figurePose";
-import { LIFT as RETRO_LIFT } from "./retroBake";
 import { BONES, FIGURE_HEIGHT, TEAM_PALETTES, soldierSkin } from "./soldier";
 import type { BotState, Team } from "../sim/bots";
 import type { Vec3 } from "../sim/vec3";
@@ -62,16 +59,6 @@ export const TEAM_COLOURS: Record<Team, { body: string; trim: string }> = {
 /** How long a figure lies on the ground before it is taken away. */
 const FALLEN_SECONDS = 3.2;
 
-/**
- * How long a figure flashes when a round lands on it, in seconds.
- *
- * The retro look's one addition to how a fight feels. Two frames of white
- * over a figure that has just been hit is the oldest hit confirmation there
- * is, it reads at any distance and any resolution, and it costs one extra
- * draw of that figure for those two frames and nothing otherwise.
- */
-const FLASH_SECONDS = 0.09;
-
 export interface BotBinding {
   id: string;
   team: Team;
@@ -94,10 +81,6 @@ export interface BotBinding {
   fallSide: number;
   /** Seconds since the figure appeared, so idles are out of step. */
   clock: number;
-  /** Health last frame, so a hit can be seen landing. */
-  lastHealth: number;
-  /** Seconds of hit flash left to show. */
-  flash: number;
   /** The shadow laid on the ground, where the tier has no shadow map. */
   patch: Mesh | null;
 }
@@ -124,7 +107,6 @@ export class BotField {
   constructor(
     private readonly scene: Scene,
     contact: ContactShadows | null = null,
-    private readonly look: Look = "modern",
   ) {
     this.contact = contact;
   }
@@ -139,8 +121,7 @@ export class BotField {
     const existing = this.builds.get(team);
     if (existing) return existing;
 
-    const retro = this.look === "retro";
-    const skin = soldierSkin(team, retro ? "low" : "full");
+    const skin = soldierSkin(team);
     const source = new Mesh(`soldier_${team}`, this.scene);
     const data = new VertexData();
     data.positions = skin.positions;
@@ -155,14 +136,9 @@ export class BotField {
     // Colour lives in the vertices, so one material covers a whole soldier:
     // uniform, carrier, skin, boots and rifle in a single draw.
     const material = new StandardMaterial(`mat_soldier_${team}`, this.scene);
-    // The retro level is baked a lift brighter than the lights say, to
-    // stand in for the grade it does not have; a figure lit by the same
-    // lights takes the same lift, or it stands a shade too dark in every
-    // street. And nothing on it shines: the look had no specular.
-    const lift = retro ? RETRO_LIFT : 1;
-    material.diffuseColor = new Color3(lift, lift, lift);
-    material.ambientColor = new Color3(lift, lift, lift);
-    material.specularColor = retro ? Color3.Black() : new Color3(0.06, 0.06, 0.06);
+    material.diffuseColor = new Color3(1, 1, 1);
+    material.ambientColor = new Color3(1, 1, 1);
+    material.specularColor = new Color3(0.06, 0.06, 0.06);
     material.specularPower = 28;
     material.freeze();
     source.material = material;
@@ -241,11 +217,7 @@ export class BotField {
       stride: 0,
       gait: 0,
       clock: (id.charCodeAt(id.length - 1) % 32) * 0.19,
-      lastHealth: Infinity,
-      flash: 0,
     };
-    mesh.overlayColor = Color3.White();
-    mesh.overlayAlpha = 0.85;
     this.bindings.push(binding);
     this.byId.set(id, binding);
     return binding;
@@ -273,13 +245,7 @@ export class BotField {
     binding.mesh.position.set(pose.sway, pose.bob, 0);
   }
 
-  /**
-   * Place one figure. Creates it on first sight.
-   *
-   * `health` is optional because not every source has it: a remote player
-   * arrives as a position and a flag. Where it is known, a drop in it is a
-   * hit, and in the retro look a hit is shown.
-   */
+  /** Place one figure. Creates it on first sight. */
   place(
     id: string,
     team: Team,
@@ -287,18 +253,9 @@ export class BotField {
     yaw: number,
     dead: boolean,
     deltaSeconds: number,
-    health?: number,
   ): void {
     const binding = this.byId.get(id) ?? this.add(id, team, position, yaw);
     binding.clock += deltaSeconds;
-    if (health !== undefined) {
-      if (this.look === "retro" && health < binding.lastHealth && !dead) {
-        binding.flash = FLASH_SECONDS;
-      }
-      binding.lastHealth = health;
-    }
-    binding.flash = Math.max(0, binding.flash - deltaSeconds);
-    binding.mesh.renderOverlay = binding.flash > 0;
     if (dead) {
       this.fall(binding, deltaSeconds);
       binding.lastPosition = { ...position };
@@ -306,11 +263,8 @@ export class BotField {
     }
     if (binding.dead) {
       // Back on their feet, somewhere else: stand the figure up before it
-      // is seen again, and forget the health they died at, or coming back
-      // with less than full reads as being hit on arrival.
+      // is seen again.
       binding.dead = false;
-      binding.lastHealth = health ?? Infinity;
-      binding.flash = 0;
       binding.root.rotation.x = 0;
       binding.root.rotation.z = 0;
       binding.root.setEnabled(true);
@@ -393,15 +347,7 @@ export class BotField {
   /** Push local bot state into the scene. */
   renderBots(bots: readonly BotState[], deltaSeconds: number): void {
     for (const bot of bots) {
-      this.place(
-        bot.id,
-        bot.team,
-        bot.position,
-        bot.yaw,
-        bot.health.dead,
-        deltaSeconds,
-        bot.health.current,
-      );
+      this.place(bot.id, bot.team, bot.position, bot.yaw, bot.health.dead, deltaSeconds);
     }
   }
 }

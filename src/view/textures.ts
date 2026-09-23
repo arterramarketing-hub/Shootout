@@ -687,7 +687,12 @@ export const createTextures = (
   const grime = createNoiseField(seed ^ 0x27d4eb2f, SIZE);
   let offset = 0;
   for (const [id, paint] of Object.entries(PAINTERS) as [SurfaceTextureId, Painter][]) {
-    const texture = new DynamicTexture(`tex_${id}`, { width: SIZE, height: SIZE }, scene, true);
+    const texture = new DynamicTexture(
+      `tex_${id}`,
+      { width: SIZE, height: SIZE },
+      scene,
+      true,
+    );
     const context = texture.getContext() as unknown as CanvasRenderingContext2D;
     paint(context, palette, makeRandom(seed + offset));
     weather(context, mottle, grime, FINISHES[id]);

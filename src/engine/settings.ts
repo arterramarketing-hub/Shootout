@@ -1,7 +1,6 @@
 import { DEFAULT_MAP_ID, MAPS } from "../maps";
 import type { BotDifficulty } from "../sim/bots";
 import { CAMERA, LOOK } from "../sim/config";
-import { isLook, type Look } from "./look";
 import type { QualityTier } from "./quality";
 
 export interface GameSettings {
@@ -17,8 +16,6 @@ export interface GameSettings {
   adsToggle: boolean;
   /** "auto" lets the benchmark decide. */
   quality: QualityTier | "auto";
-  /** Which of the two ways the game is drawn. Play is the same in both. */
-  look: Look;
   audioEnabled: boolean;
   difficulty: BotDifficulty["id"];
   teamSize: number;
@@ -40,7 +37,6 @@ export const DEFAULT_SETTINGS: GameSettings = {
   controlScale: 1,
   adsToggle: true,
   quality: "auto",
-  look: "modern",
   audioEnabled: true,
   difficulty: "regular",
   teamSize: 4,
@@ -112,7 +108,6 @@ export const loadSettings = (): GameSettings => {
       adsToggle:
         typeof parsed.adsToggle === "boolean" ? parsed.adsToggle : DEFAULT_SETTINGS.adsToggle,
       quality: isQuality(parsed.quality) ? parsed.quality : DEFAULT_SETTINGS.quality,
-      look: isLook(parsed.look) ? parsed.look : DEFAULT_SETTINGS.look,
       audioEnabled:
         typeof parsed.audioEnabled === "boolean"
           ? parsed.audioEnabled
