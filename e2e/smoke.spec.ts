@@ -50,15 +50,32 @@ interface DebugHandle extends GameState {
     left: number;
     kills: number;
     cleared: number;
+    pickups: { id: string; position: { x: number; y: number; z: number }; life: number }[];
     zombies: {
       id: string;
       dead: boolean;
       runner: boolean;
       health: number;
       position: { x: number; y: number; z: number };
+      fall: { angle: number; dirX: number; dirZ: number; slide: number; landed: boolean } | null;
     }[];
   } | null;
   callWave: () => void;
+  spawnZombieAt: (x: number, z: number, y?: number) => string | null;
+  shootZombie: (
+    id: string,
+    from: { x: number; y: number; z: number },
+    height: number,
+    damage?: number,
+  ) => boolean;
+  view: {
+    farClip: number;
+    fogMode: number;
+    fogDensity: number;
+    shadows: boolean;
+    torch: boolean;
+    night: boolean;
+  };
   invulnerable: boolean;
   map: { id: string; name: string };
   profile: { level: number; xp: number; kills: number; carried: string[] };
@@ -938,5 +955,112 @@ test.describe("zombie survival", () => {
     await expect(page.locator("#result-title")).toContainText("FELL ON WAVE 1");
     await expect(page.locator("#label-kills")).toHaveText("Wave");
     await expect(page.locator("#rewards")).toContainText("Round played");
+  });
+
+  test("survival is at night, in mist, with a torch and a short far plane", async ({ page }) => {
+    await bootSurvival(page);
+    const view = await page.evaluate(() => window.__shootout.view);
+    expect(view.night).toBe(true);
+    expect(view.torch).toBe(true);
+    expect(view.shadows).toBe(false);
+    // Exponential-squared fog, dense, and the far plane pulled in behind it.
+    expect(view.fogMode).toBe(2);
+    expect(view.fogDensity).toBeGreaterThan(0.03);
+    expect(view.farClip).toBeLessThan(60);
+  });
+
+  test("team deathmatch keeps its daylight", async ({ page }) => {
+    await bootGame(page);
+    const view = await page.evaluate(() => window.__shootout.view);
+    expect(view.night).toBe(false);
+    expect(view.torch).toBe(false);
+    expect(view.farClip).toBeGreaterThan(100);
+  });
+
+  test("a zombie takes three times a survivor's health", async ({ page }) => {
+    await bootSurvival(page);
+    const id = await page.evaluate(() => window.__shootout.spawnZombieAt(0, -40));
+    const health = await page.evaluate(
+      (id) => window.__shootout.survival!.zombies.find((zombie) => zombie.id === id)!.health,
+      id,
+    );
+    expect(health).toBe(300);
+  });
+
+  test("bodies fall the way the killing round sends them", async ({ page }) => {
+    await bootSurvival(page);
+    await page.evaluate(() => {
+      window.__shootout.invulnerable = true;
+      window.__shootout.teleport(0, -47, 0, 0, 0);
+    });
+    // Both shot from the south, travelling north: one in the chest, one low
+    // in the legs.
+    const [chest, legs] = await page.evaluate(() => {
+      const game = window.__shootout;
+      const chest = game.spawnZombieAt(-3, -40)!;
+      const legs = game.spawnZombieAt(3, -40)!;
+      game.shootZombie(chest, { x: -3, y: 1.6, z: -47 }, 1.25);
+      game.shootZombie(legs, { x: 3, y: 1.6, z: -47 }, 0.45);
+      return [chest, legs];
+    });
+    await page.waitForFunction(
+      (ids) =>
+        ids.every(
+          (id) => window.__shootout.survival!.zombies.find((zombie) => zombie.id === id)?.fall?.landed,
+        ),
+      [chest, legs],
+      { timeout: 30_000 },
+    );
+    const falls = await page.evaluate(
+      (ids) =>
+        ids.map((id) => window.__shootout.survival!.zombies.find((zombie) => zombie.id === id)!.fall!),
+      [chest, legs],
+    );
+    // The chest shot topples it away from the shooter, along +z.
+    expect(falls[0].dirZ).toBeGreaterThan(0.99);
+    expect(falls[0].angle).toBeGreaterThan(1.3);
+    // The leg shot knocks the feet along the shot and the body back over them.
+    expect(falls[1].angle).toBeLessThan(-1.3);
+    expect(falls[1].slide).toBeGreaterThan(0.1);
+  });
+
+  test("the dead leave ammunition, and walking over it refills the reserve", async ({ page }) => {
+    test.setTimeout(150_000);
+    await bootSurvival(page);
+    await page.evaluate(() => {
+      window.__shootout.invulnerable = true;
+      window.__shootout.teleport(0, -47, 0, 0, 0);
+    });
+    // Spend some of the rifle's reserve: a burst, then a reload.
+    await button(page, "btn-fire", true);
+    await page.waitForTimeout(1200);
+    await button(page, "btn-fire", false);
+    await button(page, "btn-reload", true);
+    await button(page, "btn-reload", false);
+    await page.waitForFunction(() => !window.__shootout.weapon.reloading, null, { timeout: 30_000 });
+    const before = await page.evaluate(() => window.__shootout.weapon.reserve);
+    expect(before).toBeLessThan(150);
+
+    // Put zombies down until one of them leaves something.
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      if ((await page.evaluate(() => window.__shootout.survival!.pickups.length)) > 0) break;
+      await page.evaluate((attempt) => {
+        const game = window.__shootout;
+        const x = -8 + (attempt % 5) * 4;
+        const id = game.spawnZombieAt(x, -38)!;
+        game.shootZombie(id, { x, y: 1.6, z: -47 }, 1.25);
+      }, attempt);
+      await page.waitForTimeout(700);
+    }
+    await page.waitForFunction(() => window.__shootout.survival!.pickups.length > 0, null, {
+      timeout: 20_000,
+    });
+    const at = await page.evaluate(() => window.__shootout.survival!.pickups[0].position);
+    await page.evaluate((at) => window.__shootout.teleport(at.x, at.z, 0, at.y, 0), at);
+    await page.waitForFunction(
+      (before) => window.__shootout.weapon.reserve > before,
+      before,
+      { timeout: 20_000 },
+    );
   });
 });

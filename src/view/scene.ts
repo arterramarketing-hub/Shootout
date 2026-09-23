@@ -4,6 +4,8 @@ import { ColorCurves } from "@babylonjs/core/Materials/colorCurves";
 import { ImageProcessingConfiguration } from "@babylonjs/core/Materials/imageProcessingConfiguration";
 import "@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent";
 import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
+import { SpotLight } from "@babylonjs/core/Lights/spotLight";
+import { WORLD_LAYER } from "./viewmodel";
 import { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascadedShadowGenerator";
 import { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 import { HemisphericLight } from "@babylonjs/core/Lights/hemisphericLight";
@@ -26,6 +28,8 @@ export interface BuiltScene {
   staticMeshes: Mesh[];
   /** The sun, for anything that wants to hang shadows off it. */
   key: DirectionalLight;
+  /** The survivor's torch, on a night map; hung off the camera by the caller. */
+  torch: SpotLight | null;
 }
 
 export const createScene = (
@@ -39,7 +43,13 @@ export const createScene = (
 
   // The sky is whatever is drawn where the level is not. An interior wants
   // the fog's own darkness there; a street wants a sky.
-  const sky = style.sky ? Color3.FromHexString(style.sky) : fog.scale(0.5);
+  // Under mist the fog is the sky: anything the far plane cuts off must
+  // vanish into the same colour it was already fading into.
+  const sky = style.mist
+    ? fog
+    : style.sky
+      ? Color3.FromHexString(style.sky)
+      : fog.scale(0.5);
   scene.clearColor = new Color4(sky.r, sky.g, sky.b, 1);
   // Ambient lifts the shadowed side of every surface. Without it, vertical
   // walls facing away from the key light read as flat black, and a player
@@ -51,7 +61,13 @@ export const createScene = (
   scene.skipPointerMovePicking = true;
   scene.autoClearDepthAndStencil = true;
 
-  if (quality.fog) {
+  if (style.mist) {
+    // Always on, whatever the tier: it is what makes the short far plane
+    // invisible, and what the level's mood is made of.
+    scene.fogMode = Scene.FOGMODE_EXP2;
+    scene.fogDensity = style.mist;
+    scene.fogColor = fog;
+  } else if (quality.fog) {
     scene.fogMode = Scene.FOGMODE_LINEAR;
     // Fog fades into the sky where there is one, so a distant roofline
     // dissolves into blue rather than into a grey that the sky is not.
@@ -61,13 +77,37 @@ export const createScene = (
   }
 
   const key = buildLighting(scene, map);
+  // Built before the level's materials, which are frozen once made and only
+  // ever know the lights that existed when they compiled.
+  const torch = style.night ? buildTorch(scene) : null;
   gradeImage(scene, map);
   // Anisotropy is close to free on a GPU and expensive without one, so it
   // rides with the rest of the settings a strong machine gets.
   const staticMeshes = buildMap(scene, map, quality.tier === "high" ? 4 : 1);
   buildSky(scene, style, quality, map.textureSeed);
 
-  return { scene, staticMeshes, key };
+  return { scene, staticMeshes, key, torch };
+};
+
+/**
+ * A torch, for the dark.
+ *
+ * One spot light, warm, a little wider than the view is tall, reaching as
+ * far as the mist lets anything be seen. It lights the level and whatever
+ * is walking in it, and not the weapon: that has its own light and its own
+ * camera, and a torch held behind it would only burn it out.
+ */
+const buildTorch = (scene: Scene): SpotLight => {
+  const torch = new SpotLight("torch", Vector3.Zero(), new Vector3(0, 0, 1), 1.25, 1, scene);
+  // A soft edge: full strength inside the inner cone, fading to nothing at
+  // the outer one, rather than a hard disc on the wall.
+  torch.innerAngle = 0.5;
+  torch.diffuse = Color3.FromHexString("#fff0d2");
+  torch.specular = new Color3(0.25, 0.23, 0.2);
+  torch.intensity = 2.6;
+  torch.range = 36;
+  torch.includeOnlyWithLayerMask = WORLD_LAYER;
+  return torch;
 };
 
 /**
@@ -86,7 +126,7 @@ const gradeImage = (scene: Scene, map: MapDefinition): void => {
   // a filmic curve only pulls a sunlit street down into murk to make room
   // for highlights it will never be given.
   grade.toneMappingEnabled = false;
-  grade.exposure = map.style.sky ? 1.40 : 1.06;
+  grade.exposure = map.style.exposure ?? (map.style.sky ? 1.40 : 1.06);
   grade.contrast = 1.14;
   grade.vignetteEnabled = true;
   // A vignette is a frame, not a mood. At seven tenths it was doing the work

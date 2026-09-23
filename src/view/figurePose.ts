@@ -53,6 +53,33 @@ export interface PoseInput {
    * not swinging: the arms go up for the first part and come down after.
    */
   swing?: number | null;
+  /**
+   * A body falling under its own physics. The simulation owns the fall of
+   * the whole body; this is what the limbs do on it. When set, it replaces
+   * the canned fall.
+   */
+  ragdoll?: RagdollPose | null;
+}
+
+/** The limb state of a physics fall, in the body's own frame. */
+export interface RagdollPose {
+  /** Nought to one: how far the knees have gone. */
+  buckle: number;
+  /** The head's lag, in radians, in the direction of the fall. */
+  head: number;
+  /** The arms' fling, in radians. */
+  arms: number;
+  /** The fall direction in the body's frame: towards its front, and its right. */
+  forward: number;
+  side: number;
+  /**
+   * Nought to one: how far the muscles have let go. Arms that were reaching
+   * drop to the body's sides, so a body on its back does not lie there
+   * pointing at the sky.
+   */
+  limp: number;
+  /** Nought to one: how far a body on the ground has settled into it. */
+  settle: number;
 }
 
 const flat = (): JointPose => ({ pitch: 0, yaw: 0, roll: 0 });
@@ -94,6 +121,8 @@ export const figurePose = (input: PoseInput): FigurePose => {
   const set = (name: string, pose: Partial<JointPose>): void => {
     joints[name] = { ...flat(), ...pose };
   };
+
+  if (input.ragdoll) return ragdollPose(input.ragdoll, joints, set);
 
   if (input.dying !== null) {
     // Going down. The knees buckle first and the weight follows them: a body
@@ -219,4 +248,49 @@ const shamblePose = (
     sway: Math.sin(input.stride) * 0.04 * gait,
     joints,
   };
+};
+
+/**
+ * The limbs of a body whose fall is being simulated.
+ *
+ * The trunk is the rigid body the simulation turns; everything here hangs
+ * off it. The knees give, the head lags the way the body is going and
+ * snaps on landing, the arms fling. The fall's direction is given in the
+ * body's own frame, so a head thrown back by a shot from in front nods
+ * back, and one from the side lolls sideways.
+ */
+const ragdollPose = (
+  ragdoll: RagdollPose,
+  joints: Record<string, JointPose>,
+  set: (name: string, pose: Partial<JointPose>) => void,
+): FigurePose => {
+  const limit = (value: number, most: number) => Math.max(-most, Math.min(most, value));
+  // The knees give as it goes down, and straighten out again once it is
+  // lying there, so a body on its back is not left with its knees up.
+  const settle = Math.min(1, Math.max(0, ragdoll.settle));
+  const knees = Math.min(1, ragdoll.buckle) * 0.5 * (1 - 0.75 * settle);
+  const head = limit(ragdoll.head, 1.1);
+  const arms = limit(ragdoll.arms, 1.2);
+  // Positive roll tips the top of a bone to the figure's left, so a lean to
+  // the right is a negative one.
+  set("head", { pitch: head * ragdoll.forward, roll: -head * ragdoll.side });
+  set("chest", { pitch: head * 0.25 * ragdoll.forward, roll: -head * 0.2 * ragdoll.side });
+  set("spine", { pitch: -knees * 0.3 * ragdoll.forward });
+  set("pelvis", { pitch: knees * 0.2 });
+  for (const side of ["R", "L"] as const) {
+    const lead = side === "R" ? 1 : 0.8;
+    set(`thigh${side}`, { pitch: -knees * 0.9 * lead });
+    set(`shin${side}`, { pitch: knees * 1.4 * lead });
+    set(`foot${side}`, { pitch: -knees * 0.3 });
+    // Arms held out in front: a negative pitch lifts them, and a positive
+    // one of about one and a third lets them hang at the sides.
+    const limp = Math.min(1, Math.max(0, ragdoll.limp));
+    set(`arm${side}`, {
+      pitch: limp * (side === "R" ? 1.3 : 1.2) - arms * (side === "R" ? 0.8 : 0.6),
+      yaw: (side === "R" ? -1 : 1) * Math.abs(arms) * 0.3,
+      roll: (side === "R" ? -1 : 1) * limp * 0.15,
+    });
+    set(`fore${side}`, { pitch: -Math.abs(arms) * 0.3 + limp * 0.2 });
+  }
+  return { bob: -knees * 0.18, sway: 0, joints };
 };

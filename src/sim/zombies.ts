@@ -1,4 +1,6 @@
 import type { HitscanWorld } from "./combat";
+import { createFall, stepFall, type FallState } from "./fall";
+import { HEALTH } from "./health";
 import { findPathBetween, nearestNode, nodeWorldPosition, type NavGrid } from "./nav";
 import type { Random } from "./random";
 import { clamp, copy, lengthXZ, sub, vec3, type Vec3 } from "./vec3";
@@ -81,14 +83,34 @@ export const SURVIVAL = {
   /** Nothing comes in through a breach nearer the survivor than this. */
   minSpawnDistance: 22,
   /** Seconds a body stays down before it is cleared away. */
-  corpseSeconds: 3.2,
+  /** Long enough to watch a body land and settle, and not much longer. */
+  corpseSeconds: 5,
+  /** The chance a zombie leaves ammunition where it fell. */
+  dropChance: 0.35,
+  /** How much of the rest of that chance an empty rack adds. */
+  dropChanceWhenShort: 0.55,
+  /** Runners carry more, for being harder to put down. */
+  runnerDropBonus: 0.25,
+  /** How close the survivor has to come to take a drop, in metres. */
+  pickupRadius: 1.4,
+  /** Seconds a drop lies there before it is gone. */
+  pickupSeconds: 30,
+  /** No more than this many drops on the ground at once; the oldest go first. */
+  maxPickups: 12,
 } as const;
 
 /** How many come in a wave. */
 export const waveSize = (wave: number): number => 6 + wave * 3;
 
-/** How much a zombie of a given wave can take, before the rounds put it down. */
-export const zombieHealth = (wave: number): number => Math.min(260, 80 + (wave - 1) * 14);
+/**
+ * How much a zombie can take: three times what the survivor can.
+ *
+ * The same on every wave. Later waves are harder for being bigger, faster
+ * and full of runners, not for being spongier, so what a rifle does to one
+ * is something a player learns once.
+ */
+export const ZOMBIE_HEALTH = HEALTH.max * 3;
+export const zombieHealth = (_wave: number): number => ZOMBIE_HEALTH;
 
 /** The share of a wave that runs rather than walks. */
 export const runnerShare = (wave: number): number =>
@@ -113,6 +135,24 @@ export interface ZombieState {
   attackTimer: number;
   /** Counts down through a swing in progress; zero when not swinging. */
   swing: number;
+  /** How the body is going down, once it is dead. */
+  fall: FallState | null;
+  /** Whether its drop has been decided. */
+  dropRolled: boolean;
+}
+
+/** Ammunition left on the ground by a zombie. */
+export interface AmmoPickup {
+  id: string;
+  position: Vec3;
+  /** Seconds it has left before it is gone. */
+  life: number;
+}
+
+/** Where the round that killed a zombie came from, and where it went in. */
+export interface ZombieHit {
+  from: Vec3;
+  point: Vec3;
 }
 
 export type SurvivalPhase = "breather" | "wave" | "over";
@@ -132,11 +172,18 @@ export interface SurvivalState {
   /** The last wave cleared. */
   cleared: number;
   nextId: number;
+  pickups: AmmoPickup[];
+  nextPickupId: number;
 }
 
 export interface SurvivalTarget {
   position: Vec3;
   alive: boolean;
+  /**
+   * Nought to one: how short of ammunition the survivor is. Drops come more
+   * often the emptier the rack, so a run is not lost to an empty magazine.
+   */
+  ammoNeed?: number;
 }
 
 /** What a zombie needs from the world: the grid to walk, and a way to see. */
@@ -151,6 +198,16 @@ export interface SurvivalEvents {
   onAttack?: (damage: number, from: Vec3) => void;
   onWaveStart?: (wave: number) => void;
   onWaveCleared?: (wave: number) => void;
+  /** A zombie has started a swing. */
+  onSwing?: (zombie: ZombieState) => void;
+  /** A zombie has come in through a breach. */
+  onSpawn?: (zombie: ZombieState) => void;
+  /** A body hit the ground, or a wall, this hard (metres a second). */
+  onLand?: (zombie: ZombieState, impact: number) => void;
+  /** A zombie left ammunition behind. */
+  onDrop?: (pickup: AmmoPickup) => void;
+  /** The survivor took a drop. */
+  onPickup?: (pickup: AmmoPickup) => void;
 }
 
 export interface Breach {
@@ -170,6 +227,8 @@ export const createSurvival = (): SurvivalState => ({
   headshots: 0,
   cleared: 0,
   nextId: 0,
+  pickups: [],
+  nextPickupId: 0,
 });
 
 /** How many are up and fighting. */
@@ -231,6 +290,8 @@ export const spawnZombie = (
     repathTimer: random.next() * ZOMBIE.repathInterval,
     attackTimer: 0,
     swing: 0,
+    fall: null,
+    dropRolled: false,
   };
   state.nextId += 1;
   state.zombies.push(zombie);
@@ -248,6 +309,7 @@ export const damageZombie = (
   zombie: ZombieState,
   amount: number,
   headshot: boolean,
+  hit?: ZombieHit,
 ): boolean => {
   if (zombie.dead || amount <= 0 || state.phase === "over") return false;
   zombie.health = Math.max(0, zombie.health - amount);
@@ -256,6 +318,21 @@ export const damageZombie = (
   zombie.deathTime = 0;
   zombie.swing = 0;
   zombie.velocity = vec3();
+  // The round that killed it decides how it goes down. Without one, it
+  // falls back the way it was facing, as if shot from in front.
+  const from = hit ? hit.from : vec3(
+    zombie.position.x + Math.sin(zombie.yaw),
+    zombie.position.y + 1.2,
+    zombie.position.z + Math.cos(zombie.yaw),
+  );
+  const point = hit ? hit.point : vec3(zombie.position.x, zombie.position.y + 1.2, zombie.position.z);
+  zombie.fall = createFall({
+    dirX: point.x - from.x,
+    dirZ: point.z - from.z,
+    height: point.y - zombie.position.y,
+    headshot,
+    damage: amount,
+  });
   state.kills += 1;
   if (headshot) state.headshots += 1;
   return true;
@@ -288,6 +365,21 @@ const clearLine = (world: ZombieWorld, zombie: ZombieState, target: Vec3): boole
   return !hit || hit.targetId !== null || hit.distance >= distance - 0.05;
 };
 
+/** How far a falling body can go along a direction before a wall. */
+const roomAlong = (world: ZombieWorld, zombie: ZombieState, x: number, z: number): number => {
+  const reach = 2.4;
+  // Nothing within reach means nothing to stop it: a large finite number, so
+  // it reads as measured and is not measured again.
+  let room = 1e6;
+  for (const height of [0.4, 1.1]) {
+    const eye = vec3(zombie.position.x, zombie.position.y + height, zombie.position.z);
+    const hit = world.hitscan.raycast(eye, vec3(x, 0, z), reach, zombie.id);
+    // Other bodies are not walls; only the level stops a fall.
+    if (hit && hit.targetId === null) room = Math.min(room, hit.distance);
+  }
+  return room;
+};
+
 /** One zombie, one step. */
 export const stepZombie = (
   zombie: ZombieState,
@@ -299,6 +391,15 @@ export const stepZombie = (
 ): void => {
   if (zombie.dead) {
     zombie.deathTime += dt;
+    const fall = zombie.fall;
+    if (fall) {
+      if (!Number.isFinite(fall.roomAhead)) {
+        fall.roomAhead = roomAlong(world, zombie, fall.dirX, fall.dirZ);
+        fall.roomBehind = roomAlong(world, zombie, -fall.dirX, -fall.dirZ);
+      }
+      const step = stepFall(fall, dt);
+      if (step.landed) events.onLand?.(zombie, step.impact);
+    }
     return;
   }
   zombie.attackTimer = Math.max(0, zombie.attackTimer - dt);
@@ -323,6 +424,7 @@ export const stepZombie = (
     zombie.swing = ZOMBIE.windup;
     zombie.attackTimer = ZOMBIE.attackInterval;
     zombie.velocity = vec3();
+    events.onSwing?.(zombie);
     return;
   }
 
@@ -404,7 +506,13 @@ export const stepSurvival = (
   dt: number,
   events: SurvivalEvents = {},
 ): void => {
-  if (state.phase === "over") return;
+  if (state.phase === "over") {
+    // The run is over, but bodies already going down still finish falling.
+    for (const zombie of state.zombies) {
+      if (zombie.dead) stepZombie(zombie, state.zombies, target, world, dt, events);
+    }
+    return;
+  }
 
   if (state.phase === "breather") {
     state.timer = Math.max(0, state.timer - dt);
@@ -421,7 +529,8 @@ export const stepSurvival = (
     if (state.toSpawn > 0 && state.spawnTimer === 0 && aliveCount(state) < SURVIVAL.maxAlive) {
       const at = pickBreach(breaches, target.position, world.random);
       if (at) {
-        spawnZombie(state, at, world.random);
+        const zombie = spawnZombie(state, at, world.random);
+        events.onSpawn?.(zombie);
         state.toSpawn -= 1;
       }
       state.spawnTimer = SURVIVAL.spawnInterval;
@@ -434,6 +543,7 @@ export const stepSurvival = (
   state.zombies = state.zombies.filter(
     (zombie) => !zombie.dead || zombie.deathTime < SURVIVAL.corpseSeconds,
   );
+  stepPickups(state, target, world, dt, events);
 
   if (state.phase === "wave" && state.toSpawn === 0 && aliveCount(state) === 0) {
     state.cleared = state.wave;
@@ -442,4 +552,62 @@ export const stepSurvival = (
     state.phase = "breather";
     state.timer = SURVIVAL.breather;
   }
+};
+
+/** The chance a zombie leaves a drop, given how short the survivor is. */
+export const dropChance = (zombie: ZombieState, ammoNeed: number): number => {
+  const need = clamp(ammoNeed, 0, 1);
+  const base = SURVIVAL.dropChance + (zombie.runner ? SURVIVAL.runnerDropBonus : 0);
+  return Math.min(1, base + (1 - base) * SURVIVAL.dropChanceWhenShort * need);
+};
+
+/**
+ * Drops: rolled for each body once, where it came to rest; taken by walking
+ * over them; gone after a while.
+ */
+const stepPickups = (
+  state: SurvivalState,
+  target: SurvivalTarget,
+  world: ZombieWorld,
+  dt: number,
+  events: SurvivalEvents,
+): void => {
+  for (const zombie of state.zombies) {
+    if (!zombie.dead || zombie.dropRolled) continue;
+    // Rolled once the body has come down, and left where it lies.
+    if (zombie.fall && !zombie.fall.landed && zombie.deathTime < 1.5) continue;
+    zombie.dropRolled = true;
+    if (world.random.next() >= dropChance(zombie, target.ammoNeed ?? 0)) continue;
+    const fall = zombie.fall;
+    // Beside the body, on the side it did not fall towards.
+    const along = fall ? fall.slide : 0;
+    const pickup: AmmoPickup = {
+      id: `ammo_${state.nextPickupId}`,
+      position: vec3(
+        zombie.position.x + (fall ? fall.dirX * along : 0),
+        zombie.position.y,
+        zombie.position.z + (fall ? fall.dirZ * along : 0),
+      ),
+      life: SURVIVAL.pickupSeconds,
+    };
+    state.nextPickupId += 1;
+    state.pickups.push(pickup);
+    if (state.pickups.length > SURVIVAL.maxPickups) state.pickups.shift();
+    events.onDrop?.(pickup);
+  }
+
+  const kept: AmmoPickup[] = [];
+  for (const pickup of state.pickups) {
+    pickup.life -= dt;
+    if (pickup.life <= 0) continue;
+    const dx = pickup.position.x - target.position.x;
+    const dz = pickup.position.z - target.position.z;
+    const dy = pickup.position.y - target.position.y;
+    if (target.alive && Math.hypot(dx, dz) <= SURVIVAL.pickupRadius && Math.abs(dy) < 1.5) {
+      events.onPickup?.(pickup);
+      continue;
+    }
+    kept.push(pickup);
+  }
+  state.pickups = kept;
 };

@@ -116,7 +116,23 @@ export interface MapStyle {
   keyDirection: { x: number; y: number; z: number };
   /** Emissive strip lights, if the map uses them. */
   stripLight: string;
+  /**
+   * Exponential mist, per metre. Replaces the linear fog when set, and the
+   * camera's far plane is pulled in to where the mist has gone opaque, so
+   * nothing past that point is drawn at all.
+   */
+  mist?: number;
+  /** Night: no sun to cast shadows, no sky dome, and the survivor carries a torch. */
+  night?: boolean;
+  /** The grade's exposure, where the default for the lighting does not suit. */
+  exposure?: number;
 }
+
+/**
+ * How far the mist lets anything be seen, in metres: where it is past
+ * ninety-eight per cent opaque. Beyond it there is nothing worth drawing.
+ */
+export const mistDistance = (density: number): number => Math.sqrt(Math.log(50)) / density;
 
 /**
  * The bed of sound a level sits in.
@@ -125,7 +141,7 @@ export interface MapStyle {
  * here beside the palette: a ruin has weather in it, a switchyard has
  * electricity, a range has neither.
  */
-export type AmbienceId = "ruin" | "substation" | "range";
+export type AmbienceId = "ruin" | "substation" | "range" | "night";
 
 export interface MapDefinition {
   id: string;

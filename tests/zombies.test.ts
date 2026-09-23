@@ -18,8 +18,13 @@ import {
   stepZombie,
   waveSize,
   zombieHealth,
+  ZOMBIE_HEALTH,
+  dropChance,
+  type AmmoPickup,
   type ZombieWorld,
 } from "../src/sim/zombies";
+import { HEALTH } from "../src/sim/health";
+import { FALL } from "../src/sim/fall";
 
 /** A flat yard forty metres across, with a wall across the middle of one half. */
 const floor: BoxBrush = { kind: "floor", x: 0, y: -0.5, z: 0, width: 40, height: 1, depth: 40 };
@@ -34,17 +39,18 @@ const makeWorld = (brushes: BoxBrush[] = [floor]): ZombieWorld => {
 const DT = 1 / 60;
 
 describe("waves", () => {
-  it("grows every wave, and toughens", () => {
+  it("grows every wave", () => {
     for (let wave = 1; wave < 12; wave += 1) {
       expect(waveSize(wave + 1)).toBeGreaterThan(waveSize(wave));
-      expect(zombieHealth(wave + 1)).toBeGreaterThanOrEqual(zombieHealth(wave));
     }
   });
 
-  it("takes three rifle rounds to the body to drop a first-wave zombie", () => {
-    // The rifle does thirty-four. Two leaves it standing; three puts it down.
-    expect(zombieHealth(1)).toBeGreaterThan(34 * 2);
-    expect(zombieHealth(1)).toBeLessThanOrEqual(34 * 3);
+  it("gives every zombie three times the survivor's health, on every wave", () => {
+    expect(ZOMBIE_HEALTH).toBe(HEALTH.max * 3);
+    for (let wave = 1; wave < 12; wave += 1) expect(zombieHealth(wave)).toBe(300);
+    // Nine rifle rounds to the body, three to the head.
+    expect(Math.ceil(300 / 34)).toBe(9);
+    expect(Math.ceil(300 / (34 * 3))).toBe(3);
   });
 
   it("brings runners in from the third wave, never all of them", () => {
@@ -243,5 +249,121 @@ describe("a zombie", () => {
       stepSurvival(state, target, [], world, DT);
     }
     expect(state.zombies).toEqual([other]);
+  });
+
+  it("falls away from a round in the chest, and back from one in the legs", () => {
+    const world = makeWorld();
+    const state = createSurvival();
+    const chest = spawnZombie(state, { x: -4, z: -8 }, world.random);
+    const legs = spawnZombie(state, { x: 4, z: -8 }, world.random);
+    // Both shot from the south, travelling north (+z).
+    damageZombie(state, chest, 1000, false, {
+      from: vec3(-4, 1.6, -14),
+      point: vec3(-4, 1.3, -8),
+    });
+    damageZombie(state, legs, 1000, false, {
+      from: vec3(4, 1.6, -14),
+      point: vec3(4, 0.4, -8),
+    });
+    const target = { position: vec3(0, 0, -15), alive: true };
+    for (let t = 0; t < 2.5; t += DT) {
+      for (const zombie of state.zombies) stepZombie(zombie, state.zombies, target, world, DT);
+    }
+    expect(chest.fall!.dirZ).toBeCloseTo(1, 5);
+    expect(chest.fall!.angle).toBeCloseTo(FALL.lieAngle, 3);
+    expect(legs.fall!.angle).toBeCloseTo(-FALL.lieAngle, 3);
+  });
+
+  it("lands against the wall it was shot into", () => {
+    const world = makeWorld([floor, wall]);
+    const state = createSurvival();
+    // A metre south of the wall at z = 5, shot from the south.
+    const zombie = spawnZombie(state, { x: 0, z: 3.8 }, world.random);
+    damageZombie(state, zombie, 1000, false, {
+      from: vec3(0, 1.6, -4),
+      point: vec3(0, 1.3, 3.8),
+    });
+    let landed = 0;
+    const target = { position: vec3(0, 0, -6), alive: true };
+    for (let t = 0; t < 2.5; t += DT) {
+      stepZombie(zombie, [zombie], target, world, DT, { onLand: () => (landed += 1) });
+    }
+    const fall = zombie.fall!;
+    expect(fall.roomAhead).toBeLessThan(1.2);
+    expect(fall.angle).toBeLessThan(FALL.lieAngle - 0.2);
+    expect(landed).toBe(1);
+  });
+
+  it("drops ammunition more often the emptier the survivor's rack", () => {
+    const state = createSurvival();
+    const walker = spawnZombie(state, { x: 0, z: 0 }, makeWorld().random);
+    walker.runner = false;
+    expect(dropChance(walker, 0)).toBeCloseTo(SURVIVAL.dropChance, 5);
+    expect(dropChance(walker, 1)).toBeGreaterThan(0.6);
+    walker.runner = true;
+    expect(dropChance(walker, 0)).toBeGreaterThan(SURVIVAL.dropChance);
+  });
+
+  it("leaves a drop where the body lies, and the survivor takes it by walking over it", () => {
+    // A roll that always comes up, so the drop is certain.
+    const world: ZombieWorld = { ...makeWorld(), random: { next: () => 0, range: (a) => a, reseed: () => undefined } };
+    const state = createSurvival();
+    state.phase = "wave";
+    state.toSpawn = 0;
+    const zombie = spawnZombie(state, { x: 0, z: 10 }, world.random);
+    spawnZombie(state, { x: 15, z: 15 }, world.random);
+    damageZombie(state, zombie, 1000, false);
+    const dropped: AmmoPickup[] = [];
+    const taken: AmmoPickup[] = [];
+    const events = {
+      onDrop: (pickup: AmmoPickup) => dropped.push(pickup),
+      onPickup: (pickup: AmmoPickup) => taken.push(pickup),
+    };
+    const away = { position: vec3(0, 0, -15), alive: true };
+    for (let t = 0; t < 2; t += DT) stepSurvival(state, away, [], world, DT, events);
+    expect(dropped).toHaveLength(1);
+    expect(state.pickups).toHaveLength(1);
+    const at = state.pickups[0].position;
+    expect(Math.hypot(at.x - zombie.position.x, at.z - zombie.position.z)).toBeLessThan(2);
+    // Only once per body.
+    for (let t = 0; t < 1; t += DT) stepSurvival(state, away, [], world, DT, events);
+    expect(dropped).toHaveLength(1);
+    const over = { position: vec3(at.x, at.y + 0.9, at.z), alive: true };
+    stepSurvival(state, over, [], world, DT, events);
+    expect(taken).toHaveLength(1);
+    expect(state.pickups).toHaveLength(0);
+  });
+
+  it("clears drops away after they have lain long enough", () => {
+    const world = makeWorld();
+    const state = createSurvival();
+    state.phase = "wave";
+    state.toSpawn = 1;
+    state.pickups.push({ id: "ammo_0", position: vec3(10, 0, 10), life: 1 });
+    const far = { position: vec3(-10, 0, -10), alive: true };
+    for (let t = 0; t < 1.2; t += DT) stepSurvival(state, far, [], world, DT);
+    expect(state.pickups).toHaveLength(0);
+  });
+
+  it("lets bodies finish falling after the run is over", () => {
+    const world = makeWorld();
+    const state = createSurvival();
+    const zombie = spawnZombie(state, { x: 0, z: 10 }, world.random);
+    damageZombie(state, zombie, 1000, false);
+    state.phase = "over";
+    for (let t = 0; t < 2; t += DT) {
+      stepSurvival(state, { position: vec3(0, 0, -10), alive: false }, [], world, DT);
+    }
+    expect(Math.abs(zombie.fall!.angle)).toBeCloseTo(FALL.lieAngle, 3);
+  });
+
+  it("calls out a swing as it starts", () => {
+    const world = makeWorld();
+    const state = createSurvival();
+    const zombie = spawnZombie(state, { x: 0, z: -10 }, world.random);
+    let swings = 0;
+    const target = { position: vec3(0, 0, -9), alive: true };
+    stepZombie(zombie, [zombie], target, world, DT, { onSwing: () => (swings += 1) });
+    expect(swings).toBe(1);
   });
 });

@@ -2,6 +2,7 @@ import { Bone } from "@babylonjs/core/Bones/bone";
 import { Skeleton } from "@babylonjs/core/Bones/skeleton";
 import { Color3 } from "@babylonjs/core/Maths/math.color";
 import { Matrix, Quaternion } from "@babylonjs/core/Maths/math.vector";
+import { fallTilt } from "../sim/fall";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { VertexData } from "@babylonjs/core/Meshes/mesh.vertexData";
@@ -12,7 +13,8 @@ import { FALL_SECONDS, figurePose } from "./figurePose";
 import { BONES, FIGURE_HEIGHT, TEAM_PALETTES, soldierSkin, type BoneSpec } from "./soldier";
 import { ZOMBIE_BONES, isZombieLook, zombieLook, zombieSkin, type ZombieLook } from "./zombie";
 import type { BotState, Team } from "../sim/bots";
-import { ZOMBIE, type ZombieState } from "../sim/zombies";
+import { SURVIVAL, ZOMBIE, type ZombieState } from "../sim/zombies";
+import type { RagdollPose } from "./figurePose";
 import type { Vec3 } from "../sim/vec3";
 import { damp } from "../sim/vec3";
 
@@ -92,6 +94,8 @@ export interface BotBinding {
   shamble: boolean;
   /** How far through a swing it is, for a zombie; null when not swinging. */
   swing: number | null;
+  /** The limbs of a physics fall, while one is under way. */
+  ragdoll: RagdollPose | null;
 }
 
 /** Geometry and material for one team, built once and shared by every figure. */
@@ -107,6 +111,9 @@ export class BotField {
   private readonly byId = new Map<string, BotBinding>();
   private readonly builds = new Map<FigureLook, TeamBuild>();
   private readonly spin = new Quaternion();
+  private readonly tilt = new Matrix();
+  private readonly turn = new Matrix();
+  private readonly facing = new Matrix();
   /**
    * Set where the sun casts no shadow map, so figures still read as
    * standing on something.
@@ -232,6 +239,7 @@ export class BotField {
       clock: (id.charCodeAt(id.length - 1) % 32) * 0.19,
       shamble: zombie,
       swing: null,
+      ragdoll: null,
     };
     this.bindings.push(binding);
     this.byId.set(id, binding);
@@ -250,6 +258,7 @@ export class BotField {
       clock: binding.clock,
       shamble: binding.shamble,
       swing: binding.swing,
+      ragdoll: binding.ragdoll,
     });
     for (const [name, joint] of Object.entries(pose.joints)) {
       const bone = binding.bones.get(name);
@@ -377,6 +386,10 @@ export class BotField {
   /** Push the survival horde into the scene. */
   renderZombies(zombies: readonly ZombieState[], deltaSeconds: number): void {
     for (const zombie of zombies) {
+      if (zombie.dead && zombie.fall) {
+        this.placeFalling(zombie, deltaSeconds);
+        continue;
+      }
       // The windup is the arms going up and starting down; the follow
       // through after it lands is the view's own.
       const swing = zombie.swing > 0 ? (1 - zombie.swing / ZOMBIE.windup) * 0.82 : null;
@@ -390,6 +403,68 @@ export class BotField {
         swing,
       );
     }
+  }
+
+  /**
+   * A zombie going down under the simulation's physics.
+   *
+   * The whole body is the rigid rod the simulation turned: its feet where
+   * they slid to, leaned over along the line of the shot by the angle the
+   * fall has reached. The limbs are posed on top of that. Near the end of
+   * its time the body sinks out of sight rather than blinking out.
+   */
+  private placeFalling(zombie: ZombieState, deltaSeconds: number): void {
+    const fall = zombie.fall;
+    if (!fall) return;
+    const binding =
+      this.byId.get(zombie.id) ??
+      this.add(zombie.id, zombieLook(zombie.id, zombie.runner), zombie.position, zombie.yaw);
+    binding.clock += deltaSeconds;
+    binding.dead = true;
+    binding.swing = null;
+
+    const yaw = binding.renderYaw;
+    const lying = Math.abs(Math.sin(fall.angle));
+    const fade = SURVIVAL.corpseSeconds - zombie.deathTime;
+    const sink = fade < 0.8 ? (0.8 - fade) * 0.45 : 0;
+    binding.root.position.set(
+      zombie.position.x + fall.dirX * fall.slide,
+      // Lifted by half the body's depth as it lies down, so it lies on the
+      // ground and not half in it.
+      zombie.position.y + lying * 0.1 - sink,
+      zombie.position.z + fall.dirZ * fall.slide,
+    );
+    const tilt = fallTilt(fall);
+    this.tilt.copyFrom(
+      Matrix.FromValues(
+        tilt[0], tilt[1], tilt[2], 0,
+        tilt[3], tilt[4], tilt[5], 0,
+        tilt[6], tilt[7], tilt[8], 0,
+        0, 0, 0, 1,
+      ),
+    );
+    // The figure's own turn first, then the lean.
+    Matrix.RotationYToRef(yaw, this.facing);
+    this.facing.multiplyToRef(this.tilt, this.turn);
+    binding.root.rotationQuaternion ??= new Quaternion();
+    Quaternion.FromRotationMatrixToRef(this.turn, binding.root.rotationQuaternion);
+
+    const forward = fall.dirX * Math.sin(yaw) + fall.dirZ * Math.cos(yaw);
+    const side = fall.dirX * Math.cos(yaw) - fall.dirZ * Math.sin(yaw);
+    binding.ragdoll = {
+      buckle: fall.buckle,
+      head: fall.head,
+      arms: fall.arms,
+      forward,
+      side,
+      limp: zombie.deathTime / 0.5,
+      settle: fall.landed ? (zombie.deathTime - 0.8) / 0.6 : 0,
+    };
+    if (binding.patch && this.contact) {
+      const { x, y, z } = binding.root.position;
+      this.contact.place(binding.patch, x, y, z, FIGURE_HEIGHT * (1 - lying * 0.72), 1 + lying * 0.3);
+    }
+    this.applyPose(binding, 0, 0);
   }
 
   /** Push local bot state into the scene. */

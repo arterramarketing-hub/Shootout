@@ -1,5 +1,6 @@
 import type { AmbienceId } from "../maps/types";
 import type { WeaponId } from "../sim/weapons";
+import { speak, VOWELS } from "./zombieAudio";
 
 /**
  * Game audio, synthesised at runtime.
@@ -122,7 +123,9 @@ type Incidental =
   | "horn"
   | "relay"
   | "buzz"
-  | "drip";
+  | "drip"
+  | "cricket"
+  | "moan";
 
 interface AmbienceProfile {
   /** How loud a gust of wind gets. Between gusts the wind is barely there. */
@@ -173,6 +176,17 @@ const AMBIENCES: Record<AmbienceId, AmbienceProfile> = {
     hum: 0.016,
     gap: [3.5, 10],
     events: ["relay", "buzz", "groan", "debris", "gunfire", "drip"],
+  },
+  // A city at night with the dead in it: a low wind, insects in the verges,
+  // the ruin settling, and somewhere out in the mist, something moaning.
+  night: {
+    wind: 0.04,
+    windCentre: 360,
+    gustGap: [8, 19],
+    rumble: 0.012,
+    hum: 0,
+    gap: [2.2, 6.5],
+    events: ["cricket", "cricket", "moan", "moan", "debris", "groan", "drip"],
   },
   // A range. Quiet enough to hear your own weapon properly.
   range: {
@@ -432,6 +446,10 @@ export class GameAudio {
         return this.electricBuzz();
       case "drip":
         return this.drip();
+      case "cricket":
+        return this.cricket();
+      case "moan":
+        return this.distantMoan();
       default:
         return undefined;
     }
@@ -550,6 +568,55 @@ export class GameAudio {
       const at = i * (0.3 + Math.random() * 0.5);
       this.chirp(1500 + Math.random() * 900, 520, 0.09, 0.03, "sine", at);
     }
+  }
+
+  /** Something in the verge, chirping in short trains. */
+  private cricket(): void {
+    const trains = 1 + Math.floor(Math.random() * 3);
+    const pitch = 4200 + Math.random() * 700;
+    for (let train = 0; train < trains; train += 1) {
+      const start = train * (0.45 + Math.random() * 0.3);
+      const pulses = 3 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < pulses; i += 1) {
+        this.chirp(pitch, pitch * 0.97, 0.022, 0.012, "sine", start + i * 0.045);
+      }
+    }
+  }
+
+  /** One of them, a long way off in the mist, and muffled by it. */
+  private distantMoan(): void {
+    const bus = this.bus();
+    if (!bus) return;
+    const pan = bus.context.createStereoPanner();
+    pan.pan.value = Math.random() * 1.6 - 0.8;
+    const muffle = bus.context.createBiquadFilter();
+    muffle.type = "lowpass";
+    muffle.frequency.value = 700;
+    muffle.connect(pan).connect(bus.output);
+    const vowel = VOWELS[Math.floor(Math.random() * VOWELS.length)];
+    const duration = 1.4 + Math.random() * 1.2;
+    window.setTimeout(() => {
+      muffle.disconnect();
+      pan.disconnect();
+    }, (duration + 0.3) * 1000);
+    speak(bus.context, muffle, bus.noise, {
+      pitch: 70 + Math.random() * 30,
+      pitchEnd: 55 + Math.random() * 15,
+      duration,
+      formants: vowel,
+      rasp: 0.4,
+      gain: 0.05,
+      attack: 0.35,
+    });
+  }
+
+  /**
+   * The output a sound outside this class plays into, or null when there is
+   * nothing to play into: not started yet, or the sound is off.
+   */
+  bus(): { context: AudioContext; output: AudioNode; noise: AudioBuffer } | null {
+    if (!this.context || !this.master || !this.noise || !this.enabled) return null;
+    return { context: this.context, output: this.master, noise: this.noise };
   }
 
   /* ------------------------------------------------------------------ *

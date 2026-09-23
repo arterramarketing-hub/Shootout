@@ -1,5 +1,29 @@
 # Changelog
 
+## Survival after dark
+
+**Added**
+
+- Survival is at night: a weak moon, a torch on the player, and a dense
+  exponential mist. The far plane is pulled in to where the mist goes opaque,
+  and there are no sun shadows and no sky dome, so the mode draws faster than
+  the daytime one.
+- Physics-based deaths for zombies. The killing round's direction and height
+  decide the fall: away from a chest or head shot, legs swept out and back
+  over them from a low one, slumped against a wall when shot into one.
+- Ammunition drops: crates left by the dead, more likely the emptier the
+  rack, picked up by walking over them.
+- Zombie sounds: moans, runner shrieks, snarls and swings, blows landing,
+  flesh hits, death rattles, bodies landing, dragged footsteps, drops and
+  pickups, and a chorus at each wave's start, all placed in stereo by where
+  they are. A night ambience with crickets and far-off moans.
+
+**Changed**
+
+- Zombies have 300 health, three times the player's, on every wave.
+- Waves no longer refill the rack; only the sidearm gets a floor of two
+  magazines.
+
 ## Zombie survival
 
 **Added**

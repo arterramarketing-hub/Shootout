@@ -277,18 +277,47 @@ Team deathmatch. Six minute rounds, first to 50 kills, four second respawns.
 Lobby sets difficulty and team size, the round plays, and a scoreboard reports
 kills, deaths, headshots and ratio. Online play is always team deathmatch.
 
-Zombie survival. One life, no bots, and no fences: the survival variant of
-Boulevard Works takes down the barriers across both ends of the street, so the
-plant, the cross boulevards, the lots and the storefronts around it are all
-walkable, out to hidden walls about 88 m from the centre. The dead come in
-waves from breaches all over that city, never within 22 m of the player, at
-most fourteen at a time. They walk the navigation grid around walls, speed up
-wave by wave, and from wave 3 some of them run. A zombie telegraphs its swing,
-and the blow lands only if the player is still in reach when it does, so
-stepping back is a real answer. Ammunition is topped up at the start of every
-wave. The run ends when the player falls, and the results show the wave
-reached, waves cleared, kills and headshots. Survival pays experience per
-zombie and per wave cleared, and does not add zombies to the career kill count.
+Zombie survival. One life, no bots, no fences, and it is night. The survival
+variant of Boulevard Works takes down the barriers across both ends of the
+street, so the plant, the cross boulevards, the lots and the storefronts
+around it are all walkable, out to hidden walls about 88 m from the centre.
+It is lit by a weak moon and the survivor's torch, in a mist dense enough to
+close the city down to about forty metres. The far plane stops there, and
+with no sun there are no shadow maps and no sky dome, which is why this mode
+draws faster than the daytime one.
+
+The dead come in waves from breaches all over the city, never within 22 m of
+the player, at most fourteen at a time. Each has 300 health, three times the
+player's, on every wave: nine rifle rounds to the body, three to the head.
+They walk the navigation grid around walls, speed up wave by wave, and from
+wave 3 some of them run. A zombie telegraphs its swing, and the blow lands
+only if the player is still in reach when it does.
+
+Ammunition comes from the dead. A zombie leaves a crate with a glowing band
+where it falls about a third of the time, more often the emptier the
+player's rack is, and runners more often still. Walking over one adds a
+magazine to every weapon carried. Crates last thirty seconds and blink
+before they go. The only thing a new wave hands over is a floor of two
+magazines under the sidearm.
+
+Bodies fall under physics. The body is a rigid rod on its feet with friction
+under them, shoved by the round that killed it at the height it went in. A
+chest or head shot topples it away from the shooter; a shot low in the legs
+knocks the feet out along the line of fire and drops the body back over
+them; a body shot into a wall slumps against it. The head and arms ride
+damped springs, and the arms go limp as it goes down.
+
+The horde is heard as well as seen, all synthesised: moans shaped by vowel
+resonances, runner shrieks, a snarl and a swish before a swing, the blow
+landing, rounds going into flesh, death rattles, bodies hitting the ground,
+dragged footsteps, crates dropping and being picked up, and the city moaning
+back at the start of each wave. Every one of those is panned, attenuated
+and muffled by where it is relative to where the player is facing, so a
+moan from behind sounds like it is behind.
+
+The run ends when the player falls, and the results show the wave reached,
+waves cleared, kills and headshots. Survival pays experience per zombie and
+per wave cleared, and does not add zombies to the career kill count.
 
 Settings persist to local storage and cover look sensitivity for touch and
 mouse separately, gyroscope aim, inverted look, field of view, HUD scale,

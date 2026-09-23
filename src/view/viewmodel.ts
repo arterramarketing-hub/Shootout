@@ -24,6 +24,9 @@ export const VIEWMODEL_LAYER = 0x20000000;
 /** Everything else. Babylon's default mesh mask. */
 export const WORLD_LAYER = 0x0fffffff;
 
+/** How bright the weapon's own light is, in daylight. */
+const VIEWMODEL_LIGHT = 0.75;
+
 const DEG_TO_RAD = Math.PI / 180;
 
 /**
@@ -76,6 +79,7 @@ const BOB = { amount: 0.016, roll: 0.022, frequency: 0.55 } as const;
  * Two cameras keep the world wide and the weapon in proportion.
  */
 export class ViewmodelRig {
+  private light!: HemisphericLight;
   readonly camera: FreeCamera;
   private readonly models: Record<WeaponId, WeaponModel>;
   private readonly painter: FinishPainter;
@@ -137,7 +141,8 @@ export class ViewmodelRig {
     // A dedicated light so the weapon reads the same in a dark corner as in
     // the open. Restricted to the viewmodel meshes so it cannot leak.
     const light = new HemisphericLight("vm_light", new Vector3(-0.3, 1, -0.6), scene);
-    light.intensity = 0.75;
+    light.intensity = VIEWMODEL_LIGHT;
+    this.light = light;
     light.diffuse = new Color3(0.95, 0.95, 1.0);
     light.groundColor = new Color3(0.3, 0.3, 0.34);
     light.includedOnlyMeshes = [];
@@ -294,6 +299,14 @@ export class ViewmodelRig {
     const eye = worldCamera.globalPosition;
     const direction = far.subtract(eye).normalize();
     return eye.add(direction.scale(distance));
+  }
+
+  /**
+   * Scale the weapon's own light, so it sits in the scene rather than
+   * glowing in the dark in front of it. One is daylight.
+   */
+  setLightLevel(level: number): void {
+    this.light.intensity = VIEWMODEL_LIGHT * level;
   }
 
   /** Light the muzzle flash for a frame or two. */

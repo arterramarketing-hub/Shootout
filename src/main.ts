@@ -2,6 +2,7 @@ import "./styles.css";
 import { Engine } from "@babylonjs/core/Engines/engine";
 import { Matrix, Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { GameAudio } from "./engine/audio";
+import { ZombieVoices } from "./engine/zombieAudio";
 import { FixedStepLoop, FpsMeter } from "./engine/loop";
 import {
   QualityBenchmark,
@@ -22,7 +23,7 @@ import { Screens } from "./hud/screens";
 import { InputManager } from "./input/inputManager";
 import { mapById } from "./maps";
 import { boulevardSurvivalMap } from "./maps/boulevard";
-import type { MapDefinition } from "./maps/types";
+import { mistDistance, type MapDefinition } from "./maps/types";
 import {
   DIFFICULTIES,
   PLAYER_ID,
@@ -81,6 +82,7 @@ import {
   damageZombie,
   endSurvival,
   remaining,
+  spawnZombie,
   stepSurvival,
   type Breach,
   type SurvivalState,
@@ -96,6 +98,7 @@ import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 import { ContactShadows } from "./view/contactShadow";
 import type { CascadedShadowGenerator } from "@babylonjs/core/Lights/Shadows/cascadedShadowGenerator";
 import { ViewmodelRig, WORLD_LAYER } from "./view/viewmodel";
+import { PickupField } from "./view/pickups";
 
 /** Callsigns for the bots. Original, and short enough for a kill feed. */
 /**
@@ -149,6 +152,7 @@ const boot = (): void => {
   let body!: ReturnType<BrushWorld["createController"]>;
   let effects!: ShotEffects;
   let botField!: BotField;
+  let pickupField!: PickupField;
   let sun: CascadedShadowGenerator | null = null;
   let shadowPatches!: ContactShadows;
   let selfShadow!: Mesh;
@@ -161,12 +165,25 @@ const boot = (): void => {
     const built = createScene(engine, map, quality);
     scene = built.scene;
     rig = new CameraRig(scene, quality, settings.fovDegrees);
-    sun = quality.shadows ? addSunShadows(built, rig.camera, quality) : null;
+    // Mist closes the far plane in to where it has gone opaque: nothing past
+    // that could be seen, so nothing past it is drawn.
+    if (map.style.mist) {
+      rig.camera.maxZ = Math.min(rig.camera.maxZ, mistDistance(map.style.mist));
+    }
+    // A night has no sun to cast shadows, and no shadow maps to pay for.
+    sun = quality.shadows && !map.style.night ? addSunShadows(built, rig.camera, quality) : null;
+    if (built.torch) {
+      // Held at the right shoulder and pointed where the player looks.
+      built.torch.parent = rig.camera;
+      built.torch.position.set(0.22, -0.12, 0.1);
+      built.torch.direction.set(-0.02, 0.01, 1);
+    }
     // Tracers, impacts and strip lights bloom on anything but the weakest
     // tier: it is one small blurred buffer, and it is what makes a round
     // going past read as hot rather than as a yellow stick.
     if (quality.tier !== "low") addGlow(built, rig.camera);
     viewmodel = new ViewmodelRig(scene);
+    viewmodel.setLightLevel(map.style.night ? 0.45 : 1);
     // The world camera must not draw the weapon, and the weapon camera must
     // not draw the world. Babylon clears depth between them, so the weapon
     // never intersects a wall it is standing next to.
@@ -184,7 +201,8 @@ const boot = (): void => {
     // for them. One of the two, never neither: a figure with nothing under
     // it floats over the ground it is standing on, and at range that is the
     // difference between a shot and a guess.
-    botField = new BotField(scene, quality.shadows ? null : shadowPatches);
+    botField = new BotField(scene, sun ? null : shadowPatches);
+    pickupField = new PickupField(scene);
     botField.onFigure = (mesh) => sun?.addShadowCaster(mesh, false);
 
     // The player's own, on every tier. Nobody is standing there to cast one:
@@ -202,6 +220,7 @@ const boot = (): void => {
   buildWorld(activeMap);
 
   const audio = new GameAudio();
+  const zombieVoices = new ZombieVoices(() => audio.bus());
 
   const spawn = activeMap.spawns[0];
   const spawnPosition = vec3(spawn.x, (spawn.y ?? 0) + STANCE.standHeight / 2 + 0.05, spawn.z);
@@ -491,9 +510,22 @@ const boot = (): void => {
         hitSomething = true;
         headshot = headshot || entry.headshot;
         dealt += entry.damage;
-        if (damageZombie(survival, zombie, entry.damage, entry.headshot)) {
+        // Where the round went in, which decides which way the body goes.
+        const impact =
+          resolution.impacts.find(
+            (candidate) => candidate.targetId === entry.targetId && candidate.headshot === entry.headshot,
+          ) ?? resolution.impacts.find((candidate) => candidate.targetId === entry.targetId);
+        const point = impact ? impact.point : vec3(zombie.position.x, zombie.position.y + 1.2, zombie.position.z);
+        zombieVoices.flesh(point, entry.headshot);
+        if (
+          damageZombie(survival, zombie, entry.damage, entry.headshot, {
+            from: attackerOrigin,
+            point,
+          })
+        ) {
           killedSomeone = true;
           world.setHitboxes(zombie.id, []);
+          zombieVoices.death(zombie, entry.headshot);
         }
         continue;
       }
@@ -818,6 +850,8 @@ const boot = (): void => {
       botField.clear();
       bots = [];
       survival = createSurvival();
+      zombieVoices.reset();
+      pickupField.clear();
       breaches = activeMap.spawns.filter((point) => point.team === "b");
       survivalEndTimer = 0;
       match.phase = "active";
@@ -1002,7 +1036,7 @@ const boot = (): void => {
     );
     stepSurvival(
       run,
-      { position: feet, alive: !playerHealth.dead },
+      { position: feet, alive: !playerHealth.dead, ammoNeed: ammoNeed() },
       breaches,
       { grid: nav.grid, hitscan: world, random },
       dt,
@@ -1012,19 +1046,36 @@ const boot = (): void => {
           const bearing = bearingTo(player.position, from);
           hud.showDamageFrom(bearing);
           rig.addShake(0.9);
+          zombieVoices.strike(from);
           if (!debugInvulnerable && applyDamage(playerHealth, damage, bearing)) {
             match.playerDeaths += 1;
           }
         },
+        onSwing: (zombie) => zombieVoices.swing(zombie),
+        onSpawn: (zombie) => zombieVoices.spawn(zombie),
+        onLand: (zombie, impact) => zombieVoices.land(zombie, impact),
+        onDrop: (pickup) => zombieVoices.drop(pickup.position),
+        onPickup: () => {
+          const taken = takeAmmo();
+          zombieVoices.pickup();
+          hud.pushFeed(taken > 0 ? `+${taken} ROUNDS` : "RACK FULL", "info");
+        },
         onWaveStart: (wave) => {
           announce(`WAVE ${wave}`);
-          // A fresh wave comes with fresh ammunition, so a long run is not
-          // lost to an empty rack rather than to the dead.
-          for (const weapon of playerLoadout.weapons) {
-            weapon.reserve = Math.max(weapon.reserve, weapon.definition.reserveAmmo);
-          }
+          zombieVoices.waveStart(wave);
+          // Ammunition comes from the dead now. The one thing a wave still
+          // hands over is a floor under the sidearm, so a run can never be
+          // lost to having nothing at all to shoot with.
+          const sidearm =
+            playerLoadout.weapons.find((weapon) => weapon.definition.id === "pistol") ??
+            playerLoadout.weapons[playerLoadout.weapons.length - 1];
+          const floor = sidearm.definition.magazineSize * 2;
+          sidearm.reserve = Math.max(sidearm.reserve, floor);
         },
-        onWaveCleared: (wave) => announce(`WAVE ${wave} CLEARED`),
+        onWaveCleared: (wave) => {
+          announce(`WAVE ${wave} CLEARED`);
+          zombieVoices.waveCleared();
+        },
       },
     );
     if (playerHealth.dead && run.phase !== "over") {
@@ -1038,6 +1089,35 @@ const boot = (): void => {
         finishSurvival();
       }
     }
+  };
+
+  /**
+   * How short of ammunition the player is, nought to one: the share of the
+   * rack's full capacity that is missing.
+   */
+  const ammoNeed = (): number => {
+    let have = 0;
+    let most = 0;
+    for (const weapon of playerLoadout.weapons) {
+      have += weapon.magazine + weapon.reserve;
+      most += weapon.definition.magazineSize + weapon.definition.reserveAmmo;
+    }
+    return most > 0 ? Math.max(0, Math.min(1, 1 - have / most)) : 0;
+  };
+
+  /**
+   * A crate's worth: a magazine for every weapon carried, up to what each
+   * can hold in reserve. Returns the rounds actually taken.
+   */
+  const takeAmmo = (): number => {
+    let taken = 0;
+    for (const weapon of playerLoadout.weapons) {
+      const room = weapon.definition.reserveAmmo - weapon.reserve;
+      const add = Math.max(0, Math.min(weapon.definition.magazineSize, room));
+      weapon.reserve += add;
+      taken += add;
+    }
+    return taken;
   };
 
   /** What the HUD shows in place of scores while surviving. */
@@ -1219,6 +1299,14 @@ const boot = (): void => {
     } else if (survival) {
       botField.renderZombies(survival.zombies, delta);
       botField.retain(new Set(survival.zombies.map((zombie) => zombie.id)));
+      pickupField.render(survival.pickups, delta);
+      if (inGame) {
+        zombieVoices.update(
+          { x: player.position.x, y: player.position.y, z: player.position.z, yaw: player.yaw },
+          survival.zombies,
+          delta,
+        );
+      }
       netStatusBar.textContent = "";
     } else {
       botField.renderBots(bots, delta);
@@ -1354,11 +1442,25 @@ const boot = (): void => {
           left: remaining(survival),
           kills: survival.kills,
           cleared: survival.cleared,
+          pickups: survival.pickups.map((pickup) => ({
+            id: pickup.id,
+            position: { ...pickup.position },
+            life: +pickup.life.toFixed(1),
+          })),
           zombies: survival.zombies.map((zombie) => ({
             id: zombie.id,
             dead: zombie.dead,
             runner: zombie.runner,
             health: Math.round(zombie.health),
+            fall: zombie.fall
+              ? {
+                  angle: +zombie.fall.angle.toFixed(3),
+                  dirX: +zombie.fall.dirX.toFixed(3),
+                  dirZ: +zombie.fall.dirZ.toFixed(3),
+                  slide: +zombie.fall.slide.toFixed(3),
+                  landed: zombie.fall.landed,
+                }
+              : null,
             position: {
               x: +zombie.position.x.toFixed(2),
               y: +zombie.position.y.toFixed(2),
@@ -1367,9 +1469,45 @@ const boot = (): void => {
           })),
         };
       },
+      /** Development helper: bring one zombie in at a spot, outside any wave. */
+      spawnZombieAt(x: number, z: number, y = 0) {
+        if (!survival) return null;
+        return spawnZombie(survival, { x, z, y }, random).id;
+      },
+      /**
+       * Development helper: finish a zombie with one round of `damage`,
+       * fired from `from` into it at `height` metres above its feet.
+       */
+      shootZombie(id: string, from: { x: number; y: number; z: number }, height: number, damage = 34) {
+        const zombie = survival?.zombies.find((candidate) => candidate.id === id);
+        if (!survival || !zombie) return false;
+        // Worn down to this one round, so the round decides the fall.
+        zombie.health = Math.min(zombie.health, damage);
+        const point = vec3(zombie.position.x, zombie.position.y + height, zombie.position.z);
+        const killed = damageZombie(survival, zombie, damage, height > 1.45, {
+          from: vec3(from.x, from.y, from.z),
+          point,
+        });
+        if (killed) {
+          world.setHitboxes(zombie.id, []);
+          zombieVoices.death(zombie, height > 1.45);
+        }
+        return killed;
+      },
       /** Development helper: skip the breather and bring the next wave in now. */
       callWave() {
         if (survival && survival.phase === "breather") survival.timer = 0.01;
+      },
+      /** How the level is being drawn: the far plane, the fog, and the lights. */
+      get view() {
+        return {
+          farClip: +rig.camera.maxZ.toFixed(2),
+          fogMode: scene.fogMode,
+          fogDensity: scene.fogDensity,
+          shadows: sun !== null,
+          torch: scene.getLightByName("torch") !== null,
+          night: activeMap.style.night === true,
+        };
       },
       get nav() {
         return {

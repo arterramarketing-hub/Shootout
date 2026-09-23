@@ -120,4 +120,25 @@ describe("shamble", () => {
       }
     }
   });
+
+  it("lets a dead body's arms fall to its sides, and its legs straighten once it lies still", () => {
+    const ragdoll = { buckle: 1, head: 0, arms: 0, forward: -1, side: 0, limp: 0, settle: 0 };
+    const falling = figurePose(input({ ragdoll }));
+    const limp = figurePose(input({ ragdoll: { ...ragdoll, limp: 1 } }));
+    const settled = figurePose(input({ ragdoll: { ...ragdoll, limp: 1, settle: 1 } }));
+    // Arms held out in front at first; hanging by the sides once limp.
+    expect(Math.abs(falling.joints.armR.pitch)).toBeLessThan(0.1);
+    expect(limp.joints.armR.pitch).toBeGreaterThan(1.1);
+    expect(Math.abs(settled.joints.thighR.pitch)).toBeLessThan(Math.abs(falling.joints.thighR.pitch) * 0.5);
+  });
+
+  it("throws a lagging head back along the fall, in the body's own frame", () => {
+    const base = { buckle: 0, head: 0.6, arms: 0, limp: 0, settle: 0 };
+    const backward = figurePose(input({ ragdoll: { ...base, forward: -1, side: 0 } }));
+    const sideways = figurePose(input({ ragdoll: { ...base, forward: 0, side: 1 } }));
+    expect(backward.joints.head.pitch).toBeLessThan(-0.5);
+    expect(Math.abs(backward.joints.head.roll)).toBeLessThan(1e-9);
+    expect(Math.abs(sideways.joints.head.pitch)).toBeLessThan(1e-9);
+    expect(sideways.joints.head.roll).toBeLessThan(-0.5);
+  });
 });

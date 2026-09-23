@@ -1020,11 +1020,41 @@ const survivorStarts: SpawnPoint[] = [
  * not stop anybody; everything else out there stops a round and a body the
  * way the plant does.
  */
+/**
+ * The same plant after dark, in a mist that has come up off the river.
+ *
+ * The daytime palette under a moon instead of a sun: the key goes cold and
+ * weak and steep, the fill drops to a blue murmur, and the ambient is close
+ * to black, so what the survivor can see is mostly what their torch is
+ * pointed at. The mist is dense enough to close the city down to forty
+ * metres, which is where the far plane goes: past it nothing is drawn, and
+ * with no sun there are no shadow maps and no sky to paint either.
+ */
+const nightStyle: MapStyle = {
+  ...style,
+  // No sky: under mist the fog colour is all there is past the far plane.
+  sky: undefined,
+  fog: "#1a222b",
+  skyLight: "#5b6f92",
+  groundLight: "#23211e",
+  keyLight: "#a8bde2",
+  fillIntensity: 0.5,
+  keyIntensity: 0.5,
+  ambient: "#10151c",
+  keyDirection: { x: -0.3, y: -0.88, z: 0.37 },
+  stripLight: "#ffd8a0",
+  mist: 0.05,
+  night: true,
+  exposure: 1.3,
+};
+
 export const boulevardSurvivalMap: MapDefinition = {
   ...boulevardMap,
   id: "boulevard-survival",
   name: "Boulevard Works",
-  tagline: "The plant and the streets around it, and they are coming from all of them.",
+  tagline: "The plant and the streets around it, after dark, and they are coming from all of them.",
+  style: nightStyle,
+  ambience: "night",
   size: SURVIVAL_REACH * 2,
   brushes: mergeBrushes([
     ...brushes
