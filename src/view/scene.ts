@@ -263,6 +263,9 @@ const buildMap = (
   const buckets = new Map<string, { kind: SurfaceKind; tint?: string; meshes: Mesh[] }>();
 
   for (const [index, brush] of map.brushes.entries()) {
+    // Collision only: the edge of an open map, where the city carries on
+    // past the point anybody may walk to.
+    if (brush.hidden) continue;
     const mesh = new Mesh(`brush_${index}`, scene);
     const geometry = brushGeometry(brush, TEXEL_METRES);
     const data = new VertexData();

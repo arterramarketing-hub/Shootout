@@ -19,6 +19,8 @@ const alike = (a: BoxBrush, b: BoxBrush): boolean =>
   a.kind === b.kind &&
   (a.tint ?? "") === (b.tint ?? "") &&
   (a.solid ?? true) === (b.solid ?? true) &&
+  (a.hidden ?? false) === (b.hidden ?? false) &&
+  (a.group ?? "") === (b.group ?? "") &&
   (a.yaw ?? 0) === 0 &&
   (b.yaw ?? 0) === 0 &&
   (a.pitch ?? 0) === 0 &&

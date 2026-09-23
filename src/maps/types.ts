@@ -42,6 +42,19 @@ export interface BoxBrush {
   /** Set false for decoration the player should walk through. */
   solid?: boolean;
   /**
+   * Solid but never drawn: a wall that exists only for collision.
+   *
+   * For the edge of an open map, where the city carries on visually past
+   * the point anybody is allowed to walk to.
+   */
+  hidden?: boolean;
+  /**
+   * Which part of the level a brush belongs to, where a variant of the map
+   * needs to treat that part differently. Brushes in different groups never
+   * merge, so a group survives the merge pass intact.
+   */
+  group?: string;
+  /**
    * Multiplies this brush's surface colour, as a hex string.
    *
    * This is how a zone gets an identity. Every surface of a kind shares one

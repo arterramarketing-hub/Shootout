@@ -80,8 +80,11 @@ const TINT = {
 const brushes: BoxBrush[] = [];
 const random = createRandom(0x0b0e1e);
 
+/** The group the brushes being laid down belong to, if any. */
+let group: string | undefined;
+
 const box = (brush: BoxBrush): void => {
-  brushes.push(brush);
+  brushes.push(group ? { ...brush, group } : brush);
 };
 
 /** A box from its extents rather than its centre, which walls prefer. */
@@ -483,13 +486,16 @@ span("floor", ROAD.west - KERB, ROAD.west, -GROUND, 0.15, -24, 24);
 span("floor", ROAD.east, ROAD.east + KERB, -GROUND, 0.15, -24, 24);
 // The ends of the street are fenced off, and rubble has piled against the
 // fence: this is the edge of the world, and it should look like a place that
-// was closed rather than a place that stops.
+// was closed rather than a place that stops. Grouped, because survival takes
+// the fence down and lets the street run on into the city.
+group = "fence";
 for (const z of [-23.6, 23.6]) {
   span("catwalk", ROAD.west - KERB, ROAD.east + KERB, 0, 2.6, z - 0.06, z + 0.06, { tint: "#5c6166" });
   span("accent", ROAD.west - KERB - 0.05, ROAD.east + KERB + 0.05, 2.5, 2.7, z - 0.1, z + 0.1, { tint: TINT.steel });
   rubblePile(-3, z + Math.sign(-z) * 1.5, 4, 1.1);
   rubblePile(4, z + Math.sign(-z) * 1.8, 4, 0.9);
 }
+group = undefined;
 
 /* ------------------------------------------------------------------ *
  * West wing: the long block with the tower, blue's side.
@@ -740,6 +746,7 @@ for (const [x, z] of [[-29, -9], [-23, 9], [-17, 15], [-29, 15], [-23, -21], [11
  * map. See `outskirts.ts` for what is out there.
  * ------------------------------------------------------------------ */
 
+group = "outskirts";
 for (const brush of buildOutskirts({
   seed: 0x0b0e1e ^ 0x5eed,
   edge: { x: 32, z: 24 },
@@ -748,6 +755,7 @@ for (const brush of buildOutskirts({
 }).brushes) {
   box(brush);
 }
+group = undefined;
 
 /* ------------------------------------------------------------------ *
  * Spawns.
@@ -925,4 +933,110 @@ export const boulevardMap: MapDefinition = {
     maxLayers: 5,
   },
   spawns,
+};
+
+/* ------------------------------------------------------------------ *
+ * Survival: the same plant, with the city around it opened up.
+ * ------------------------------------------------------------------ */
+
+/**
+ * How far out a survivor may walk, in metres from the middle of the street.
+ *
+ * Far enough to take in the boulevards across both ends of the street, the
+ * lots and storefronts past them, and the blocks either side of the plant;
+ * short of the stacks and silos on the horizon, which are there to be seen.
+ * The navigation grid is baked to the same edge, so everything a player
+ * can reach, a zombie can follow them to.
+ */
+export const SURVIVAL_REACH = 88;
+
+/**
+ * Walls nobody sees, around the edge of the walkable city.
+ *
+ * The backdrop carries on for another sixty metres past them, so the edge
+ * reads as more city rather than as the end of the world.
+ */
+const survivalBounds = (): BoxBrush[] => {
+  const reach = SURVIVAL_REACH;
+  const thick = 2;
+  const height = 30;
+  const wall = (x: number, z: number, width: number, depth: number): BoxBrush => ({
+    kind: "wall",
+    x,
+    y: height / 2 - 2,
+    z,
+    width,
+    height,
+    depth,
+    hidden: true,
+    group: "bounds",
+  });
+  return [
+    wall(0, reach + thick / 2, reach * 2 + thick * 2, thick),
+    wall(0, -reach - thick / 2, reach * 2 + thick * 2, thick),
+    wall(reach + thick / 2, 0, thick, reach * 2),
+    wall(-reach - thick / 2, 0, thick, reach * 2),
+  ];
+};
+
+/**
+ * Where zombies come from: the edges of the walkable city, and the far
+ * corners of the plant itself.
+ *
+ * The run picks among the ones far enough from the survivor that nothing
+ * appears in front of them, and near enough that it arrives. Every one of
+ * these stands on the navigation grid; the survival map tests check.
+ */
+const breaches: SpawnPoint[] = [
+  // Down both ends of the street, and along the boulevards across them.
+  [0, 52], [0, -52], [-34, 54], [34, 54], [-34, -54], [34, -54],
+  [-70, 54], [70, 54], [-70, -54], [70, -54],
+  // The lots past the ends of the wings.
+  [-25, 40], [25, 40], [-25, -40], [25, -40], [-50, 40], [50, -40],
+  // East and west of the plant.
+  [-42, 0], [42, 0], [-42, 30], [41, -28], [-70, 14], [70, -14],
+  // Inside it: the far ends of each wing.
+  [-29, 21], [-29, -21], [29, 21], [29, -21],
+].map(([x, z]) => ({ team: "b" as const, x, z, y: L0, yaw: Math.atan2(-x, -z) }));
+
+/**
+ * Where a survivor starts: the middle of the street, which is the one place
+ * every direction a threat can come from is open.
+ */
+const survivorStarts: SpawnPoint[] = [
+  { team: "a", x: 0, z: 0, y: L0, yaw: 0 },
+  { team: "a", x: 0, z: 4, y: L0, yaw: 0 },
+  { team: "a", x: 0, z: -4, y: L0, yaw: Math.PI },
+];
+
+/**
+ * Boulevard Works with the fences down and the city made real.
+ *
+ * Everything outside the plant was scenery: drawn, and solid nowhere, so a
+ * bullet or a body passed straight through it. For survival it is ground to
+ * walk on and walls to put your back to — the street runs on past both ends
+ * to the boulevards, and the lots, storefronts and blocks either side are
+ * all there to be reached. Leaves stay soft, so the trees in the lots do
+ * not stop anybody; everything else out there stops a round and a body the
+ * way the plant does.
+ */
+export const boulevardSurvivalMap: MapDefinition = {
+  ...boulevardMap,
+  id: "boulevard-survival",
+  name: "Boulevard Works",
+  tagline: "The plant and the streets around it, and they are coming from all of them.",
+  size: SURVIVAL_REACH * 2,
+  brushes: mergeBrushes([
+    ...brushes
+      .filter((brush) => brush.group !== "fence")
+      .map((brush) =>
+        brush.group === "outskirts" && brush.kind !== "foliage" ? { ...brush, solid: true } : brush,
+      ),
+    ...survivalBounds(),
+  ]),
+  nav: {
+    ...boulevardMap.nav,
+    halfExtent: SURVIVAL_REACH + 2,
+  },
+  spawns: [...survivorStarts, ...breaches],
 };

@@ -181,48 +181,148 @@ export const findPath = (
   const goal = grid.nodes[goalIndex];
   if (!start || !goal) return null;
 
-  const count = grid.nodes.length;
-  const cameFrom = new Int32Array(count).fill(-1);
-  const gScore = new Float32Array(count).fill(Infinity);
-  const closed = new Uint8Array(count);
+  const scratch = scratchFor(grid);
+  // A new generation per search: a slot whose stamp is not this one has not
+  // been touched yet, which is what saves clearing three whole-grid arrays
+  // on every call.
+  scratch.generation += 1;
+  if (scratch.generation >= 0xffffffff) {
+    scratch.seen.fill(0);
+    scratch.closed.fill(0);
+    scratch.generation = 1;
+  }
+  const generation = scratch.generation;
+  const { cameFrom, gScore, seen, closed, heap } = scratch;
+  heap.clear();
 
+  seen[startIndex] = generation;
   gScore[startIndex] = 0;
-  // A plain array used as a priority queue. The node counts here are small
-  // enough that a binary heap would not pay for its own complexity.
-  const open: { index: number; f: number }[] = [
-    { index: startIndex, f: heuristic(grid, start, goal) },
-  ];
+  cameFrom[startIndex] = -1;
+  heap.push(startIndex, heuristic(grid, start, goal));
   let visited = 0;
 
-  while (open.length > 0 && visited < maxVisited) {
-    let bestSlot = 0;
-    for (let i = 1; i < open.length; i += 1) {
-      if (open[i].f < open[bestSlot].f) bestSlot = i;
-    }
-    const current = open.splice(bestSlot, 1)[0];
-    if (closed[current.index]) continue;
-    closed[current.index] = 1;
+  while (heap.size > 0 && visited < maxVisited) {
+    const current = heap.pop();
+    if (closed[current] === generation) continue;
+    closed[current] = generation;
     visited += 1;
 
-    if (current.index === goalIndex) {
+    if (current === goalIndex) {
       return reconstruct(grid, cameFrom, goalIndex);
     }
 
-    const node = grid.nodes[current.index];
+    const node = grid.nodes[current];
     for (const neighbour of node.links) {
-      if (closed[neighbour]) continue;
+      if (closed[neighbour] === generation) continue;
       const step = heuristic(grid, node, grid.nodes[neighbour]);
-      const tentative = gScore[current.index] + step;
-      if (tentative >= gScore[neighbour]) continue;
-      cameFrom[neighbour] = current.index;
+      const tentative = gScore[current] + step;
+      if (seen[neighbour] === generation && tentative >= gScore[neighbour]) continue;
+      seen[neighbour] = generation;
+      cameFrom[neighbour] = current;
       gScore[neighbour] = tentative;
-      open.push({
-        index: neighbour,
-        f: tentative + heuristic(grid, grid.nodes[neighbour], goal),
-      });
+      heap.push(neighbour, tentative + heuristic(grid, grid.nodes[neighbour], goal));
     }
   }
   return null;
+};
+
+/**
+ * A binary min-heap of node indices keyed by score.
+ *
+ * The open list used to be a plain array scanned end to end for its best
+ * entry on every step, which was fine at a few thousand nodes and is not at
+ * the eighty-odd thousand a city-sized grid has: a long route there keeps
+ * thousands of nodes open, and a dozen walkers asking for one each a second
+ * turned into most of a frame.
+ */
+class IndexHeap {
+  private indices: number[] = [];
+  private scores: number[] = [];
+
+  get size(): number {
+    return this.indices.length;
+  }
+
+  clear(): void {
+    this.indices.length = 0;
+    this.scores.length = 0;
+  }
+
+  push(index: number, score: number): void {
+    const indices = this.indices;
+    const scores = this.scores;
+    let at = indices.length;
+    indices.push(index);
+    scores.push(score);
+    while (at > 0) {
+      const parent = (at - 1) >> 1;
+      if (scores[parent] <= score) break;
+      indices[at] = indices[parent];
+      scores[at] = scores[parent];
+      at = parent;
+    }
+    indices[at] = index;
+    scores[at] = score;
+  }
+
+  pop(): number {
+    const indices = this.indices;
+    const scores = this.scores;
+    const top = indices[0];
+    const lastIndex = indices.pop()!;
+    const lastScore = scores.pop()!;
+    const length = indices.length;
+    if (length === 0) return top;
+    let at = 0;
+    for (;;) {
+      const left = at * 2 + 1;
+      if (left >= length) break;
+      const right = left + 1;
+      const child = right < length && scores[right] < scores[left] ? right : left;
+      if (scores[child] >= lastScore) break;
+      indices[at] = indices[child];
+      scores[at] = scores[child];
+      at = child;
+    }
+    indices[at] = lastIndex;
+    scores[at] = lastScore;
+    return top;
+  }
+}
+
+interface SearchScratch {
+  cameFrom: Int32Array;
+  gScore: Float32Array;
+  /** Which search last wrote this slot's score. */
+  seen: Uint32Array;
+  /** Which search last closed this slot. */
+  closed: Uint32Array;
+  generation: number;
+  heap: IndexHeap;
+}
+
+/**
+ * Working memory for searches on one grid, made once and kept.
+ *
+ * Three whole-grid arrays per search was a megabyte of garbage a call on a
+ * large grid. Kept per grid, and rebuilt only if the grid has grown since.
+ */
+const scratchByGrid = new WeakMap<NavGrid, SearchScratch>();
+
+const scratchFor = (grid: NavGrid): SearchScratch => {
+  const count = grid.nodes.length;
+  const existing = scratchByGrid.get(grid);
+  if (existing && existing.cameFrom.length >= count) return existing;
+  const made: SearchScratch = {
+    cameFrom: new Int32Array(count),
+    gScore: new Float32Array(count),
+    seen: new Uint32Array(count),
+    closed: new Uint32Array(count),
+    generation: 0,
+    heap: new IndexHeap(),
+  };
+  scratchByGrid.set(grid, made);
+  return made;
 };
 
 const reconstruct = (grid: NavGrid, cameFrom: Int32Array, goalIndex: number): Vec3[] => {
